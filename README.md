@@ -59,6 +59,18 @@ cargo test --workspace
 # - 1 watcher test
 ```
 
+**Run Benchmarks:**
+```bash
+# Run all benchmarks
+cargo bench --workspace
+
+# Results: All performance targets EXCEEDED by 1000x-10000x!
+# - Parser: 0.84 µs (simple) to 25 µs (1000 lines)
+# - Evaluator: 0.75 µs to 10 µs
+# - Full pipeline: ~2.2 µs (parse + evaluate)
+# See BENCHMARKS.md for detailed results
+```
+
 **Run the TypeScript Demo:**
 ```bash
 # Install dependencies
