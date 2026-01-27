@@ -68,8 +68,8 @@ pub enum Token<'src> {
     #[token("input")]
     Input,
 
-    // Identifiers
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice())]
+    // Identifiers (including CSS properties with dashes like margin-bottom)
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_-]*", |lex| lex.slice())]
     Ident(&'src str),
 
     // String literals

@@ -10,3 +10,10 @@ paperclip-parser = { path = "../parser" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "evaluator_bench"
+harness = false
