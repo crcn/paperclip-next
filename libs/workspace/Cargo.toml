@@ -1,0 +1,24 @@
+[package]
+name = "paperclip-workspace"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Workspace server for Paperclip with gRPC streaming"
+
+[dependencies]
+paperclip-proto = { path = "../proto" }
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+tokio.workspace = true
+tonic.workspace = true
+prost.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true

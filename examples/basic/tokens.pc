@@ -1,0 +1,35 @@
+// Design tokens
+public token primary #3366FF
+public token primaryHover #2255EE
+public token secondary #6B7280
+public token success #10B981
+public token warning #F59E0B
+public token error #EF4444
+
+public token spacing4 4px
+public token spacing8 8px
+public token spacing16 16px
+public token spacing24 24px
+
+public token fontSizeSmall 12px
+public token fontSizeBase 14px
+public token fontSizeLarge 18px
+
+public token radiusSmall 2px
+public token radiusBase 4px
+public token radiusLarge 8px
+
+public style buttonBase {
+    padding: 8px 16px
+    border-radius: var(radiusBase)
+    font-size: var(fontSizeBase)
+    font-weight: 500
+    transition: background 0.2s
+}
+
+public style cardBase {
+    background: #ffffff
+    border-radius: var(radiusLarge)
+    padding: var(spacing16)
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1)
+}

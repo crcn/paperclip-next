@@ -1,0 +1,21 @@
+[package]
+name = "paperclip-evaluator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Evaluator for Paperclip AST to Virtual DOM"
+
+[dependencies]
+paperclip-proto = { path = "../proto" }
+paperclip-parser = { path = "../parser" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "evaluator_bench"
+harness = false

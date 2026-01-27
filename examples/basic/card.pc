@@ -1,0 +1,84 @@
+// Card component with slots and conditionals
+import "./tokens.pc" as tokens
+import "./button.pc" as buttons
+
+/** @frame(x: 0, y: 100, width: 320, height: 200) */
+public component Card {
+    render div {
+        style extends tokens.cardBase {
+            display: flex
+            flex-direction: column
+            gap: var(tokens.spacing16)
+        }
+        slot header
+        slot children
+        slot footer
+    }
+}
+
+/** @frame(x: 340, y: 100, width: 320, height: 280) */
+public component ProductCard {
+    render div {
+        style extends tokens.cardBase {
+            display: flex
+            flex-direction: column
+        }
+        div {
+            style {
+                font-size: var(tokens.fontSizeLarge)
+                font-weight: 600
+                margin-bottom: var(tokens.spacing8)
+            }
+            text "Product Name"
+        }
+        div {
+            style {
+                color: var(tokens.secondary)
+                margin-bottom: var(tokens.spacing16)
+            }
+            text "Product description goes here. This is a sample product."
+        }
+        div {
+            style {
+                display: flex
+                justify-content: space-between
+                align-items: center
+            }
+            div {
+                style {
+                    font-size: var(tokens.fontSizeLarge)
+                    font-weight: bold
+                    color: var(tokens.primary)
+                }
+                text "$99.00"
+            }
+            buttons.Button {
+                insert children {
+                    text "Add to Cart"
+                }
+            }
+        }
+    }
+}
+
+/** @frame(x: 0, y: 400, width: 320, height: 150) */
+component ConditionalCard {
+    render div {
+        style extends tokens.cardBase
+        if showBadge {
+            div {
+                style {
+                    background: var(tokens.success)
+                    color: #ffffff
+                    padding: 4px 8px
+                    border-radius: var(tokens.radiusSmall)
+                    font-size: var(tokens.fontSizeSmall)
+                }
+                text "New"
+            }
+        }
+        slot children {
+            text "Card content"
+        }
+    }
+}

@@ -1,0 +1,44 @@
+// Basic button component example
+import "./tokens.pc" as tokens
+
+/** @frame(x: 0, y: 0, width: 200, height: 60) */
+public component Button {
+    variant hover trigger { ":hover" }
+    variant disabled
+    
+    render button {
+        class="btn"
+        style extends tokens.buttonBase {
+            background: var(tokens.primary)
+            color: #ffffff
+            border: none
+            cursor: pointer
+        }
+        style variant hover {
+            background: var(tokens.primaryHover)
+        }
+        style variant disabled {
+            opacity: 0.5
+            cursor: not-allowed
+        }
+        slot children {
+            text "Click me"
+        }
+    }
+}
+
+/** @frame(x: 220, y: 0, width: 200, height: 60) */
+public component SecondaryButton {
+    render button {
+        style {
+            background: transparent
+            color: var(tokens.primary)
+            border: 1px solid var(tokens.primary)
+            padding: 8px 16px
+            border-radius: 4px
+        }
+        slot children {
+            text "Secondary"
+        }
+    }
+}
