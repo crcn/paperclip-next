@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package paperclip.workspace;
+
+// Workspace service for real-time preview
+service WorkspaceService {
+  // Stream preview updates for a file
+  rpc StreamPreview(PreviewRequest) returns (stream PreviewUpdate);
+
+  // Watch files in a directory
+  rpc WatchFiles(WatchRequest) returns (stream FileEvent);
+}
+
+// Request to start preview streaming
+message PreviewRequest {
+  string file_path = 1;
+}
+
+// Preview update containing Virtual DOM
+message PreviewUpdate {
+  string file_path = 1;
+  string vdom_json = 2;  // JSON-serialized Virtual DOM
+  optional string error = 3;
+  int64 timestamp = 4;
+}
+
+// Request to watch files
+message WatchRequest {
+  string directory = 1;
+  repeated string patterns = 2;  // e.g., ["*.pc"]
+}
+
+// File change event
+message FileEvent {
+  enum EventType {
+    CREATED = 0;
+    MODIFIED = 1;
+    DELETED = 2;
+  }
+
+  EventType event_type = 1;
+  string file_path = 2;
+  int64 timestamp = 3;
+}

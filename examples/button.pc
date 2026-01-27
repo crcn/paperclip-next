@@ -1,0 +1,12 @@
+public component Button {
+    render button {
+        style {
+            padding: 8px 16px
+            background: #3366FF
+            color: white
+            border: none
+            border-radius: 4px
+        }
+        text "Click me"
+    }
+}

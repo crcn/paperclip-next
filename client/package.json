@@ -1,0 +1,19 @@
+{
+  "name": "paperclip-client",
+  "version": "0.1.0",
+  "description": "Paperclip browser client for real-time preview",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "vite",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}

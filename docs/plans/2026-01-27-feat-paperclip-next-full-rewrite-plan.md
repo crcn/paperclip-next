@@ -548,14 +548,15 @@ Before full implementation, validate critical architectural decisions with focus
 #### Spike 0.3: gRPC Streaming Preview Loop (Rust + TypeScript)
 **Goal:** Prove real-time edit → preview pipeline
 
-- [ ] Set up Tonic gRPC server with streaming RPC
-- [ ] Implement file watcher → parse → evaluate → stream
-- [ ] Connect browser client via gRPC-web
-- [ ] Implement Virtual DOM differ/patcher in browser
+- [x] Set up Tonic gRPC server with streaming RPC
+- [x] Implement file watcher → parse → evaluate → stream
+- [x] Implement Virtual DOM differ/patcher in browser
+- [ ] Connect browser client via gRPC-web (deferred - demo uses standalone client)
 - [ ] Measure end-to-end latency: keystroke → preview update
 - [ ] Target: <40ms total
 
 **Output:** Working real-time preview loop
+**Status:** ✅ gRPC server with file watching implemented. TypeScript Virtual DOM differ/patcher working in standalone demo.
 
 #### Spike 0.4: Roundtrip Serialization (Rust)
 **Goal:** Prove AST edits preserve formatting

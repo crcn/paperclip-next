@@ -1,318 +1,258 @@
-//! Workspace gRPC server implementation
-
-use std::collections::HashMap;
+use crate::watcher::FileWatcher;
+use paperclip_evaluator::Evaluator;
+use paperclip_parser::parse;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
-use paperclip_evaluator::{evaluate, GraphManager};
-use paperclip_proto::virt::EvaluatedModule;
+use std::pin::Pin;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tonic::{Request, Response, Status};
 
-use crate::proto::*;
-use crate::mutations::apply_mutation;
-use crate::serializer::serialize_document;
-
-/// History entry for undo/redo
-#[derive(Clone)]
-struct HistoryEntry {
-    source: String,
-    evaluated: EvaluatedModule,
+// Include generated proto code
+pub mod proto {
+    tonic::include_proto!("paperclip.workspace");
 }
 
-/// Per-file state
-struct FileState {
-    source: String,
-    evaluated: Option<EvaluatedModule>,
-    history: Vec<HistoryEntry>,
-    history_index: usize,
-}
+use proto::{
+    workspace_service_server::{WorkspaceService, WorkspaceServiceServer},
+    FileEvent, PreviewRequest, PreviewUpdate, WatchRequest,
+};
 
-/// The workspace server state
 pub struct WorkspaceServer {
-    /// Project root directory
-    root: PathBuf,
-    
-    /// Open files
-    files: Arc<RwLock<HashMap<PathBuf, FileState>>>,
-    
-    /// Dependency graph
-    graph: Arc<RwLock<GraphManager>>,
-    
-    /// Event subscribers
-    subscribers: Arc<RwLock<Vec<mpsc::Sender<ServerEvent>>>>,
+    root_dir: PathBuf,
 }
 
 impl WorkspaceServer {
-    pub fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            files: Arc::new(RwLock::new(HashMap::new())),
-            graph: Arc::new(RwLock::new(GraphManager::new())),
-            subscribers: Arc::new(RwLock::new(Vec::new())),
-        }
+    pub fn new(root_dir: PathBuf) -> Self {
+        Self { root_dir }
     }
-    
-    /// Subscribe to server events
-    pub async fn subscribe(&self) -> mpsc::Receiver<ServerEvent> {
+
+    pub fn into_service(self) -> WorkspaceServiceServer<Self> {
+        WorkspaceServiceServer::new(self)
+    }
+
+    fn process_file(&self, file_path: &str) -> Result<String, String> {
+        // Read file
+        let full_path = self.root_dir.join(file_path);
+        let source = std::fs::read_to_string(&full_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        // Parse
+        let doc = parse(&source).map_err(|e| format!("Parse error: {:?}", e))?;
+
+        // Evaluate
+        let mut evaluator = Evaluator::new();
+        let vdoc = evaluator
+            .evaluate(&doc)
+            .map_err(|e| format!("Evaluation error: {:?}", e))?;
+
+        // Serialize to JSON
+        serde_json::to_string(&vdoc).map_err(|e| format!("Serialization error: {}", e))
+    }
+}
+
+#[tonic::async_trait]
+impl WorkspaceService for WorkspaceServer {
+    type StreamPreviewStream =
+        Pin<Box<dyn Stream<Item = Result<PreviewUpdate, Status>> + Send + 'static>>;
+
+    async fn stream_preview(
+        &self,
+        request: Request<PreviewRequest>,
+    ) -> Result<Response<Self::StreamPreviewStream>, Status> {
+        let req = request.into_inner();
+        let file_path = req.file_path.clone();
+        let root_dir = self.root_dir.clone();
+
         let (tx, rx) = mpsc::channel(100);
-        self.subscribers.write().await.push(tx);
-        rx
-    }
-    
-    /// Broadcast an event to all subscribers
-    async fn broadcast(&self, event: ServerEvent) {
-        let subscribers = self.subscribers.read().await;
-        for tx in subscribers.iter() {
-            let _ = tx.send(event.clone()).await;
-        }
-    }
-    
-    /// Open a file
-    pub async fn open_file(&self, request: OpenFileRequest) -> Result<OpenFileResponse, String> {
-        let path = self.root.join(&request.path);
-        
-        // Read file content
-        let source = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|e| format!("Failed to read file: {}", e))?;
-        
-        // Evaluate
-        let evaluated = evaluate(&source, &request.path)
-            .map_err(|e| format!("Evaluation error: {}", e))?;
-        
-        // Store in open files
-        {
-            let mut files = self.files.write().await;
-            files.insert(path.clone(), FileState {
-                source: source.clone(),
-                evaluated: Some(evaluated.clone()),
-                history: vec![HistoryEntry {
-                    source: source.clone(),
-                    evaluated: evaluated.clone(),
-                }],
-                history_index: 0,
-            });
-        }
-        
-        Ok(OpenFileResponse {
-            path: request.path,
-            source,
-            evaluated: Some(evaluated),
-        })
-    }
-    
-    /// Apply mutations to a file
-    pub async fn apply_mutations(&self, request: ApplyMutationsRequest) -> Result<MutationResult, String> {
-        let path = self.root.join(&request.path);
-        
-        let mut files = self.files.write().await;
-        let file_state = files.get_mut(&path)
-            .ok_or_else(|| "File not open".to_string())?;
-        
-        // Parse current source
-        let mut doc = paperclip_parser::parse(&file_state.source)
-            .map_err(|e| format!("Parse error: {} errors", e.len()))?;
-        
-        // Apply each mutation
-        for mutation in &request.mutations {
-            apply_mutation(&mut doc, mutation)
-                .map_err(|e| format!("Mutation error: {}", e))?;
-        }
-        
-        // Serialize back to source
-        let new_source = serialize_document(&doc, &file_state.source);
-        
-        // Re-evaluate
-        let evaluated = evaluate(&new_source, &request.path)
-            .map_err(|e| format!("Evaluation error: {}", e))?;
-        
-        // Update state and history
-        file_state.source = new_source.clone();
-        file_state.evaluated = Some(evaluated.clone());
-        
-        // Truncate future history and add new entry
-        file_state.history.truncate(file_state.history_index + 1);
-        file_state.history.push(HistoryEntry {
-            source: new_source.clone(),
-            evaluated: evaluated.clone(),
-        });
-        file_state.history_index = file_state.history.len() - 1;
-        
-        // Write to disk
-        tokio::fs::write(&path, &new_source)
-            .await
-            .map_err(|e| format!("Failed to write file: {}", e))?;
-        
-        // Broadcast change
-        self.broadcast(ServerEvent::FileChanged {
-            path: request.path,
-            source: new_source.clone(),
-            evaluated: evaluated.clone(),
-        }).await;
-        
-        Ok(MutationResult {
-            success: true,
-            new_source: Some(new_source),
-            evaluated: Some(evaluated),
-            error: None,
-        })
-    }
-    
-    /// Undo last change
-    pub async fn undo(&self, request: UndoRequest) -> Result<UndoResponse, String> {
-        let path = self.root.join(&request.path);
-        
-        let mut files = self.files.write().await;
-        let file_state = files.get_mut(&path)
-            .ok_or_else(|| "File not open".to_string())?;
-        
-        if file_state.history_index == 0 {
-            return Ok(UndoResponse {
-                success: false,
-                source: None,
-                evaluated: None,
-            });
-        }
-        
-        file_state.history_index -= 1;
-        let entry = &file_state.history[file_state.history_index];
-        
-        file_state.source = entry.source.clone();
-        file_state.evaluated = Some(entry.evaluated.clone());
-        
-        // Write to disk
-        tokio::fs::write(&path, &entry.source)
-            .await
-            .map_err(|e| format!("Failed to write file: {}", e))?;
-        
-        // Broadcast change
-        self.broadcast(ServerEvent::FileChanged {
-            path: request.path,
-            source: entry.source.clone(),
-            evaluated: entry.evaluated.clone(),
-        }).await;
-        
-        Ok(UndoResponse {
-            success: true,
-            source: Some(entry.source.clone()),
-            evaluated: Some(entry.evaluated.clone()),
-        })
-    }
-    
-    /// Redo undone change
-    pub async fn redo(&self, request: UndoRequest) -> Result<UndoResponse, String> {
-        let path = self.root.join(&request.path);
-        
-        let mut files = self.files.write().await;
-        let file_state = files.get_mut(&path)
-            .ok_or_else(|| "File not open".to_string())?;
-        
-        if file_state.history_index >= file_state.history.len() - 1 {
-            return Ok(UndoResponse {
-                success: false,
-                source: None,
-                evaluated: None,
-            });
-        }
-        
-        file_state.history_index += 1;
-        let entry = &file_state.history[file_state.history_index];
-        
-        file_state.source = entry.source.clone();
-        file_state.evaluated = Some(entry.evaluated.clone());
-        
-        // Write to disk
-        tokio::fs::write(&path, &entry.source)
-            .await
-            .map_err(|e| format!("Failed to write file: {}", e))?;
-        
-        // Broadcast change
-        self.broadcast(ServerEvent::FileChanged {
-            path: request.path,
-            source: entry.source.clone(),
-            evaluated: entry.evaluated.clone(),
-        }).await;
-        
-        Ok(UndoResponse {
-            success: true,
-            source: Some(entry.source.clone()),
-            evaluated: Some(entry.evaluated.clone()),
-        })
-    }
-    
-    /// Handle external file change (from file watcher)
-    pub async fn on_file_changed(&self, path: PathBuf) -> Result<(), String> {
-        let relative_path = path.strip_prefix(&self.root)
-            .map_err(|_| "Path not in project")?
-            .to_string_lossy()
-            .to_string();
-        
-        // Read new content
-        let source = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|e| format!("Failed to read file: {}", e))?;
-        
-        // Evaluate
-        let evaluated = evaluate(&source, &relative_path)
-            .map_err(|e| format!("Evaluation error: {}", e))?;
-        
-        // Update state if file is open
-        {
-            let mut files = self.files.write().await;
-            if let Some(file_state) = files.get_mut(&path) {
-                file_state.source = source.clone();
-                file_state.evaluated = Some(evaluated.clone());
+
+        // Send initial update
+        match self.process_file(&file_path) {
+            Ok(vdom_json) => {
+                let update = PreviewUpdate {
+                    file_path: file_path.clone(),
+                    vdom_json,
+                    error: None,
+                    timestamp: chrono::Utc::now().timestamp_millis(),
+                };
+                let _ = tx.send(Ok(update)).await;
+            }
+            Err(error) => {
+                let update = PreviewUpdate {
+                    file_path: file_path.clone(),
+                    vdom_json: String::new(),
+                    error: Some(error),
+                    timestamp: chrono::Utc::now().timestamp_millis(),
+                };
+                let _ = tx.send(Ok(update)).await;
             }
         }
-        
-        // Invalidate dependent files in graph
-        {
-            let mut graph = self.graph.write().await;
-            graph.invalidate(&path);
-        }
-        
-        // Broadcast change
-        self.broadcast(ServerEvent::FileChanged {
-            path: relative_path,
-            source,
-            evaluated,
-        }).await;
-        
-        Ok(())
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env::temp_dir;
-    use tokio::fs;
+        // Spawn watcher task
+        tokio::spawn(async move {
+            // Watch the directory containing the file
+            let watch_path = root_dir.join(
+                PathBuf::from(&file_path)
+                    .parent()
+                    .unwrap_or(std::path::Path::new(".")),
+            );
 
-    #[tokio::test]
-    async fn test_open_and_mutate() {
-        // Create temp directory with a .pc file
-        let temp = temp_dir().join("paperclip-test");
-        fs::create_dir_all(&temp).await.unwrap();
-        
-        let file_path = temp.join("test.pc");
-        fs::write(&file_path, r#"
-public component Button {
-    render button {
-        text "Click me"
+            let watcher = match FileWatcher::new(watch_path) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!("Failed to create watcher: {}", e);
+                    return;
+                }
+            };
+
+            loop {
+                if let Some(event) = watcher.next_event() {
+                    // Check if the event is for our file
+                    let is_our_file = event.paths.iter().any(|p| {
+                        p.file_name()
+                            .and_then(|n| n.to_str())
+                            .map(|n| file_path.contains(n))
+                            .unwrap_or(false)
+                    });
+
+                    if !is_our_file {
+                        continue;
+                    }
+
+                    // Process file and send update
+                    let full_path = root_dir.join(&file_path);
+                    let source = match std::fs::read_to_string(&full_path) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let update = PreviewUpdate {
+                                file_path: file_path.clone(),
+                                vdom_json: String::new(),
+                                error: Some(format!("Failed to read file: {}", e)),
+                                timestamp: chrono::Utc::now().timestamp_millis(),
+                            };
+                            if tx.send(Ok(update)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
+                    let doc = match parse(&source) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            let update = PreviewUpdate {
+                                file_path: file_path.clone(),
+                                vdom_json: String::new(),
+                                error: Some(format!("Parse error: {:?}", e)),
+                                timestamp: chrono::Utc::now().timestamp_millis(),
+                            };
+                            if tx.send(Ok(update)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
+                    let mut evaluator = Evaluator::new();
+                    let vdoc = match evaluator.evaluate(&doc) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let update = PreviewUpdate {
+                                file_path: file_path.clone(),
+                                vdom_json: String::new(),
+                                error: Some(format!("Evaluation error: {:?}", e)),
+                                timestamp: chrono::Utc::now().timestamp_millis(),
+                            };
+                            if tx.send(Ok(update)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
+                    let vdom_json = match serde_json::to_string(&vdoc) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            let update = PreviewUpdate {
+                                file_path: file_path.clone(),
+                                vdom_json: String::new(),
+                                error: Some(format!("Serialization error: {}", e)),
+                                timestamp: chrono::Utc::now().timestamp_millis(),
+                            };
+                            if tx.send(Ok(update)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
+                    let update = PreviewUpdate {
+                        file_path: file_path.clone(),
+                        vdom_json,
+                        error: None,
+                        timestamp: chrono::Utc::now().timestamp_millis(),
+                    };
+
+                    if tx.send(Ok(update)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(
+            Box::pin(output_stream) as Self::StreamPreviewStream
+        ))
     }
-}
-"#).await.unwrap();
-        
-        let server = WorkspaceServer::new(temp.clone());
-        
-        // Open file
-        let response = server.open_file(OpenFileRequest {
-            path: "test.pc".to_string(),
-        }).await.unwrap();
-        
-        assert!(response.evaluated.is_some());
-        assert_eq!(response.evaluated.as_ref().unwrap().components.len(), 1);
-        
-        // Cleanup
-        fs::remove_dir_all(&temp).await.ok();
+
+    type WatchFilesStream =
+        Pin<Box<dyn Stream<Item = Result<FileEvent, Status>> + Send + 'static>>;
+
+    async fn watch_files(
+        &self,
+        request: Request<WatchRequest>,
+    ) -> Result<Response<Self::WatchFilesStream>, Status> {
+        let req = request.into_inner();
+        let watch_path = self.root_dir.join(&req.directory);
+
+        let (tx, rx) = mpsc::channel(100);
+
+        tokio::spawn(async move {
+            let watcher = match FileWatcher::new(watch_path) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!("Failed to create watcher: {}", e);
+                    return;
+                }
+            };
+
+            loop {
+                if let Some(event) = watcher.next_event() {
+                    for path in event.paths {
+                        let event_type = match event.kind {
+                            notify::EventKind::Create(_) => 0, // CREATED
+                            notify::EventKind::Modify(_) => 1, // MODIFIED
+                            notify::EventKind::Remove(_) => 2, // DELETED
+                            _ => continue,
+                        };
+
+                        let file_event = FileEvent {
+                            event_type,
+                            file_path: path.to_string_lossy().to_string(),
+                            timestamp: chrono::Utc::now().timestamp_millis(),
+                        };
+
+                        if tx.send(Ok(file_event)).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(
+            Box::pin(output_stream) as Self::WatchFilesStream
+        ))
     }
 }

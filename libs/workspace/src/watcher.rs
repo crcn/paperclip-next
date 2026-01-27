@@ -1,76 +1,80 @@
-//! File system watcher for detecting changes
-
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use std::sync::mpsc::{channel, Receiver};
+use thiserror::Error;
 
-/// Events from the file watcher
-#[derive(Debug, Clone)]
-pub enum WatchEvent {
-    Created(PathBuf),
-    Modified(PathBuf),
-    Deleted(PathBuf),
+#[derive(Error, Debug)]
+pub enum WatcherError {
+    #[error("Failed to create watcher: {0}")]
+    CreateError(#[from] notify::Error),
+
+    #[error("Watch error: {0}")]
+    WatchError(String),
 }
 
-/// Configuration for the file watcher
-pub struct WatcherConfig {
-    /// Root directory to watch
-    pub root: PathBuf,
-    /// File patterns to include (e.g., "*.pc")
-    pub patterns: Vec<String>,
-    /// Debounce delay in milliseconds
-    pub debounce_ms: u64,
+pub type WatcherResult<T> = Result<T, WatcherError>;
+
+pub struct FileWatcher {
+    _watcher: RecommendedWatcher,
+    receiver: Receiver<notify::Result<Event>>,
 }
 
-impl Default for WatcherConfig {
-    fn default() -> Self {
-        Self {
-            root: PathBuf::from("."),
-            patterns: vec!["*.pc".to_string()],
-            debounce_ms: 100,
+impl FileWatcher {
+    pub fn new(path: PathBuf) -> WatcherResult<Self> {
+        let (tx, rx) = channel();
+
+        let mut watcher = RecommendedWatcher::new(
+            move |res| {
+                let _ = tx.send(res);
+            },
+            Config::default(),
+        )?;
+
+        watcher.watch(&path, RecursiveMode::Recursive)?;
+
+        Ok(Self {
+            _watcher: watcher,
+            receiver: rx,
+        })
+    }
+
+    pub fn next_event(&self) -> Option<Event> {
+        match self.receiver.recv() {
+            Ok(Ok(event)) => Some(event),
+            _ => None,
         }
     }
-}
 
-/// Start watching for file changes
-/// 
-/// Returns a channel that receives file change events
-pub fn start_watcher(_config: WatcherConfig) -> mpsc::Receiver<WatchEvent> {
-    let (tx, rx) = mpsc::channel(100);
-    
-    // TODO: Implement actual file watching using notify crate
-    // For now, this is a stub that returns the receiver
-    
-    // In a real implementation:
-    // tokio::spawn(async move {
-    //     let (watch_tx, watch_rx) = std::sync::mpsc::channel();
-    //     let mut watcher = notify::recommended_watcher(watch_tx).unwrap();
-    //     watcher.watch(&config.root, RecursiveMode::Recursive).unwrap();
-    //     
-    //     while let Ok(event) = watch_rx.recv() {
-    //         // Filter and debounce events
-    //         // Send to tx
-    //     }
-    // });
-    
-    // Keep tx alive in a dummy task
-    tokio::spawn(async move {
-        let _tx = tx; // Keep the sender alive
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+    pub fn try_next_event(&self) -> Option<Event> {
+        match self.receiver.try_recv() {
+            Ok(Ok(event)) => Some(event),
+            _ => None,
         }
-    });
-    
-    rx
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::thread;
+    use std::time::Duration;
 
-    #[tokio::test]
-    async fn test_watcher_creation() {
-        let config = WatcherConfig::default();
-        let _rx = start_watcher(config);
-        // Watcher should be created without panicking
+    #[test]
+    fn test_file_watcher() {
+        let temp_dir = std::env::temp_dir().join("paperclip_watcher_test");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let watcher = FileWatcher::new(temp_dir.clone()).unwrap();
+
+        // Create a test file
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            fs::write(temp_dir.join("test.pc"), "component Test {}").unwrap();
+        });
+
+        // Wait for event
+        let event = watcher.next_event();
+        assert!(event.is_some());
     }
 }
