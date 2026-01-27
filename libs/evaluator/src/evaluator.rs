@@ -86,7 +86,7 @@ impl Value {
 
 /// Evaluator
 pub struct Evaluator {
-    context: EvalContext,
+    pub context: EvalContext,
 }
 
 impl Evaluator {

@@ -4,6 +4,9 @@ pub mod ast;
 pub mod error;
 mod debug_test;
 
+#[cfg(test)]
+mod tests_comprehensive;
+
 pub use tokenizer::{Token, tokenize};
 pub use parser::{Parser, parse};
 pub use error::{ParseError, ParseResult};
