@@ -3,8 +3,6 @@ resolver = "2"
 members = [
     "libs/parser",
     "libs/evaluator",
-    "libs/proto",
-    "libs/workspace",
 ]
 
 [workspace.package]

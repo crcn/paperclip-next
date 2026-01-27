@@ -524,24 +524,26 @@ Before full implementation, validate critical architectural decisions with focus
 #### Spike 0.1: Parser Performance (Rust)
 **Goal:** Validate logos + chumsky + bumpalo hits performance targets
 
-- [ ] Implement minimal .pc parser with logos lexer
-- [ ] Add chumsky parser for component/style/token syntax
+- [x] Implement minimal .pc parser with logos lexer
+- [x] Add parser for component/style/token syntax (using recursive descent)
 - [ ] Use bumpalo arena for AST allocation
 - [ ] Benchmark: parse 1000-line file
 - [ ] Target: <10ms parse time
 
 **Output:** Parser skeleton meeting performance target, or alternative approach
+**Status:** ✅ Parser implemented with logos lexer + recursive descent. All tests passing.
 
 #### Spike 0.2: Evaluator + Virtual DOM (Rust)
 **Goal:** Prove AST → Virtual DOM evaluation pipeline
 
-- [ ] Implement minimal evaluator that produces Virtual HTML/CSS
-- [ ] Handle imports and token resolution
-- [ ] Implement expression evaluation (simple formulas)
+- [x] Implement minimal evaluator that produces Virtual HTML/CSS
+- [x] Handle imports and token resolution
+- [x] Implement expression evaluation (simple formulas)
 - [ ] Benchmark evaluation time
 - [ ] Target: <20ms for medium component
 
 **Output:** Working evaluator producing Virtual DOM
+**Status:** ✅ Evaluator implemented with Virtual DOM output. Tests passing for components and styles.
 
 #### Spike 0.3: gRPC Streaming Preview Loop (Rust + TypeScript)
 **Goal:** Prove real-time edit → preview pipeline

@@ -1,0 +1,8 @@
+component Card {
+    render div {
+        style {
+            padding: 16px
+        }
+        text "Hello"
+    }
+}
