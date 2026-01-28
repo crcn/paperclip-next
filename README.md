@@ -75,10 +75,10 @@ cargo bench --workspace
 ```bash
 # Install dependencies
 cd packages/client
-npm install
+yarn install
 
 # Start dev server
-npm run dev
+yarn dev
 
 # Open browser to http://localhost:3000
 ```

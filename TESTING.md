@@ -10,7 +10,7 @@ Make sure you have the following installed:
 - **Rust** (1.70+): `rustc --version`
 - **Node.js** (18+): `node --version`
 - **Cargo**: Should come with Rust
-- **npm**: Should come with Node.js
+- **Yarn** (1.x): `yarn --version` or install via `npm install -g yarn`
 
 ---
 
@@ -64,7 +64,7 @@ cargo build
 
 ```bash
 cd packages/client
-npm install
+yarn install
 
 # Should install React 18 and dependencies
 # Expected output:
@@ -74,7 +74,7 @@ npm install
 ### Verify TypeScript Compilation
 
 ```bash
-npm run build
+yarn build
 
 # Should complete without errors
 # Look for: No error output
@@ -83,7 +83,7 @@ npm run build
 ### Run Development Server
 
 ```bash
-npm run dev
+yarn dev
 
 # Expected output:
 # VITE v5.x.x  ready in XXX ms
@@ -179,7 +179,7 @@ The complete system will be tested with:
 cargo run --bin paperclip-server -- --root examples
 
 # Terminal 2: Start client
-cd packages/client && npm run dev
+cd packages/client && yarn dev
 
 # Terminal 3: Edit a file
 echo 'component Button { <button>Updated</button> }' > examples/button.pc
@@ -213,19 +213,19 @@ cargo test
 
 ### TypeScript Compilation Fails
 
-**Issue**: `npm run build` shows type errors
+**Issue**: `yarn build` shows type errors
 
 **Solution**:
 ```bash
 # Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules yarn.lock
+yarn install
 
 # Check tsconfig.json has jsx: "react-jsx"
 cat tsconfig.json | grep jsx
 
 # Try again
-npm run build
+yarn build
 ```
 
 ### Demo Page Blank
@@ -237,8 +237,8 @@ npm run build
 2. Check for errors
 3. Common issues:
    - Module not found: Check file paths
-   - React not loaded: Run `npm install`
-   - Port conflict: Use different port with `npm run dev -- --port 3000`
+   - React not loaded: Run `yarn install`
+   - Port conflict: Use different port with `yarn dev -- --port 3000`
 
 ### Component Not Rendering
 
@@ -300,8 +300,8 @@ Use this checklist to verify both spikes work correctly:
 - [ ] Protobuf types compile correctly
 
 ### Spike 0.5 (TypeScript)
-- [ ] npm install succeeds
-- [ ] npm run build succeeds (no TypeScript errors)
+- [ ] yarn install succeeds
+- [ ] yarn build succeeds (no TypeScript errors)
 - [ ] Dev server starts
 - [ ] Demo page loads at /hybrid-demo.html
 - [ ] DatePicker component renders

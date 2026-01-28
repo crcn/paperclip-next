@@ -168,8 +168,8 @@ cargo bench --workspace
 ### Try TypeScript Demo
 ```bash
 cd packages/client
-npm install
-npm run dev
+yarn install
+yarn dev
 # Open http://localhost:3000
 ```
 

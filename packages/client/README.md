@@ -19,7 +19,7 @@ TypeScript browser client with OT-style Virtual DOM differ and patcher.
 ## Installation
 
 ```bash
-npm install
+yarn install
 ```
 
 ## Usage
@@ -390,7 +390,7 @@ Update text content at the specified path.
 Run the interactive demo:
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 Open http://localhost:3000 to see the Virtual DOM differ/patcher in action.
@@ -447,13 +447,13 @@ const invalidNode: VNode = {
 Build TypeScript:
 
 ```bash
-npm run build
+yarn build
 ```
 
 Run in browser:
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 ## Integration with Paperclip Server
@@ -515,13 +515,13 @@ client/
 Build for production:
 
 ```bash
-npm run build
+yarn build
 ```
 
 Preview production build:
 
 ```bash
-npm run preview
+yarn preview
 ```
 
 ## Example Virtual DOM JSON

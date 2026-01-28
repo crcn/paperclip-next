@@ -97,7 +97,7 @@ Prove that hybrid rendering (DOM + React components) works via patch-based appro
 
 ### Build Results
 ```bash
-npm run build
+yarn build
 ✅ TypeScript compilation successful
 ✅ JSX support working
 ✅ React types resolved
@@ -297,9 +297,9 @@ cargo build  # Verify compilation
 ### Spike 0.5
 ```bash
 cd packages/client
-npm install
-npm run build  # Verify TypeScript compilation
-npm run dev    # Test demo at /hybrid-demo.html
+yarn install
+yarn build  # Verify TypeScript compilation
+yarn dev    # Test demo at /hybrid-demo.html
 ```
 
 ---

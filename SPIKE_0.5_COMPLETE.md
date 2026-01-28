@@ -147,8 +147,8 @@ To test the spike:
 
 ```bash
 cd packages/client
-npm install
-npm run dev
+yarn install
+yarn dev
 # Open http://localhost:5173/hybrid-demo.html
 ```
 
