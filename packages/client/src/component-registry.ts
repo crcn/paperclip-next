@@ -5,6 +5,10 @@
 export interface ComponentMetadata {
   id: string;
   framework: "react";
+  // The ES module object containing the component
+  // Example: import * as DatePickerModule from './DatePicker'
+  // Then module = DatePickerModule, which has { DatePicker: Component }
+  // Access via: module[exportName] or module.DatePicker
   module: any;
   exportName: string;
 }
