@@ -1,0 +1,19 @@
+// Test file with intentional syntax errors to demonstrate pretty error reporting
+
+component Button render div {
+    text "Missing opening brace"
+}
+
+component Card {
+    render div {
+        text "This is valid"
+    }
+}
+
+public unknown
+
+component BadElement {
+    render notanelement {
+        text "Unknown element"
+    }
+}

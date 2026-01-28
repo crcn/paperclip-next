@@ -1,0 +1,58 @@
+// A feature showcase component
+
+public component Feature {
+    slot icon {
+        text "🚀"
+    }
+
+    slot title {
+        text "Feature Title"
+    }
+
+    slot description {
+        text "Feature description goes here"
+    }
+
+    render div {
+        style {
+            background: white
+            border-radius: 12px
+            padding: 32px
+            text-align: center
+            transition: all 0.3s ease
+            border: 2px solid transparent
+        }
+
+        style hover {
+            border-color: #667eea
+            transform: translateY(-4px)
+        }
+
+        div {
+            style {
+                font-size: 48px
+                margin-bottom: 16px
+            }
+            icon
+        }
+
+        div {
+            style {
+                font-size: 20px
+                font-weight: 600
+                color: #333
+                margin-bottom: 8px
+            }
+            title
+        }
+
+        div {
+            style {
+                font-size: 14px
+                color: #666
+                line-height: 1.6
+            }
+            description
+        }
+    }
+}

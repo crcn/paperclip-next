@@ -147,7 +147,9 @@ fn test_integration_nested_structure() {
 
             // Check first child
             match &children[0] {
-                VNode::Element { styles, children, .. } => {
+                VNode::Element {
+                    styles, children, ..
+                } => {
                     assert!(styles.contains_key("margin-bottom"));
                     assert_eq!(children.len(), 1);
                 }
@@ -376,10 +378,9 @@ fn test_integration_member_access() {
         "email".to_string(),
         paperclip_evaluator::Value::String("alice@example.com".to_string()),
     );
-    evaluator.context.set_variable(
-        "user".to_string(),
-        paperclip_evaluator::Value::Object(user),
-    );
+    evaluator
+        .context
+        .set_variable("user".to_string(), paperclip_evaluator::Value::Object(user));
 
     let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
@@ -435,7 +436,7 @@ fn test_integration_json_roundtrip() {
     let json = serde_json::to_string(&vdoc).expect("Failed to serialize");
 
     // Deserialize from JSON
-    let deserialized: paperclip_evaluator::VDocument =
+    let deserialized: paperclip_evaluator::VirtualDomDocument =
         serde_json::from_str(&json).expect("Failed to deserialize");
 
     // Verify roundtrip preserved structure
@@ -513,14 +514,12 @@ fn test_integration_performance_batch() {
     // Verify all components processed
     for (i, node) in vdoc.nodes.iter().enumerate() {
         match node {
-            VNode::Element { children, .. } => {
-                match &children[0] {
-                    VNode::Text { content } => {
-                        assert_eq!(content, &format!("{}", i + 1));
-                    }
-                    _ => panic!("Expected text node"),
+            VNode::Element { children, .. } => match &children[0] {
+                VNode::Text { content } => {
+                    assert_eq!(content, &format!("{}", i + 1));
                 }
-            }
+                _ => panic!("Expected text node"),
+            },
             _ => panic!("Expected element node"),
         }
     }

@@ -1,17 +1,25 @@
-pub mod tokenizer;
-pub mod parser;
 pub mod ast;
-pub mod error;
-pub mod serializer;
 mod debug_test;
+pub mod error;
+pub mod id_generator;
+pub mod parser;
+pub mod serializer;
+pub mod tokenizer;
 
 #[cfg(test)]
 mod tests_comprehensive;
 
-pub use tokenizer::{Token, tokenize};
-pub use parser::{Parser, parse};
-pub use serializer::{Serializer, serialize};
+#[cfg(test)]
+mod tests_new_features;
+
+#[cfg(test)]
+mod test_comprehensive_example;
+
 pub use error::{ParseError, ParseResult};
+pub use id_generator::{get_document_id, IDGenerator};
+pub use parser::{parse, parse_with_path, Parser};
+pub use serializer::{serialize, Serializer};
+pub use tokenizer::{tokenize, Token};
 
 #[cfg(test)]
 mod tests {

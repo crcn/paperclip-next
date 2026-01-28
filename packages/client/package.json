@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "grpc-client": "node --loader ts-node/esm src/grpc-client.ts",
+    "test:latency": "node --loader ts-node/esm src/test-latency-final.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.10.0",
@@ -15,10 +17,12 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "vite": "^5.0.11"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@4.1.0"
 }

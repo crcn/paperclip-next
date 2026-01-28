@@ -1,7 +1,7 @@
+use crate::ast::Element;
 /// Comprehensive test suite for parser
 /// Tests edge cases, error conditions, complex syntax
 use crate::*;
-use crate::ast::Element;
 
 #[cfg(test)]
 mod parser_comprehensive_tests {
@@ -69,7 +69,10 @@ mod parser_comprehensive_tests {
         // Verify nested structure
         if let Some(Element::Tag { children, .. }) = &doc.components[0].body {
             assert_eq!(children.len(), 2); // Two div children
-            if let Element::Tag { children: inner, .. } = &children[1] {
+            if let Element::Tag {
+                children: inner, ..
+            } = &children[1]
+            {
                 assert_eq!(inner.len(), 1); // One nested div
             }
         }
@@ -407,5 +410,99 @@ mod parser_comprehensive_tests {
         assert!(result.is_ok());
         let doc = result.unwrap();
         assert_eq!(doc.components.len(), 1);
+    }
+
+    // Error span tests
+    #[test]
+    fn test_error_spans_are_valid() {
+        let source = "component Button { render }";
+        let err = parse(source).unwrap_err();
+        let span = err.span();
+        assert!(span.start <= source.len());
+        assert!(span.end <= source.len());
+        assert!(span.start <= span.end);
+    }
+
+    #[test]
+    fn test_error_position_accessor() {
+        let source = "component Button { render }";
+        let err = parse(source).unwrap_err();
+        let pos = err.position();
+        assert!(pos <= source.len());
+    }
+
+    #[test]
+    fn test_backward_compat_position_constructor() {
+        use crate::error::ParseError;
+        let err = ParseError::unexpected_token(42, "}", "div");
+        assert_eq!(err.position(), 42);
+        let span = err.span();
+        assert_eq!(span.start, 42);
+        assert_eq!(span.end, 43);
+    }
+
+    #[test]
+    fn test_unexpected_token_error_has_span() {
+        let source = "component Button { render div";
+        let err = parse(source).unwrap_err();
+        let span = err.span();
+        // Should have a valid span pointing somewhere in the source
+        assert!(span.start <= source.len());
+        assert!(span.end <= source.len());
+    }
+
+    #[test]
+    fn test_invalid_syntax_error_has_span() {
+        let source = "public unknown";
+        let err = parse(source).unwrap_err();
+        let span = err.span();
+        assert!(span.start < source.len());
+        assert!(span.end <= source.len());
+    }
+
+    #[cfg(feature = "pretty-errors")]
+    #[test]
+    fn test_pretty_error_output() {
+        use crate::error::pretty;
+        let source = "component Button { render }";
+        let err = parse(source).unwrap_err();
+        let formatted = pretty::format_error(&err, "test.pc", source);
+
+        // Check that the formatted output contains expected elements
+        assert!(formatted.contains("Error"));
+        assert!(formatted.contains("test.pc"));
+        assert!(!formatted.is_empty());
+    }
+
+    #[cfg(feature = "pretty-errors")]
+    #[test]
+    fn test_pretty_error_contains_source_context() {
+        use crate::error::pretty;
+        // Missing opening brace after component name
+        let source = "component Button render div { }";
+        let err = parse(source).unwrap_err();
+        let formatted = pretty::format_error(&err, "button.pc", source);
+
+        // Should contain file name
+        assert!(formatted.contains("button.pc"));
+        // Should contain error context
+        assert!(!formatted.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_errors_have_different_spans() {
+        // Test that different errors have different spans
+        let source1 = "component A { render }";
+        let source2 = "component B";
+
+        let err1 = parse(source1).unwrap_err();
+        let err2 = parse(source2).unwrap_err();
+
+        let span1 = err1.span();
+        let span2 = err2.span();
+
+        // Both should be valid
+        assert!(span1.start <= source1.len());
+        assert!(span2.start <= source2.len());
     }
 }

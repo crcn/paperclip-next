@@ -1,0 +1,84 @@
+// A hero section component
+
+public component Hero {
+    render div {
+        style {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+            color: white
+            padding: 80px 24px
+            text-align: center
+            border-radius: 16px
+            margin-bottom: 48px
+        }
+
+        div {
+            style {
+                font-size: 48px
+                font-weight: 800
+                margin-bottom: 16px
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1)
+            }
+            text "Welcome to Paperclip"
+        }
+
+        div {
+            style {
+                font-size: 20px
+                margin-bottom: 32px
+                opacity: 0.9
+            }
+            text "Build beautiful UI components with a visual canvas"
+        }
+
+        div {
+            style {
+                display: flex
+                gap: 16px
+                justify-content: center
+                flex-wrap: wrap
+            }
+
+            button {
+                style {
+                    padding: 14px 32px
+                    background: white
+                    color: #667eea
+                    border: none
+                    border-radius: 8px
+                    font-size: 16px
+                    font-weight: 600
+                    cursor: pointer
+                    transition: all 0.3s ease
+                }
+
+                style hover {
+                    transform: translateY(-2px)
+                    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15)
+                }
+
+                text "Get Started"
+            }
+
+            button {
+                style {
+                    padding: 14px 32px
+                    background: transparent
+                    color: white
+                    border: 2px solid white
+                    border-radius: 8px
+                    font-size: 16px
+                    font-weight: 600
+                    cursor: pointer
+                    transition: all 0.3s ease
+                }
+
+                style hover {
+                    background: white
+                    color: #667eea
+                }
+
+                text "Learn More"
+            }
+        }
+    }
+}

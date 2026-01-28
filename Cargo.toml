@@ -4,6 +4,13 @@ members = [
     "packages/parser",
     "packages/evaluator",
     "packages/workspace",
+    "packages/inference",
+    "packages/compiler-react",
+    "packages/compiler-css",
+    "packages/compiler-html",
+    "packages/cli",
+    "packages/wasm",
+    "packages/vision",
 ]
 
 [workspace.package]
@@ -42,3 +49,14 @@ tokio-stream = "0.1"
 
 # Testing
 criterion = "0.5"
+
+# WASM
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+wasm-bindgen-test = "0.3"
+
+# WASM release profile - optimized for size
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Better optimization

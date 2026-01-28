@@ -130,9 +130,7 @@ fn tokenize_only(c: &mut Criterion) {
         }
     "#;
 
-    c.bench_function("tokenize_only", |b| {
-        b.iter(|| tokenize(black_box(source)))
-    });
+    c.bench_function("tokenize_only", |b| b.iter(|| tokenize(black_box(source))));
 }
 
 criterion_group!(

@@ -1,0 +1,54 @@
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 48px;
+}
+
+.buttons-section {
+  text-align: center;
+  margin-top: 48px;
+  padding: 48px 0;
+}
+
+.buttons-section h2 {
+  font-size: 32px;
+  margin-bottom: 32px;
+  color: #333;
+}
+
+.buttons-row {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app {
+    padding: 16px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cards-container {
+    flex-direction: column;
+    align-items: center;
+  }
+}

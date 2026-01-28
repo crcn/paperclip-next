@@ -1,8 +1,10 @@
-# OT-Style Patches Refactor
+# Serializable Patches Refactor
 
 ## Overview
 
-Refactored the client library from a tightly-coupled DOM-based diff/patch system to an **Operational Transformation (OT)** style approach with pure, serializable patches.
+Refactored the client library from a tightly-coupled DOM-based diff/patch system to a **path-based, serializable patch system** with pure functions.
+
+**Note**: While this architecture uses path-based patches similar to Operational Transformation (OT) systems, it does NOT implement full OT. There are no transformation functions for concurrent operations. This is designed for **single-user HMR (Hot Module Replacement)** scenarios, not multi-user collaborative editing.
 
 ## What Changed
 
@@ -22,7 +24,7 @@ patch(patches); // Mutates DOM directly
 - ❌ Hard to test without DOM
 - ❌ Encouraged global state pattern (DOM elements stored globally)
 
-### After (OT-style)
+### After (Path-based, Serializable)
 
 ```typescript
 // Pure diffing - no DOM needed
@@ -38,7 +40,7 @@ const newElement = patch(patches, element, domPatchApplier());
 - ✅ Platform-agnostic (DOM, SSR, React, Canvas, etc.)
 - ✅ Testable without browser
 - ✅ Composable appliers
-- ✅ Ready for collaborative editing
+- ✅ Ready for single-user HMR streaming
 
 ## API Changes
 
@@ -203,13 +205,13 @@ stream.on('data', (json) => {
 
 ## Future Possibilities
 
-With OT-style patches, you can now:
+With serializable, path-based patches, you can now:
 
 1. **Server-side diffing** - Rust evaluator could generate patches directly
-2. **Collaborative editing** - Transform patches for multi-user editing
-3. **Time travel** - Store and replay patch sequences
-4. **Multi-platform** - Same patches work in browser, Node, native apps
-5. **Optimizations** - Batch, deduplicate, or compress patches before sending
+2. **Time travel** - Store and replay patch sequences for undo/redo
+3. **Multi-platform** - Same patches work in browser, Node, native apps
+4. **Optimizations** - Batch, deduplicate, or compress patches before sending
+5. **Collaborative editing** - Add OT transformation layer or use CRDT (Automerge, Yjs) on top of patches
 
 ## Testing
 

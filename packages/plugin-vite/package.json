@@ -1,0 +1,44 @@
+{
+  "name": "@paperclip-lang/vite-plugin",
+  "version": "0.1.0",
+  "description": "Vite plugin for Paperclip files",
+  "packageManager": "yarn@4.1.0",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "watch": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "prepublishOnly": "yarn build"
+  },
+  "keywords": [
+    "paperclip",
+    "vite",
+    "plugin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "vite": "^3.0.0 || ^4.0.0 || ^5.0.0"
+  },
+  "dependencies": {
+    "@paperclip-lang/wasm": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

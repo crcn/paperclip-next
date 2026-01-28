@@ -1,16 +1,17 @@
 # paperclip-client
 
-TypeScript browser client with OT-style Virtual DOM differ and patcher.
+TypeScript browser client with path-based, serializable Virtual DOM differ and patcher.
 
 ## Features
 
-- ⚡ **OT-style patches** - Operational Transformation compatible
-- 🔄 **Pure diffing** - No side effects, completely serializable
+- ⚡ **Serializable patches** - Path-based addressing, JSON serializable
+- 🔄 **Pure diffing** - No side effects, no DOM required for diffing
 - 📦 **Zero dependencies** - Pure TypeScript Virtual DOM implementation
 - 🌐 **Platform-agnostic** - Works with DOM, SSR, React, or custom renderers
 - 🎨 **Complete coverage** - CREATE, REMOVE, REPLACE, UPDATE patches
 - ✅ **Type-safe** - Full TypeScript types
 - 🚫 **No globals** - Explicit dependencies, easy to test
+- 🎯 **Single-user HMR** - Designed for hot module replacement, not collaborative editing
 
 ## Important Guidelines
 
@@ -57,7 +58,7 @@ const element = createElement(vdoc.nodes[0]);
 document.body.appendChild(element);
 ```
 
-### Diffing and Patching (OT-Style)
+### Diffing and Patching (Path-Based)
 
 ```typescript
 import { diff, patch, domPatchApplier } from "./src/vdom";
@@ -222,7 +223,7 @@ interface CssRule {
 
 #### `Patch`
 
-OT-style patch operation with path-based addressing (discriminated union):
+Path-based patch operation (discriminated union):
 
 ```typescript
 type Patch =
@@ -302,9 +303,9 @@ const ssrApplier: PatchApplier<string> = {
 };
 ```
 
-## Patch Types (OT-Style)
+## Patch Types (Path-Based)
 
-All patches use **path-based addressing** instead of DOM references.
+All patches use **path-based addressing** instead of DOM references. This enables serialization over the network for HMR streaming.
 
 ### CREATE
 
@@ -382,8 +383,9 @@ Update text content at the specified path.
 
 - ✅ **Serializable** - Can send over network (gRPC, WebSocket)
 - ✅ **Testable** - No DOM needed for testing
-- ✅ **OT-compatible** - Ready for collaborative editing
+- ✅ **HMR-ready** - Perfect for hot module replacement streaming
 - ✅ **Platform-agnostic** - Works with DOM, SSR, React, etc.
+- ✅ **Extensible** - Can add OT/CRDT layer for collaborative editing (future)
 
 ## Demo
 
@@ -572,7 +574,44 @@ See **DEVELOPMENT.md** for important guidelines on:
 - Using explicit dependencies instead of singletons
 - Testing strategies for pure functions
 
-See **OT_REFACTOR.md** for details on the OT-style architecture.
+See **OT_REFACTOR.md** for details on the path-based, serializable patch architecture.
+
+## gRPC Client
+
+A Node.js gRPC client is provided for connecting to the Paperclip workspace server.
+
+### Running the Client
+
+Start the workspace server:
+
+```bash
+cd ../../
+cargo run --bin paperclip-server examples
+```
+
+In another terminal, run the gRPC client:
+
+```bash
+yarn grpc-client button.pc
+```
+
+This connects to the server and streams preview updates for the specified file.
+
+### Latency Testing
+
+Measure end-to-end latency from file write to preview update:
+
+```bash
+yarn test:latency
+```
+
+**Results from Spike 0.3:**
+- Average latency: **12.67ms**
+- Min latency: **6ms**
+- Max latency: **25ms**
+- Pass rate: **100%** (all tests < 40ms target)
+
+The test measures the time from writing a `.pc` file to receiving the preview update via gRPC streaming. This validates that the full pipeline (file write → watcher → parse → evaluate → stream → receive) meets performance targets.
 
 ## License
 

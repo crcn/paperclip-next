@@ -1,3 +1,5 @@
+use crate::semantic_identity::SemanticID;
+use paperclip_parser::ast::Span;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -11,28 +13,42 @@ pub enum VNode {
         attributes: HashMap<String, String>,
         styles: HashMap<String, String>,
         children: Vec<VNode>,
+        /// Semantic identity (stable across refactoring) - REQUIRED
+        semantic_id: SemanticID,
+        /// Explicit key for repeat items (from key attribute)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
+        /// Legacy AST-based ID (deprecated, will be removed)
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
 
     /// Text node
-    Text {
-        content: String,
-    },
+    Text { content: String },
 
     /// Comment node
-    Comment {
-        content: String,
+    Comment { content: String },
+
+    /// Error node (for partial evaluation - shows errors inline instead of crashing)
+    Error {
+        message: String,
+        /// Source location where error occurred
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<Span>,
+        /// Semantic ID for diffing (errors at same location should match)
+        semantic_id: SemanticID,
     },
 }
 
 impl VNode {
-    pub fn element(tag: impl Into<String>) -> Self {
+    pub fn element(tag: impl Into<String>, semantic_id: SemanticID) -> Self {
         VNode::Element {
             tag: tag.into(),
             attributes: HashMap::new(),
             styles: HashMap::new(),
             children: Vec::new(),
+            semantic_id,
+            key: None,
             id: None,
         }
     }
@@ -43,8 +59,19 @@ impl VNode {
         }
     }
 
+    pub fn error(message: impl Into<String>, span: Option<Span>, semantic_id: SemanticID) -> Self {
+        VNode::Error {
+            message: message.into(),
+            span,
+            semantic_id,
+        }
+    }
+
     pub fn with_attr(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        if let VNode::Element { ref mut attributes, .. } = self {
+        if let VNode::Element {
+            ref mut attributes, ..
+        } = self
+        {
             attributes.insert(key.into(), value.into());
         }
         self
@@ -58,22 +85,54 @@ impl VNode {
     }
 
     pub fn with_child(mut self, child: VNode) -> Self {
-        if let VNode::Element { ref mut children, .. } = self {
+        if let VNode::Element {
+            ref mut children, ..
+        } = self
+        {
             children.push(child);
         }
         self
     }
 
     pub fn with_children(mut self, new_children: Vec<VNode>) -> Self {
-        if let VNode::Element { ref mut children, .. } = self {
+        if let VNode::Element {
+            ref mut children, ..
+        } = self
+        {
             children.extend(new_children);
         }
         self
     }
 
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
-        if let VNode::Element { id: ref mut node_id, .. } = self {
+        if let VNode::Element {
+            id: ref mut node_id,
+            ..
+        } = self
+        {
             *node_id = Some(id.into());
+        }
+        self
+    }
+
+    pub fn with_semantic_id(mut self, new_semantic_id: SemanticID) -> Self {
+        if let VNode::Element {
+            semantic_id: ref mut sid,
+            ..
+        } = self
+        {
+            *sid = new_semantic_id;
+        }
+        self
+    }
+
+    pub fn with_key(mut self, key: impl Into<String>) -> Self {
+        if let VNode::Element {
+            key: ref mut node_key,
+            ..
+        } = self
+        {
+            *node_key = Some(key.into());
         }
         self
     }
@@ -81,7 +140,7 @@ impl VNode {
 
 /// Virtual Document (collection of root nodes with metadata)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VDocument {
+pub struct VirtualDomDocument {
     pub nodes: Vec<VNode>,
     pub styles: Vec<CssRule>,
 }
@@ -93,7 +152,7 @@ pub struct CssRule {
     pub properties: HashMap<String, String>,
 }
 
-impl VDocument {
+impl VirtualDomDocument {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
@@ -113,7 +172,7 @@ impl VDocument {
     }
 }
 
-impl Default for VDocument {
+impl Default for VirtualDomDocument {
     fn default() -> Self {
         Self::new()
     }

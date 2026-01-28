@@ -1,0 +1,30 @@
+{
+  "name": "@paperclip-lang/loader-core",
+  "version": "0.1.0",
+  "description": "Core utilities for Paperclip bundler loaders",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "jest"
+  },
+  "keywords": [
+    "paperclip",
+    "loader",
+    "bundler"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

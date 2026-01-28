@@ -4,20 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
-
-info() { echo -e "${BLUE}→${NC} $*"; }
-success() { echo -e "${GREEN}✓${NC} $*"; }
-error() { echo -e "${RED}✗${NC} $*"; }
-warn() { echo -e "${YELLOW}⚠${NC} $*"; }
+info() { echo "→ $*"; }
+success() { echo "✓ $*"; }
+error() { echo "✗ $*" >&2; }
+warn() { echo "⚠ $*" >&2; }
 
 # Check for fzf and offer to install
 ensure_fzf() {
@@ -28,8 +18,8 @@ ensure_fzf() {
   warn "fzf not found - needed for interactive menu"
   echo ""
   echo "Install fzf:"
-  echo "  macOS:   ${CYAN}brew install fzf${NC}"
-  echo "  Linux:   ${CYAN}sudo apt install fzf${NC} or ${CYAN}sudo yum install fzf${NC}"
+  echo "  macOS:   brew install fzf"
+  echo "  Linux:   sudo apt install fzf or sudo yum install fzf"
   echo ""
   read -p "Install with Homebrew now? (y/n) " -n 1 -r
   echo
@@ -126,49 +116,38 @@ run_clippy() {
 show_menu() {
   ensure_fzf
 
-  # Define menu items with emojis and descriptions
+  # Define menu items
   local options=(
-    "🧪 test|Run all Rust tests (cargo test --workspace)"
-    "📊 bench|Run performance benchmarks"
-    "🚀 server|Start gRPC server on :50051"
-    "🎨 demo|Open TypeScript client demo (localhost:3000)"
-    "✅ check|Run all checks (check/clippy/fmt/test)"
-    "📦 build|Build all packages in release mode"
-    "🎯 clippy|Run clippy linter"
-    "✨ format|Format all code with rustfmt"
-    "🧹 clean|Clean all build artifacts"
+    "test|Run all Rust tests (cargo test --workspace)"
+    "bench|Run performance benchmarks"
+    "server|Start gRPC server on :50051"
+    "demo|Open TypeScript client demo (localhost:3000)"
+    "check|Run all checks (check/clippy/fmt/test)"
+    "build|Build all packages in release mode"
+    "clippy|Run clippy linter"
+    "format|Format all code with rustfmt"
+    "clean|Clean all build artifacts"
   )
 
-  # Use fzf for selection with preview
+  # Use fzf for selection with constrained height
   local selected
   selected=$(printf '%s\n' "${options[@]}" | \
-    fzf --height=60% \
+    fzf --height=40% \
+        --layout=reverse \
         --border=rounded \
-        --margin=1 \
-        --padding=1 \
         --prompt="❯ " \
-        --pointer="▶" \
-        --marker="✓" \
         --header="Paperclip Development Menu" \
         --header-first \
-        --color="fg:#ebdbb2,bg:#282828,hl:#83a598" \
-        --color="fg+:#ebdbb2,bg+:#3c3836,hl+:#83a598" \
-        --color="info:#fabd2f,prompt:#fb4934,pointer:#b8bb26" \
-        --color="marker:#8ec07c,spinner:#fabd2f,header:#d3869b" \
-        --preview='echo {}' \
-        --preview-window=up:1:wrap \
-        --no-info \
-        --cycle \
-        --reverse)
+        --info=inline)
 
   if [ -z "$selected" ]; then
     echo "Cancelled."
     exit 0
   fi
 
-  # Extract command from selection (format: "emoji command|description")
+  # Extract command from selection (format: "command|description")
   local cmd
-  cmd=$(echo "$selected" | sed -E 's/^[^ ]+ ([^|]+)\|.*/\1/')
+  cmd=$(echo "$selected" | sed -E 's/^([^|]+)\|.*/\1/')
 
   echo ""
   case "$cmd" in

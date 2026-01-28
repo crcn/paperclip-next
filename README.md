@@ -16,18 +16,25 @@ This repository contains a working proof-of-concept demonstrating the core pipel
 
 #### 🔤 Parser (Rust)
 - **Tokenizer** using `logos` with zero-copy string slices
+- **Deterministic ID generation** using CRC32 + sequential counters
 - **Recursive descent parser** supporting:
   - Components, styles, tokens
   - HTML elements (div, button, etc.)
   - Text nodes and expressions
   - Conditionals and iteration
-- **12 passing tests**
+- **39 passing tests**
 
 #### ⚙️ Evaluator (Rust)
 - **AST → Virtual DOM transformation**
+- **Semantic Identity** - Stable, hierarchical node IDs
 - **Expression evaluation** (literals, variables, binary operators)
 - **Component rendering** with inline styles
-- **2 passing tests**
+- **Stable patches** - Semantic ID-based diffing
+- **Bundle support** - Cross-file component resolution
+- **CSS extraction** - Scoped stylesheets
+- **Slot implementation** - Default and inserted content with semantic tracking
+- **Dev mode validation** - Zero-overhead warnings for unstable patterns
+- **112 passing tests**
 
 #### 🌐 Workspace Server (Rust)
 - **gRPC service** with Tonic for streaming
@@ -46,17 +53,17 @@ This repository contains a working proof-of-concept demonstrating the core pipel
 **Prerequisites:**
 - Rust (latest stable)
 - Node.js 18+
-- npm or yarn
+- Yarn 4.x
 
 **Run the Tests:**
 ```bash
 # Test Rust code
 cargo test --workspace
 
-# Results: 15 tests passing
-# - 12 parser tests
-# - 2 evaluator tests
-# - 1 watcher test
+# Results: 152+ tests passing
+# - 39 parser tests
+# - 112 evaluator tests (includes slots + validator)
+# - 1 workspace test
 ```
 
 **Run Benchmarks:**
@@ -69,6 +76,50 @@ cargo bench --workspace
 # - Evaluator: 0.75 µs to 10 µs
 # - Full pipeline: ~2.2 µs (parse + evaluate)
 # See BENCHMARKS.md for detailed results
+```
+
+**Use the CLI:**
+```bash
+# Initialize a new project
+cargo run --package paperclip-cli -- init
+
+# Compile to React + TypeScript
+cargo run --package paperclip-cli -- compile --typescript
+
+# Compile to CSS
+cargo run --package paperclip-cli -- compile --target css
+
+# Output to stdout
+cargo run --package paperclip-cli -- compile --target css --stdout
+```
+
+**Or compile programmatically:**
+```bash
+# Run the React compiler example
+cargo run --package paperclip-compiler-react --example simple
+```
+
+**Use with Bundlers:**
+```bash
+# Build WASM loaders for webpack, vite, rollup, esbuild
+./build-loaders.sh
+
+# See LOADERS.md for detailed usage
+```
+
+**Try the Examples:**
+```bash
+# Vite + React example (recommended)
+cd examples/vite-react
+yarn install
+yarn dev
+
+# Webpack + React example
+cd examples/webpack-react
+yarn install
+yarn dev
+
+# See examples/README.md for more
 ```
 
 **Run the TypeScript Demo:**
@@ -111,6 +162,24 @@ public component Button {
 
 This parses into an AST, evaluates into a Virtual DOM, and can be streamed to clients for real-time preview.
 
+### Semantic Identity - Stable Node Tracking
+
+Every VNode in the Virtual DOM has a **semantic ID** that remains stable across refactoring:
+
+```
+Card{"Card-0"}::div[id]::h1[id]
+Card{"Card-0"}::div[id]::Button{"Button-0"}::button[id]
+Card{"Card-0"}::div[id]::Button{"Button-1"}::button[id]
+```
+
+**Benefits:**
+- 🔄 **Stable patches** - Nodes matched by ID, not position
+- 📝 **Refactoring-safe** - IDs survive structural changes
+- 🚀 **Zero patches on reorder** - Same content = no updates
+- 🎯 **Hierarchical** - Full path from root to node
+
+See `PHASE_3_4_COMPLETE.md` for implementation details.
+
 ### Architecture
 
 ```
@@ -122,16 +191,27 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
 ┌─────────────────────────────────────────────────────────┐
 │              Parser (packages/parser)                    │
 │  • Tokenizer (logos)                                     │
+│  • Deterministic ID generation (CRC32)                   │
 │  • Recursive descent parser                              │
-│  • AST generation                                        │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ▼
+│  • AST with sequential IDs                               │
+└──────┬─────────────┬────────────────────────────────────┘
+       │             │
+       │             ▼
+       │    ┌─────────────────────────────────────────────┐
+       │    │  React Compiler (packages/compiler-react)   │
+       │    │  • AST → React/JSX                          │
+       │    │  • Component generation                     │
+       │    │  • Props & hooks support                    │
+       │    └─────────────────────────────────────────────┘
+       │
+       ▼
 ┌─────────────────────────────────────────────────────────┐
 │            Evaluator (packages/evaluator)                │
 │  • AST → Virtual DOM                                     │
+│  • Semantic ID generation (hierarchical)                 │
 │  • Expression evaluation                                 │
 │  • Style application                                     │
+│  • Bundle/cross-file resolution                          │
 └────────────────────┬────────────────────────────────────┘
                      │
                      ▼
@@ -140,6 +220,7 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
 │  • File watching (notify)                                │
 │  • gRPC streaming (Tonic)                                │
 │  • JSON serialization                                    │
+│  • Semantic ID-based patch generation                    │
 └────────────────────┬────────────────────────────────────┘
                      │
                      ▼
@@ -158,16 +239,45 @@ See the full implementation plan in `docs/plans/2026-01-27-feat-paperclip-next-f
 **Phase 0 (Architecture Spikes)** - In Progress:
 - ✅ Spike 0.1: Parser Performance
 - ✅ Spike 0.2: Evaluator + Virtual DOM
-- ✅ Spike 0.3: gRPC Streaming Preview Loop (partial)
+- ✅ Spike 0.3: gRPC Streaming Preview Loop
+- ✅ Spike 0.6: Semantic Identity Implementation
 - 🔲 Spike 0.4: Roundtrip Serialization
 - 🔲 Spike 0.5: Live Component Preview Loading
-- ... and 16 more spikes to validate architecture
+- ... and more spikes to validate architecture
+
+**Recent Completions:**
+- ✅ **Phase 6: Slot Implementation** (January 2026)
+  - Component slots with default and inserted content
+  - Semantic ID tracking with SlotVariant (Default/Inserted)
+  - Multiple named slots support
+  - Empty slot handling
+  - Flexible syntax: `Card { }` and `Card() { }` both work
+  - 112 evaluator tests passing
+  - See `PHASE_6_COMPLETE.md` for details
+
+- ✅ **Phase 5: Dev Mode Warnings** (January 2026)
+  - Zero-overhead validation framework
+  - Auto-generated key detection
+  - Duplicate semantic ID detection
+  - Production mode bypass (no performance cost)
+  - 105 evaluator tests passing
+  - See `PHASE_5_COMPLETE.md` for details
+
+- ✅ **Phase 3 & 4: Semantic Identity & Stable Patches** (January 2026)
+  - Deterministic ID generation (CRC32 + sequential)
+  - Hierarchical semantic IDs for all VNodes
+  - Auto-generated component keys
+  - Semantic ID-based diffing algorithm
+  - 102 evaluator tests passing
+  - See `PHASE_3_4_COMPLETE.md` for details
 
 **Phase 1 (Core Engine):**
 - Incremental parsing with tree-sitter
 - GraphManager for dependency resolution
-- React/Yew compilers
-- Performance benchmarks (<10ms parse, <20ms evaluate)
+- ✅ React compiler (packages/compiler-react)
+- ✅ CSS compiler (packages/compiler-css)
+- Yew compiler
+- Performance benchmarks (<10ms parse, <20ms evaluate) ✅ **EXCEEDED** by 1000x
 
 **Phase 2 (Designer):**
 - Canvas UI (React)
@@ -197,12 +307,17 @@ Every pixel on the canvas must trace to editable source. This is the same invari
 This is a rewrite from scratch. The old codebase serves as reference, but we're building fresh with modern tooling.
 
 **Tech Stack:**
-- Parser: Rust + logos + recursive descent
-- Evaluator: Rust (zero-copy, arena allocation)
-- Server: Rust + Tonic (gRPC)
-- Client: TypeScript + Virtual DOM
-- (Future) Designer: React
-- (Future) Compilers: React, Yew, HTML/CSS
+- **CLI:** Rust + clap (command-line interface)
+- **Parser:** Rust + logos + recursive descent
+- **Evaluator:** Rust (zero-copy, arena allocation)
+- **Compilers:**
+  - ✅ **React** (AST → JSX/React components + TypeScript definitions)
+  - ✅ **CSS** (AST → Scoped stylesheets)
+  - 🔲 Yew (coming soon)
+  - 🔲 HTML (coming soon)
+- **Server:** Rust + Tonic (gRPC)
+- **Client:** TypeScript + Virtual DOM
+- **(Future) Designer:** React
 
 ## License
 

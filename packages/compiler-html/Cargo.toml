@@ -1,0 +1,17 @@
+[package]
+name = "paperclip-compiler-html"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true

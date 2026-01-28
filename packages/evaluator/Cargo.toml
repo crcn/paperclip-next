@@ -5,12 +5,18 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+default = []
+async = ["tokio"]
+
 [dependencies]
 paperclip-parser = { path = "../parser" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 prost = "0.13"
+tokio = { workspace = true, optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"

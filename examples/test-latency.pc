@@ -1,0 +1,10 @@
+public component Card {
+  render div {
+    style {
+      padding: 16px
+    }
+    div { text "Title" }
+    div { text "Content" }
+    button { text "Action" }
+  }
+}

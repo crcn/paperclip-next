@@ -12,9 +12,15 @@ bumpalo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+crc32fast = "1.4"
+ariadne = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
+
+[features]
+default = ["pretty-errors"]
+pretty-errors = ["ariadne"]
 
 [[bench]]
 name = "parser_bench"

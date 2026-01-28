@@ -8,7 +8,10 @@ High-performance AST evaluator that transforms Paperclip components into Virtual
 - 🌳 **Virtual DOM output** - JSON-serializable for streaming
 - 📊 **Expression evaluation** - Variables, operators, member access
 - 🎨 **Style application** - Inline styles with CSS properties
-- ✅ **Well-tested** - 2 passing tests
+- 🔑 **Semantic Identity** - Stable, refactoring-safe node IDs
+- 📦 **Bundle Support** - Cross-file component resolution
+- 🎯 **Stable Patches** - Semantic ID-based diffing
+- ✅ **Well-tested** - 102 passing tests
 
 ## Installation
 
@@ -25,7 +28,7 @@ paperclip-parser = { path = "../parser" }
 ### Basic Evaluation
 
 ```rust
-use paperclip_parser::parse;
+use paperclip_parser::parse_with_path;
 use paperclip_evaluator::Evaluator;
 
 fn main() {
@@ -41,16 +44,106 @@ fn main() {
         }
     "#;
 
-    // Parse
-    let doc = parse(source).expect("Failed to parse");
+    // Parse with file path for stable IDs
+    let doc = parse_with_path(source, "/components/button.pc")
+        .expect("Failed to parse");
 
-    // Evaluate
-    let mut evaluator = Evaluator::new();
+    // Evaluate with document ID
+    let mut evaluator = Evaluator::with_document_id("/components/button.pc");
     let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
     // Use Virtual DOM
     println!("Generated {} root nodes", vdoc.nodes.len());
     println!("Generated {} CSS rules", vdoc.styles.len());
+}
+```
+
+### Semantic Identity (Stable IDs)
+
+Every VNode has a semantic ID that remains stable across refactoring:
+
+```rust
+use paperclip_parser::parse_with_path;
+use paperclip_evaluator::{Evaluator, VNode};
+
+fn main() {
+    let source = r#"
+        public component Card {
+            render div {
+                h1 { text "Title" }
+                Button()
+                Button()
+            }
+        }
+
+        component Button {
+            render button { text "Click" }
+        }
+    "#;
+
+    let doc = parse_with_path(source, "/card.pc").unwrap();
+    let mut evaluator = Evaluator::with_document_id("/card.pc");
+    let vdom = evaluator.evaluate(&doc).unwrap();
+
+    // Every element has a semantic ID
+    if let VNode::Element { semantic_id, children, .. } = &vdom.nodes[0] {
+        println!("Card semantic ID: {}", semantic_id.to_selector());
+        // Output: Card{"Card-0"}::div[id]
+
+        for child in children {
+            if let VNode::Element { semantic_id, .. } = child {
+                println!("Child semantic ID: {}", semantic_id.to_selector());
+                // Output: Card{"Card-0"}::div[id]::h1[id]
+                //         Card{"Card-0"}::div[id]::Button{"Button-0"}::button[id]
+                //         Card{"Card-0"}::div[id]::Button{"Button-1"}::button[id]
+            }
+        }
+    }
+}
+```
+
+### Stable Patches (Diffing)
+
+Generate minimal patches using semantic ID-based matching:
+
+```rust
+use paperclip_parser::parse_with_path;
+use paperclip_evaluator::{Evaluator, diff_vdocument};
+
+fn main() {
+    let source_v1 = r#"
+        public component Card {
+            render div {
+                h1 { text "Title" }
+                p { text "Content" }
+            }
+        }
+    "#;
+
+    let source_v2 = r#"
+        public component Card {
+            render div {
+                h1 { text "Updated Title" }
+                p { text "Content" }
+            }
+        }
+    "#;
+
+    // Generate VDOM for both versions
+    let doc_v1 = parse_with_path(source_v1, "/card.pc").unwrap();
+    let mut eval_v1 = Evaluator::with_document_id("/card.pc");
+    let vdom_v1 = eval_v1.evaluate(&doc_v1).unwrap();
+
+    let doc_v2 = parse_with_path(source_v2, "/card.pc").unwrap();
+    let mut eval_v2 = Evaluator::with_document_id("/card.pc");
+    let vdom_v2 = eval_v2.evaluate(&doc_v2).unwrap();
+
+    // Generate minimal patches
+    let patches = diff_vdocument(&vdom_v1, &vdom_v2);
+
+    // Nodes matched by semantic ID - minimal patches!
+    println!("Patches: {}", patches.len());
+    // Only the text content changed, not the structure
 }
 ```
 
@@ -180,11 +273,24 @@ Main evaluator struct.
 
 **`new() -> Self`**
 
-Create a new evaluator instance.
+Create a new evaluator instance with anonymous document ID.
 
-**`evaluate(&mut self, doc: &Document) -> EvalResult<VDocument>`**
+**`with_document_id(path: &str) -> Self`**
+
+Create evaluator with document ID from file path. **Recommended** for stable semantic IDs.
+
+**Example:**
+```rust
+let mut evaluator = Evaluator::with_document_id("/components/button.pc");
+```
+
+**`evaluate(&mut self, doc: &Document) -> EvalResult<VirtualDomDocument>`**
 
 Evaluate a parsed document to Virtual DOM.
+
+**`evaluate_bundle(&mut self, bundle: &Bundle, entry_path: &Path) -> EvalResult<VirtualDomDocument>`**
+
+Evaluate a bundle with cross-file imports.
 
 ### `EvalContext`
 
@@ -237,7 +343,9 @@ Virtual DOM node (enum):
 - `attributes: HashMap<String, String>` - Element attributes
 - `styles: HashMap<String, String>` - Inline styles
 - `children: Vec<VNode>` - Child nodes
-- `id: Option<String>` - Optional ID for tracking
+- `semantic_id: SemanticID` - Stable semantic identity
+- `key: Option<String>` - Explicit key (from key attribute)
+- `id: Option<String>` - Legacy AST-based ID (deprecated)
 
 **`Text`** - Text node
 - `content: String` - Text content
@@ -245,17 +353,144 @@ Virtual DOM node (enum):
 **`Comment`** - Comment node
 - `content: String` - Comment content
 
-### `VDocument`
+### `VirtualDomDocument`
 
 Virtual document containing:
 - `nodes: Vec<VNode>` - Root nodes
 - `styles: Vec<CssRule>` - Global CSS rules
+
+### `SemanticID`
+
+Hierarchical semantic identity for stable node tracking.
+
+#### Methods
+
+**`to_selector() -> String`**
+
+Convert to CSS-like selector string.
+
+**Example:**
+```rust
+let id: SemanticID = // ...
+println!("{}", id.to_selector());
+// Output: Card{"Card-0"}::div[id]::Button{"Button-1"}::button[id]
+```
+
+**`is_descendant_of(&self, other: &SemanticID) -> bool`**
+
+Check if this ID is a descendant of another.
+
+**`parent() -> Option<SemanticID>`**
+
+Get parent semantic ID.
+
+### `SemanticSegment`
+
+Segment of a semantic path (enum):
+
+- `Component { name: String, key: Option<String> }` - Component instance
+- `Element { tag: String, role: Option<String>, ast_id: String }` - HTML element
+- `Slot { name: String, variant: SlotVariant }` - Slot insertion
+- `RepeatItem { repeat_id: String, key: String }` - Repeat item
+- `ConditionalBranch { condition_id: String, branch: Branch }` - Conditional branch
+
+### Diffing Functions
+
+**`diff_vdocument(old: &VirtualDomDocument, new: &VirtualDomDocument) -> Vec<VDocPatch>`**
+
+Generate minimal patches using semantic ID-based node matching.
+
+**Benefits:**
+- Nodes matched by semantic ID, not position
+- Reordering produces zero patches (if content unchanged)
+- Refactoring-safe - IDs survive structural changes
+
+**Example:**
+```rust
+let patches = diff_vdocument(&old_vdom, &new_vdom);
+for patch in patches {
+    // Apply patches...
+}
+```
 
 ### `CssRule`
 
 CSS rule:
 - `selector: String` - CSS selector
 - `properties: HashMap<String, String>` - CSS properties
+
+### `Bundle`
+
+Multi-file bundle with dependency resolution.
+
+#### Methods
+
+**`new() -> Self`**
+
+Create a new empty bundle.
+
+**`add_document(&mut self, path: PathBuf, document: Document)`**
+
+Add a parsed document to the bundle.
+
+**`build_dependencies(&mut self) -> Result<(), BundleError>`**
+
+Resolve dependencies between documents.
+
+**`get_document(&self, path: &Path) -> Option<&Document>`**
+
+Get a document by path.
+
+**`find_component(&self, name: &str, from_path: &Path) -> Option<(&Component, &Path)>`**
+
+Find a component by name from a specific file.
+
+**Example:**
+```rust
+use paperclip_evaluator::Bundle;
+use std::path::PathBuf;
+
+let mut bundle = Bundle::new();
+bundle.add_document(PathBuf::from("/main.pc"), main_doc);
+bundle.add_document(PathBuf::from("/button.pc"), button_doc);
+bundle.build_dependencies()?;
+
+// Evaluate bundle
+let mut evaluator = Evaluator::new();
+let vdom = evaluator.evaluate_bundle(&bundle, &PathBuf::from("/main.pc"))?;
+```
+
+### `CssEvaluator`
+
+CSS extraction and evaluation.
+
+#### Methods
+
+**`new() -> Self`**
+
+Create evaluator with anonymous document ID.
+
+**`with_document_id(path: &str) -> Self`**
+
+Create with document ID from file path.
+
+**`evaluate(&mut self, doc: &Document) -> CssResult<VirtualCssDocument>`**
+
+Evaluate document to CSS rules.
+
+**Example:**
+```rust
+use paperclip_evaluator::CssEvaluator;
+use paperclip_parser::parse_with_path;
+
+let doc = parse_with_path(source, "/styles.pc")?;
+let mut css_eval = CssEvaluator::with_document_id("/styles.pc");
+let css_doc = css_eval.evaluate(&doc)?;
+
+for rule in &css_doc.rules {
+    println!("{} {{ {:?} }}", rule.selector, rule.properties);
+}
+```
 
 ## Expression Evaluation
 

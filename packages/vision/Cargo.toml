@@ -1,0 +1,53 @@
+[package]
+name = "paperclip-vision"
+version.workspace = true
+edition.workspace = true
+authors = ["Paperclip Contributors"]
+description = "Screenshot capture and visual testing for Paperclip components"
+license = "MIT"
+repository = "https://github.com/paperclip-ui/paperclip-next"
+
+[[bin]]
+name = "paperclip-vision"
+path = "src/main.rs"
+
+[lib]
+name = "paperclip_vision"
+path = "src/lib.rs"
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+
+# Browser automation
+headless_chrome = "1.0"
+
+# HTTP server for rendering
+tiny_http = "0.12"
+
+# Image processing
+image = "0.25"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow = "1.0"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Timestamps
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3.8"

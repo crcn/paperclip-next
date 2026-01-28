@@ -221,8 +221,11 @@ mod workspace_comprehensive_tests {
 
         // Create file in nested directory
         let nested_file = buttons_dir.join("primary.pc");
-        fs::write(&nested_file, "public component Primary { render button {} }")
-            .expect("Failed to write nested file");
+        fs::write(
+            &nested_file,
+            "public component Primary { render button {} }",
+        )
+        .expect("Failed to write nested file");
 
         // Verify file exists and can be processed
         assert!(nested_file.exists());

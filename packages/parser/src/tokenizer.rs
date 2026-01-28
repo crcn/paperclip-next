@@ -50,6 +50,15 @@ pub enum Token<'src> {
     #[token("repeat")]
     Repeat,
 
+    #[token("in")]
+    In,
+
+    #[token("insert")]
+    Insert,
+
+    #[token("script")]
+    Script,
+
     #[token("text")]
     Text,
 
@@ -125,6 +134,24 @@ pub enum Token<'src> {
     #[token(".")]
     Dot,
 
+    #[token("==")]
+    EqualsEquals,
+
+    #[token("!=")]
+    NotEquals,
+
+    #[token("<=")]
+    LessThanEquals,
+
+    #[token(">=")]
+    GreaterThanEquals,
+
+    #[token("&&")]
+    And,
+
+    #[token("||")]
+    Or,
+
     #[token("=")]
     Equals,
 
@@ -173,6 +200,9 @@ impl<'src> fmt::Display for Token<'src> {
             Token::Trigger => write!(f, "trigger"),
             Token::If => write!(f, "if"),
             Token::Repeat => write!(f, "repeat"),
+            Token::In => write!(f, "in"),
+            Token::Insert => write!(f, "insert"),
+            Token::Script => write!(f, "script"),
             Token::Text => write!(f, "text"),
             Token::Div => write!(f, "div"),
             Token::Span => write!(f, "span"),
@@ -196,6 +226,12 @@ impl<'src> fmt::Display for Token<'src> {
             Token::Semicolon => write!(f, ";"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
+            Token::EqualsEquals => write!(f, "=="),
+            Token::NotEquals => write!(f, "!="),
+            Token::LessThanEquals => write!(f, "<="),
+            Token::GreaterThanEquals => write!(f, ">="),
+            Token::And => write!(f, "&&"),
+            Token::Or => write!(f, "||"),
             Token::Equals => write!(f, "="),
             Token::Plus => write!(f, "+"),
             Token::Minus => write!(f, "-"),
@@ -293,7 +329,9 @@ mod tests {
 
         assert!(tokens.iter().any(|(t, _)| *t == Token::Public));
         assert!(tokens.iter().any(|(t, _)| *t == Token::Component));
-        assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Ident("Button"))));
+        assert!(tokens
+            .iter()
+            .any(|(t, _)| matches!(t, Token::Ident("Button"))));
         assert!(tokens.iter().any(|(t, _)| *t == Token::LBrace));
         assert!(tokens.iter().any(|(t, _)| *t == Token::RBrace));
     }
@@ -312,6 +350,9 @@ mod tests {
         let tokens = tokenize(source);
 
         // Comments should be skipped
-        assert!(!tokens.iter().any(|(t, _)| matches!(t, Token::Slash) && matches!(tokens.get(1), Some((Token::Slash, _)))));
+        assert!(!tokens
+            .iter()
+            .any(|(t, _)| matches!(t, Token::Slash)
+                && matches!(tokens.get(1), Some((Token::Slash, _)))));
     }
 }

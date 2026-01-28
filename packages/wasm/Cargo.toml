@@ -1,0 +1,21 @@
+[package]
+name = "paperclip-wasm"
+version.workspace = true
+edition.workspace = true
+description = "WebAssembly bindings for Paperclip compiler"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+paperclip-compiler-react = { path = "../compiler-react" }
+paperclip-compiler-css = { path = "../compiler-css" }
+wasm-bindgen.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+console_error_panic_hook.workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true

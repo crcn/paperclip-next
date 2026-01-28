@@ -1,0 +1,26 @@
+[package]
+name = "paperclip-compiler-react"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+paperclip-inference = { path = "../inference" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
+
+[[example]]
+name = "typescript_defs"
+path = "examples/typescript_defs.rs"

@@ -1,0 +1,25 @@
+{
+  "name": "@paperclip-lang/wasm",
+  "version": "0.1.0",
+  "description": "WebAssembly bindings for Paperclip compiler",
+  "main": "pkg/paperclip_wasm.js",
+  "types": "pkg/paperclip_wasm.d.ts",
+  "files": [
+    "pkg"
+  ],
+  "scripts": {
+    "build": "wasm-pack build --target bundler --out-dir pkg",
+    "build:nodejs": "wasm-pack build --target nodejs --out-dir pkg-node",
+    "build:web": "wasm-pack build --target web --out-dir pkg-web",
+    "build:all": "yarn build && yarn build:nodejs && yarn build:web",
+    "test": "wasm-pack test --node"
+  },
+  "keywords": [
+    "paperclip",
+    "wasm",
+    "compiler"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "yarn@4.1.0"
+}

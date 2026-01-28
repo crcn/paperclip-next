@@ -6,11 +6,12 @@ use std::collections::HashMap;
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    pub id: String,
 }
 
 impl Span {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+    pub fn new(start: usize, end: usize, id: String) -> Self {
+        Self { start, end, id }
     }
 }
 
@@ -19,6 +20,7 @@ impl Span {
 pub struct Document {
     pub imports: Vec<Import>,
     pub tokens: Vec<TokenDecl>,
+    pub triggers: Vec<TriggerDecl>,
     pub styles: Vec<StyleDecl>,
     pub components: Vec<Component>,
 }
@@ -40,6 +42,15 @@ pub struct TokenDecl {
     pub span: Span,
 }
 
+/// Trigger declaration (reusable CSS selectors/media queries)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TriggerDecl {
+    pub public: bool,
+    pub name: String,
+    pub selectors: Vec<String>,
+    pub span: Span,
+}
+
 /// Style declaration (reusable style mixin)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StyleDecl {
@@ -55,9 +66,30 @@ pub struct StyleDecl {
 pub struct Component {
     pub public: bool,
     pub name: String,
+    pub script: Option<ScriptDirective>,
+    pub frame: Option<FrameAnnotation>,
     pub variants: Vec<Variant>,
     pub slots: Vec<Slot>,
     pub body: Option<Element>,
+    pub span: Span,
+}
+
+/// Script directive for binding to external code
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScriptDirective {
+    pub src: String,
+    pub target: String,
+    pub name: Option<String>,
+    pub span: Span,
+}
+
+/// Frame annotation for designer positioning
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FrameAnnotation {
+    pub x: f64,
+    pub y: f64,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
     pub span: Span,
 }
 
@@ -83,7 +115,8 @@ pub struct Slot {
 pub enum Element {
     /// HTML element (div, button, etc.)
     Tag {
-        name: String,
+        tag_name: String,
+        name: Option<String>,
         attributes: HashMap<String, Expression>,
         styles: Vec<StyleBlock>,
         children: Vec<Element>,
@@ -91,10 +124,7 @@ pub enum Element {
     },
 
     /// Text node
-    Text {
-        content: Expression,
-        span: Span,
-    },
+    Text { content: Expression, span: Span },
 
     /// Component instance
     Instance {
@@ -121,8 +151,12 @@ pub enum Element {
     },
 
     /// Slot insertion
-    SlotInsert {
-        name: String,
+    SlotInsert { name: String, span: Span },
+
+    /// Insert directive (explicit slot content)
+    Insert {
+        slot_name: String,
+        content: Vec<Element>,
         span: Span,
     },
 }
@@ -130,7 +164,7 @@ pub enum Element {
 /// Style block (inline styles)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StyleBlock {
-    pub variant: Option<String>,
+    pub variants: Vec<String>,
     pub extends: Vec<String>,
     pub properties: HashMap<String, String>,
     pub span: Span,
@@ -141,28 +175,16 @@ pub struct StyleBlock {
 #[serde(tag = "type")]
 pub enum Expression {
     /// String literal
-    Literal {
-        value: String,
-        span: Span,
-    },
+    Literal { value: String, span: Span },
 
     /// Number literal
-    Number {
-        value: f64,
-        span: Span,
-    },
+    Number { value: f64, span: Span },
 
     /// Boolean literal
-    Boolean {
-        value: bool,
-        span: Span,
-    },
+    Boolean { value: bool, span: Span },
 
     /// Variable reference
-    Variable {
-        name: String,
-        span: Span,
-    },
+    Variable { name: String, span: Span },
 
     /// Member access (obj.prop)
     Member {
@@ -222,6 +244,7 @@ impl Document {
         Self {
             imports: Vec::new(),
             tokens: Vec::new(),
+            triggers: Vec::new(),
             styles: Vec::new(),
             components: Vec::new(),
         }

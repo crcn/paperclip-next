@@ -1,7 +1,7 @@
 /// Comprehensive test suite for evaluator
 /// Tests expression evaluation, component composition, error handling
 use crate::*;
-use paperclip_parser::parse;
+use paperclip_parser::parse_with_path;
 
 #[cfg(test)]
 mod evaluator_comprehensive_tests {
@@ -23,8 +23,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 2);
@@ -69,8 +69,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -82,10 +82,14 @@ mod evaluator_comprehensive_tests {
 
                 // Check nested structure
                 match &children[1] {
-                    VNode::Element { children: inner, .. } => {
+                    VNode::Element {
+                        children: inner, ..
+                    } => {
                         assert_eq!(inner.len(), 1);
                         match &inner[0] {
-                            VNode::Element { children: deepest, .. } => {
+                            VNode::Element {
+                                children: deepest, ..
+                            } => {
                                 assert_eq!(deepest.len(), 1);
                             }
                             _ => panic!("Expected element node"),
@@ -114,8 +118,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -151,8 +155,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -186,8 +190,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -214,19 +218,17 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         match &vdoc.nodes[0] {
-            VNode::Element { children, .. } => {
-                match &children[0] {
-                    VNode::Text { content } => {
-                        assert_eq!(content, "Hello World");
-                    }
-                    _ => panic!("Expected text node"),
+            VNode::Element { children, .. } => match &children[0] {
+                VNode::Text { content } => {
+                    assert_eq!(content, "Hello World");
                 }
-            }
+                _ => panic!("Expected text node"),
+            },
             _ => panic!("Expected element node"),
         }
     }
@@ -241,8 +243,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
 
         // Set variable
         evaluator
@@ -252,14 +254,12 @@ mod evaluator_comprehensive_tests {
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         match &vdoc.nodes[0] {
-            VNode::Element { children, .. } => {
-                match &children[0] {
-                    VNode::Text { content } => {
-                        assert_eq!(content, "Alice");
-                    }
-                    _ => panic!("Expected text node"),
+            VNode::Element { children, .. } => match &children[0] {
+                VNode::Text { content } => {
+                    assert_eq!(content, "Alice");
                 }
-            }
+                _ => panic!("Expected text node"),
+            },
             _ => panic!("Expected element node"),
         }
     }
@@ -274,8 +274,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
 
         // Set object variable
         let mut user = std::collections::HashMap::new();
@@ -287,14 +287,12 @@ mod evaluator_comprehensive_tests {
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         match &vdoc.nodes[0] {
-            VNode::Element { children, .. } => {
-                match &children[0] {
-                    VNode::Text { content } => {
-                        assert_eq!(content, "Bob");
-                    }
-                    _ => panic!("Expected text node"),
+            VNode::Element { children, .. } => match &children[0] {
+                VNode::Text { content } => {
+                    assert_eq!(content, "Bob");
                 }
-            }
+                _ => panic!("Expected text node"),
+            },
             _ => panic!("Expected element node"),
         }
     }
@@ -420,8 +418,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
 
         let result = evaluator.evaluate(&doc);
         // Should handle missing component gracefully
@@ -439,13 +437,138 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
 
         let result = evaluator.evaluate(&doc);
         // Should handle missing variable gracefully
         // Either error or return empty string
         assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_error_messages_include_context() {
+        let source = r#"
+            public component App {
+                render div {
+                    text {undefinedVariable}
+                }
+            }
+        "#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+
+        let result = evaluator.evaluate(&doc);
+        // With partial evaluation, errors are now caught and converted to Error nodes
+        assert!(result.is_ok(), "Should not crash on undefined variable");
+
+        let vdoc = result.unwrap();
+        // The div should have an Error node as child
+        if let VNode::Element { children, .. } = &vdoc.nodes[0] {
+            match &children[0] {
+                VNode::Error { message, span, .. } => {
+                    // Error message should include variable name
+                    assert!(
+                        message.contains("undefinedVariable"),
+                        "Error should mention variable name: {}",
+                        message
+                    );
+                    // Span should be present
+                    assert!(span.is_some(), "Error should have span information");
+                }
+                other => panic!("Expected Error node, got {:?}", other),
+            }
+        } else {
+            panic!("Expected Element node");
+        }
+    }
+
+    #[test]
+    fn test_error_division_by_zero() {
+        use crate::evaluator::{EvalError, Evaluator};
+        use paperclip_parser::ast::{BinaryOp, Expression, Span};
+
+        // Manually create evaluator and test division by zero
+        let evaluator = Evaluator::new();
+
+        let expr = Expression::Binary {
+            left: Box::new(Expression::Number {
+                value: 5.0,
+                span: Span::new(0, 1, "test".to_string()),
+            }),
+            operator: BinaryOp::Divide,
+            right: Box::new(Expression::Number {
+                value: 0.0,
+                span: Span::new(4, 5, "test".to_string()),
+            }),
+            span: Span::new(0, 5, "test".to_string()),
+        };
+
+        let result = evaluator.evaluate_expression(&expr);
+        assert!(result.is_err());
+
+        if let Err(err) = result {
+            match err {
+                EvalError::DivisionByZero { span } => {
+                    // Should have span information
+                    assert_eq!(span, Span::new(0, 5, "test".to_string()));
+                }
+                _ => panic!("Expected DivisionByZero error, got: {:?}", err),
+            }
+        }
+    }
+
+    #[test]
+    fn test_error_invalid_operands() {
+        use crate::evaluator::{EvalError, Evaluator};
+        use paperclip_parser::ast::{BinaryOp, Expression, Span};
+
+        // Manually create evaluator and test invalid operands
+        let evaluator = Evaluator::new();
+
+        let expr = Expression::Binary {
+            left: Box::new(Expression::Literal {
+                value: "hello".to_string(),
+                span: Span::new(0, 7, "test".to_string()),
+            }),
+            operator: BinaryOp::Subtract,
+            right: Box::new(Expression::Literal {
+                value: "world".to_string(),
+                span: Span::new(10, 17, "test".to_string()),
+            }),
+            span: Span::new(0, 17, "test".to_string()),
+        };
+
+        let result = evaluator.evaluate_expression(&expr);
+        assert!(result.is_err());
+
+        if let Err(err) = result {
+            let err_str = format!("{}", err);
+            // Error should mention the operator and types
+            assert!(
+                err_str.contains("-") || err_str.contains("Invalid"),
+                "Error should mention operator: {}",
+                err_str
+            );
+
+            match err {
+                EvalError::InvalidOperands {
+                    operator,
+                    details,
+                    span,
+                } => {
+                    assert_eq!(operator, "-");
+                    assert!(
+                        details.contains("String") || details.contains("string"),
+                        "Details should mention types: {}",
+                        details
+                    );
+                    assert_eq!(span, Span::new(0, 17, "test".to_string()));
+                }
+                _ => panic!("Expected InvalidOperands error, got: {:?}", err),
+            }
+        }
     }
 
     #[test]
@@ -456,8 +579,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -488,8 +611,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         assert_eq!(vdoc.nodes.len(), 1);
@@ -529,8 +652,8 @@ mod evaluator_comprehensive_tests {
             }
         "#;
 
-        let doc = parse(source).expect("Failed to parse");
-        let mut evaluator = Evaluator::new();
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
         // Test JSON serialization
@@ -541,7 +664,7 @@ mod evaluator_comprehensive_tests {
         assert!(json.contains("Click"));
 
         // Test deserialization
-        let deserialized: VDocument =
+        let deserialized: VirtualDomDocument =
             serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.nodes.len(), 1);
     }

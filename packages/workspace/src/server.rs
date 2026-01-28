@@ -1,5 +1,5 @@
-use crate::watcher::FileWatcher;
 use crate::state::WorkspaceState;
+use crate::watcher::FileWatcher;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -199,8 +199,7 @@ impl WorkspaceService for WorkspaceServer {
         ))
     }
 
-    type WatchFilesStream =
-        Pin<Box<dyn Stream<Item = Result<FileEvent, Status>> + Send + 'static>>;
+    type WatchFilesStream = Pin<Box<dyn Stream<Item = Result<FileEvent, Status>> + Send + 'static>>;
 
     async fn watch_files(
         &self,

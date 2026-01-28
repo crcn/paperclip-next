@@ -1,7 +1,11 @@
+use paperclip_evaluator::{
+    diff_vdocument, AssetReference, AssetType, Bundle, CssEvaluator, Evaluator, VDocPatch,
+    VirtualCssDocument, VirtualDomDocument,
+};
+use paperclip_parser::{ast::Document, get_document_id, parse_with_path};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use paperclip_parser::{parse, ast::Document};
-use paperclip_evaluator::{Evaluator, VDocument, diff_vdocument, VDocPatch};
+use tracing::{debug, error, info, instrument, warn};
 
 // Re-export evaluator's protobuf types
 pub use paperclip_evaluator::vdom_differ::proto::patches::InitializePatch;
@@ -19,90 +23,136 @@ pub enum StateError {
     IoError(#[from] std::io::Error),
 }
 
-// Asset reference extracted from AST
-#[derive(Clone, Debug)]
-pub struct AssetReference {
-    pub path: String,
-    pub asset_type: AssetType,
-    pub resolved_path: PathBuf,
-}
-
-#[derive(Clone, Debug)]
-pub enum AssetType {
-    Image,
-    Font,
-    Video,
-    Audio,
-    Other,
-}
-
 // Per-file cached state
+// Note: AST is stored in Bundle.documents, assets in Bundle.assets
 #[derive(Clone)]
 pub struct FileState {
     pub source: String,
-    pub ast: Document,
-    pub vdom: VDocument,
-    pub assets: Vec<AssetReference>,
+    pub vdom: VirtualDomDocument,
+    pub css: VirtualCssDocument,
     pub version: u64,
+    pub document_id: String,
 }
 
 // Workspace-level state cache
 pub struct WorkspaceState {
     files: HashMap<PathBuf, FileState>,
+    // Bundle for the workspace - rebuilt when files change
+    bundle: Bundle,
 }
 
 impl WorkspaceState {
     pub fn new() -> Self {
         Self {
             files: HashMap::new(),
+            bundle: Bundle::new(),
         }
     }
 
-    // Update file and return VDocument patches
+    // Update file and return VirtualDomDocument patches
+    #[instrument(skip(self, new_source, project_root), fields(path = %path.display(), source_len = new_source.len()))]
     pub fn update_file(
         &mut self,
         path: PathBuf,
         new_source: String,
         project_root: &Path,
     ) -> Result<Vec<VDocPatch>, StateError> {
-        // Parse new source
-        let new_ast = parse(&new_source)
-            .map_err(|e| StateError::ParseError(format!("{:?}", e)))?;
+        let is_cached = self.files.contains_key(&path);
+        info!(is_cached, "Updating file");
 
-        let mut evaluator = Evaluator::new();
-        let new_vdom = evaluator.evaluate(&new_ast)
-            .map_err(|e| StateError::EvalError(format!("{:?}", e)))?;
+        // Get path string for ID generation
+        let path_str = path.to_string_lossy();
 
-        let new_assets = extract_assets(&new_ast, project_root);
+        // Parse new source with file path for proper ID generation
+        debug!("Parsing source");
+        let new_ast = parse_with_path(&new_source, &path_str).map_err(|e| {
+            error!(error = ?e, "Parse failed");
+            StateError::ParseError(format!("{:?}", e))
+        })?;
+
+        // Get document ID
+        let document_id = get_document_id(&path_str);
+
+        // Add/update file in bundle
+        debug!("Adding file to bundle");
+        self.bundle.add_document(path.clone(), new_ast.clone());
+
+        // Rebuild bundle dependencies
+        debug!("Building bundle dependencies");
+        if let Err(e) = self.bundle.build_dependencies(project_root) {
+            warn!(error = ?e, "Failed to build dependencies, continuing with single-file evaluation");
+        }
+
+        // Evaluate using bundle for cross-file imports
+        debug!("Evaluating AST for DOM with bundle");
+        let mut evaluator = Evaluator::with_document_id(&path_str);
+        let new_vdom = evaluator
+            .evaluate_bundle(&self.bundle, &path)
+            .map_err(|e| {
+                error!(error = ?e, "DOM bundle evaluation failed");
+                StateError::EvalError(format!("{:?}", e))
+            })?;
+
+        debug!("Evaluating AST for CSS with bundle");
+        let mut css_evaluator = CssEvaluator::with_document_id(&path_str);
+        let new_css = css_evaluator
+            .evaluate_bundle(&self.bundle, &path)
+            .map_err(|e| {
+                error!(error = ?e, "CSS bundle evaluation failed");
+                StateError::EvalError(format!("{:?}", e))
+            })?;
+        info!(css_rules = new_css.rules.len(), "CSS evaluated");
+
+        debug!(assets_count = "extracting", "Extracting assets");
+        let new_assets = extract_assets(&new_ast, project_root, &path);
+        info!(assets_count = new_assets.len(), "Assets extracted");
+
+        // Add assets to bundle
+        for asset in &new_assets {
+            self.bundle.add_asset(asset.clone());
+        }
 
         // Get old state for diffing
         let patches = if let Some(old_state) = self.files.get(&path) {
+            debug!(
+                old_version = old_state.version,
+                "Generating patches from diff"
+            );
             // Generate patches by diffing
-            diff_vdocument(&old_state.vdom, &new_vdom)
+            let patches = diff_vdocument(&old_state.vdom, &new_vdom);
+            info!(patch_count = patches.len(), "Patches generated");
+            patches
         } else {
+            info!("First evaluation, generating initialize patch");
             // First time - send full document as "initialize" patch
             use paperclip_evaluator::vdom_differ::proto::patches::v_doc_patch;
             vec![VDocPatch {
-                patch_type: Some(v_doc_patch::PatchType::Initialize(
-                    InitializePatch {
-                        vdom: Some(convert_vdom_to_proto(&new_vdom)),
-                    }
-                )),
+                patch_type: Some(v_doc_patch::PatchType::Initialize(InitializePatch {
+                    vdom: Some(convert_vdom_to_proto(&new_vdom)),
+                })),
             }]
         };
 
         // Update cached state
-        let new_version = self.files.get(&path)
-            .map(|s| s.version + 1)
-            .unwrap_or(0);
+        let new_version = self.files.get(&path).map(|s| s.version + 1).unwrap_or(0);
 
-        self.files.insert(path, FileState {
-            source: new_source,
-            ast: new_ast,
-            vdom: new_vdom,
-            assets: new_assets,
-            version: new_version,
-        });
+        info!(
+            new_version,
+            nodes = new_vdom.nodes.len(),
+            css_rules = new_css.rules.len(),
+            "Caching file state"
+        );
+
+        self.files.insert(
+            path,
+            FileState {
+                source: new_source,
+                vdom: new_vdom,
+                css: new_css,
+                version: new_version,
+                document_id,
+            },
+        );
 
         Ok(patches)
     }
@@ -111,15 +161,35 @@ impl WorkspaceState {
     pub fn get_file(&self, path: &Path) -> Option<&FileState> {
         self.files.get(path)
     }
+
+    /// Get the parsed AST for a file (from bundle)
+    pub fn get_ast(&self, path: &Path) -> Option<&Document> {
+        self.bundle.get_document(path)
+    }
+
+    /// Get all assets used by a specific file (from bundle)
+    pub fn get_file_assets(&self, path: &Path) -> Vec<&AssetReference> {
+        self.bundle.assets_for_file(path)
+    }
+
+    /// Get all unique assets across the workspace
+    pub fn get_all_assets(&self) -> impl Iterator<Item = &AssetReference> {
+        self.bundle.unique_assets()
+    }
+
+    /// Get the bundle (for advanced queries)
+    pub fn bundle(&self) -> &Bundle {
+        &self.bundle
+    }
 }
 
 // Extract asset references from AST
-fn extract_assets(ast: &Document, project_root: &Path) -> Vec<AssetReference> {
+fn extract_assets(ast: &Document, project_root: &Path, source_file: &Path) -> Vec<AssetReference> {
     let mut assets = Vec::new();
 
     for component in &ast.components {
         if let Some(body) = &component.body {
-            extract_from_element(body, project_root, &mut assets);
+            extract_from_element(body, project_root, source_file, &mut assets);
         }
     }
 
@@ -129,30 +199,40 @@ fn extract_assets(ast: &Document, project_root: &Path) -> Vec<AssetReference> {
 fn extract_from_element(
     element: &paperclip_parser::ast::Element,
     project_root: &Path,
+    source_file: &Path,
     assets: &mut Vec<AssetReference>,
 ) {
     use paperclip_parser::ast::Element;
 
     match element {
-        Element::Tag { name, attributes, children, .. } => {
+        Element::Tag {
+            tag_name,
+            attributes,
+            children,
+            ..
+        } => {
             // Extract from img src
-            if name == "img" {
+            if tag_name == "img" {
                 if let Some(src_expr) = attributes.get("src") {
                     if let Some(src) = expression_to_string(src_expr) {
                         assets.push(AssetReference {
                             path: src.clone(),
                             asset_type: AssetType::Image,
                             resolved_path: resolve_asset_path(&src, project_root),
+                            source_file: source_file.to_path_buf(),
                         });
                     }
                 }
             }
 
             // Extract from link href (fonts, stylesheets)
-            if name == "link" {
+            if tag_name == "link" {
                 if let Some(href_expr) = attributes.get("href") {
                     if let Some(href) = expression_to_string(href_expr) {
-                        let asset_type = if href.ends_with(".woff") || href.ends_with(".woff2") || href.ends_with(".ttf") {
+                        let asset_type = if href.ends_with(".woff")
+                            || href.ends_with(".woff2")
+                            || href.ends_with(".ttf")
+                        {
                             AssetType::Font
                         } else if href.ends_with(".css") {
                             AssetType::Other
@@ -163,16 +243,17 @@ fn extract_from_element(
                             path: href.clone(),
                             asset_type,
                             resolved_path: resolve_asset_path(&href, project_root),
+                            source_file: source_file.to_path_buf(),
                         });
                     }
                 }
             }
 
             // Extract from video/audio sources
-            if name == "video" || name == "audio" {
+            if tag_name == "video" || tag_name == "audio" {
                 if let Some(src_expr) = attributes.get("src") {
                     if let Some(src) = expression_to_string(src_expr) {
-                        let asset_type = if name == "video" {
+                        let asset_type = if tag_name == "video" {
                             AssetType::Video
                         } else {
                             AssetType::Audio
@@ -181,19 +262,21 @@ fn extract_from_element(
                             path: src.clone(),
                             asset_type,
                             resolved_path: resolve_asset_path(&src, project_root),
+                            source_file: source_file.to_path_buf(),
                         });
                     }
                 }
             }
 
             // Extract from source elements (video/audio children)
-            if name == "source" {
+            if tag_name == "source" {
                 if let Some(src_expr) = attributes.get("src") {
                     if let Some(src) = expression_to_string(src_expr) {
                         assets.push(AssetReference {
                             path: src.clone(),
                             asset_type: AssetType::Other,
                             resolved_path: resolve_asset_path(&src, project_root),
+                            source_file: source_file.to_path_buf(),
                         });
                     }
                 }
@@ -201,25 +284,29 @@ fn extract_from_element(
 
             // Recurse into children
             for child in children {
-                extract_from_element(child, project_root, assets);
+                extract_from_element(child, project_root, source_file, assets);
             }
         }
 
         Element::Instance { children, .. } => {
             // Recurse into component instance children
             for child in children {
-                extract_from_element(child, project_root, assets);
+                extract_from_element(child, project_root, source_file, assets);
             }
         }
 
-        Element::Conditional { then_branch, else_branch, .. } => {
+        Element::Conditional {
+            then_branch,
+            else_branch,
+            ..
+        } => {
             // Extract from conditional branches
             for child in then_branch {
-                extract_from_element(child, project_root, assets);
+                extract_from_element(child, project_root, source_file, assets);
             }
             if let Some(else_br) = else_branch {
                 for child in else_br {
-                    extract_from_element(child, project_root, assets);
+                    extract_from_element(child, project_root, source_file, assets);
                 }
             }
         }
@@ -227,12 +314,19 @@ fn extract_from_element(
         Element::Repeat { body, .. } => {
             // Extract from repeat body
             for child in body {
-                extract_from_element(child, project_root, assets);
+                extract_from_element(child, project_root, source_file, assets);
             }
         }
 
         Element::Text { .. } | Element::SlotInsert { .. } => {
             // No assets in text or slot inserts
+        }
+
+        Element::Insert { content, .. } => {
+            // Extract from insert content
+            for child in content {
+                extract_from_element(child, project_root, source_file, assets);
+            }
         }
     }
 }
@@ -261,7 +355,10 @@ fn resolve_asset_path(relative_path: &str, project_root: &Path) -> PathBuf {
     // Handle leading ./ or ../
     let cleaned = relative_path.trim_start_matches("./");
 
-    if cleaned.starts_with("http://") || cleaned.starts_with("https://") || cleaned.starts_with("//") {
+    if cleaned.starts_with("http://")
+        || cleaned.starts_with("https://")
+        || cleaned.starts_with("//")
+    {
         // External URL - return as-is (PathBuf will just store it)
         PathBuf::from(cleaned)
     } else {
@@ -270,8 +367,8 @@ fn resolve_asset_path(relative_path: &str, project_root: &Path) -> PathBuf {
     }
 }
 
-// Convert VDocument to protobuf format (stub for now)
-fn convert_vdom_to_proto(_vdom: &VDocument) -> proto_vdom::VDocument {
+// Convert VirtualDomDocument to protobuf format (stub for now)
+fn convert_vdom_to_proto(_vdom: &VirtualDomDocument) -> proto_vdom::VDocument {
     // TODO: Implement full conversion
     // For now, return empty document
     proto_vdom::VDocument {
@@ -312,13 +409,19 @@ mod tests {
         let path = PathBuf::from("/test/file.pc");
         let project_root = PathBuf::from("/test");
 
-        state.update_file(path.clone(), "component A {}".to_string(), &project_root).unwrap();
+        state
+            .update_file(path.clone(), "component A {}".to_string(), &project_root)
+            .unwrap();
         assert_eq!(state.get_file(&path).unwrap().version, 0);
 
-        state.update_file(path.clone(), "component B {}".to_string(), &project_root).unwrap();
+        state
+            .update_file(path.clone(), "component B {}".to_string(), &project_root)
+            .unwrap();
         assert_eq!(state.get_file(&path).unwrap().version, 1);
 
-        state.update_file(path.clone(), "component C {}".to_string(), &project_root).unwrap();
+        state
+            .update_file(path.clone(), "component C {}".to_string(), &project_root)
+            .unwrap();
         assert_eq!(state.get_file(&path).unwrap().version, 2);
     }
 
@@ -334,10 +437,13 @@ mod tests {
   }
 }"#;
 
-        state.update_file(path.clone(), source.to_string(), &project_root).unwrap();
+        state
+            .update_file(path.clone(), source.to_string(), &project_root)
+            .unwrap();
 
-        let file_state = state.get_file(&path).unwrap();
+        // Assets are now accessed through the bundle
+        let file_assets = state.get_file_assets(&path);
         // Assets list exists (may be empty if no assets in this simple component)
-        assert!(file_state.assets.len() >= 0);
+        assert!(file_assets.len() >= 0);
     }
 }

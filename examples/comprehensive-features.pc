@@ -1,0 +1,230 @@
+// Comprehensive example demonstrating all parser features
+
+import "./theme.pc" as theme
+import "./icons.pc"
+
+// Design tokens
+public token primaryColor #3366FF
+public token secondaryColor #FF6633
+token spacing 16px
+token fontFamily "Inter, sans-serif"
+
+// Triggers for responsive and interactive states
+public trigger hover {
+  ":hover",
+  ":focus"
+}
+
+trigger mobile {
+  "@media (max-width: 768px)"
+}
+
+// Reusable styles
+public style baseButton {
+  padding: 16px 32px
+  border-radius: 8px
+  font-family: fontFamily
+  cursor: pointer
+}
+
+style primaryButton extends baseButton {
+  background: primaryColor
+  color: #FFFFFF
+}
+
+// Component with script directive
+component Counter {
+  script(src: "./counter.tsx", target: "react", name: "CounterComponent")
+
+  variant disabled
+  variant loading
+
+  slot icon
+
+  render div container (class = "counter") {
+    style {
+      display: flex
+      align-items: center
+      gap: 16px
+    }
+
+    style variant disabled {
+      opacity: 0.5
+      pointer-events: none
+    }
+
+    button decrementBtn (onClick = handleDecrement, disabled = isDisabled) {
+      style extends primaryButton {
+        background: secondaryColor
+      }
+
+      style variant hover {
+        transform: scale(1.05)
+      }
+
+      text "-"
+    }
+
+    div countDisplay {
+      style {
+        font-size: 24px
+        font-weight: bold
+        min-width: 60px
+        text-align: center
+      }
+
+      // Expression with arithmetic and function calls
+      text formatNumber(count + offset)
+    }
+
+    button incrementBtn (onClick = handleIncrement) {
+      style extends primaryButton
+
+      style variant hover + disabled {
+        cursor: not-allowed
+      }
+
+      text "+"
+    }
+
+    // Conditional rendering
+    if showReset && count > 0 {
+      button resetBtn (onClick = handleReset) {
+        style extends baseButton {
+          background: #CCCCCC
+        }
+
+        text "Reset"
+      }
+    }
+
+    // Slot insertion
+    insert icon {
+      text "📊"
+    }
+  }
+}
+
+// Component with complex expressions
+component UserList {
+  script(src: "./user-list.tsx", target: "react")
+
+  slot header
+  slot footer
+
+  render div listContainer (class = "user-list") {
+    style {
+      padding: spacing
+      background: theme.backgroundColor
+    }
+
+    header
+
+    // Complex conditional with logical operators
+    if users.length > 0 && isLoaded || hasCache {
+      div userGrid {
+        style {
+          display: grid
+          grid-template-columns: "repeat(3, 1fr)"
+          gap: spacing
+        }
+
+        // Iteration with member access
+        repeat user in getFilteredUsers(users, searchQuery) {
+          div userCard (key = user.id) {
+            style {
+              padding: spacing
+              border-radius: 8px
+              background: #FFFFFF
+            }
+
+            style variant hover {
+              box-shadow: "0 4px 12px rgba(0, 0, 0, 0.1)"
+            }
+
+            img avatar (
+              src = user.profile.avatar,
+              alt = user.profile.name
+            ) {
+              style {
+                width: 64px
+                height: 64px
+                border-radius: 50%
+              }
+            }
+
+            div userInfo {
+              // Template string interpolation
+              text "Name: ${user.profile.name}"
+
+              // Comparison operators
+              if user.age >= 18 && user.age <= 65 {
+                text "Adult"
+              }
+
+              // Arithmetic with precedence
+              text calculateScore(user.points * 10 + bonusPoints)
+
+              // Nested function calls and member access
+              text toUpperCase(formatDate(user.profile.createdAt))
+            }
+          }
+        }
+      }
+    }
+
+    // Insert directive for named slots
+    insert footer {
+      div pagination {
+        text "Page ${currentPage} of ${totalPages}"
+      }
+    }
+  }
+}
+
+// Component demonstrating all element name features
+component Layout {
+  render div rootContainer (id = "app-root") {
+    style {
+      min-height: 100vh
+      display: flex
+      flex-direction: column
+    }
+
+    div headerSection (role = "banner") {
+      style {
+        background: primaryColor
+        padding: spacing
+      }
+
+      text "Header"
+    }
+
+    div mainContent (role = "main") {
+      style extends theme.contentStyle {
+        flex: 1
+        padding: 32px
+      }
+
+      Counter (
+        initialCount = 0,
+        step = 1,
+        onCountChange = handleCountChange
+      ) {
+        insert icon {
+          text "🔢"
+        }
+      }
+    }
+
+    div footerSection (role = "contentinfo") {
+      style {
+        background: secondaryColor
+        padding: spacing
+        text-align: center
+      }
+
+      text "© 2024 Example App"
+    }
+  }
+}

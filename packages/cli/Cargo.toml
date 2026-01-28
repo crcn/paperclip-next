@@ -1,0 +1,38 @@
+[package]
+name = "paperclip-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "paperclip"
+path = "src/main.rs"
+
+[features]
+default = []
+vision = ["paperclip-vision"]
+
+[dependencies]
+paperclip-parser = { path = "../parser", features = ["pretty-errors"] }
+paperclip-compiler-react = { path = "../compiler-react" }
+paperclip-compiler-css = { path = "../compiler-css" }
+paperclip-compiler-html = { path = "../compiler-html" }
+paperclip-evaluator = { path = "../evaluator" }
+paperclip-vision = { path = "../vision", optional = true }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+anyhow.workspace = true
+thiserror.workspace = true
+
+# File system
+glob = "0.3"
+walkdir = "2.4"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+colored = "2.1"

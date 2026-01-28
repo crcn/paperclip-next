@@ -1,0 +1,37 @@
+{
+  "name": "@paperclip-lang/webpack-loader",
+  "version": "0.1.0",
+  "description": "Webpack loader for Paperclip files",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "packageManager": "yarn@4.1.0",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "prepublishOnly": "yarn build"
+  },
+  "keywords": [
+    "paperclip",
+    "webpack",
+    "loader"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "webpack": "^5.0.0"
+  },
+  "dependencies": {
+    "@paperclip-lang/wasm": "^0.1.0",
+    "loader-utils": "^3.2.1",
+    "schema-utils": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/webpack": "^5.28.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

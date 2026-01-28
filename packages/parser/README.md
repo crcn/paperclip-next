@@ -60,6 +60,28 @@ fn main() {
 }
 ```
 
+### Parsing with File Path (Recommended)
+
+```rust
+use paperclip_parser::parse_with_path;
+
+fn main() {
+    let source = r#"
+        public component Button {
+            render button {
+                text "Click me"
+            }
+        }
+    "#;
+
+    // Parse with file path for deterministic IDs
+    let doc = parse_with_path(source, "/components/button.pc").unwrap();
+
+    println!("Document ID: {}", doc.components[0].span.id);
+    // IDs are deterministic based on file path
+}
+```
+
 ### Tokenization Only
 
 ```rust
@@ -114,6 +136,31 @@ fn main() {
 }
 ```
 
+### Document ID Generation
+
+```rust
+use paperclip_parser::{get_document_id, IDGenerator};
+
+fn main() {
+    // Get deterministic document ID from file path
+    let doc_id = get_document_id("/components/button.pc");
+    println!("Document ID: {}", doc_id); // e.g., "80f4925f"
+
+    // IDs are deterministic - same path always generates same ID
+    let id1 = get_document_id("/entry.pc");
+    let id2 = get_document_id("/entry.pc");
+    assert_eq!(id1, id2);
+
+    // Create ID generator for sequential IDs
+    let mut id_gen = IDGenerator::new("/components/button.pc");
+    let id1 = id_gen.new_id(); // "80f4925f-1"
+    let id2 = id_gen.new_id(); // "80f4925f-2"
+    let id3 = id_gen.new_id(); // "80f4925f-3"
+
+    println!("Generated IDs: {}, {}, {}", id1, id2, id3);
+}
+```
+
 ### Error Handling
 
 ```rust
@@ -152,11 +199,64 @@ Parse a complete .pc file into an AST.
 
 **Returns:** `Result<Document, ParseError>`
 
+#### `parse_with_path(source: &str, path: &str) -> ParseResult<Document>`
+
+Parse a .pc file with file path for deterministic ID generation. **Recommended** for production use.
+
+**Parameters:**
+- `source` - Source code to parse
+- `path` - File path (used for ID generation)
+
+**Returns:** `Result<Document, ParseError>`
+
+**Example:**
+```rust
+let doc = parse_with_path(source, "/components/button.pc")?;
+```
+
+#### `get_document_id(path: &str) -> String`
+
+Generate deterministic document ID from file path using CRC32.
+
+**Parameters:**
+- `path` - File path
+
+**Returns:** Document ID (hex string, e.g., "80f4925f")
+
+**Example:**
+```rust
+let doc_id = get_document_id("/entry.pc");
+assert_eq!(doc_id, get_document_id("/entry.pc")); // Deterministic!
+```
+
 #### `tokenize(source: &str) -> Vec<(Token, Range<usize>)>`
 
 Tokenize source code into tokens with source positions.
 
 **Returns:** Vector of (token, span) tuples
+
+### IDGenerator
+
+Sequential ID generator for AST nodes.
+
+#### `IDGenerator::new(path: &str) -> Self`
+
+Create generator for a document path.
+
+#### `id_generator.new_id() -> String`
+
+Generate next sequential ID (e.g., "docId-1", "docId-2", ...)
+
+#### `id_generator.seed() -> &str`
+
+Get the document ID seed.
+
+**Example:**
+```rust
+let mut gen = IDGenerator::new("/test.pc");
+let id1 = gen.new_id(); // "docId-1"
+let id2 = gen.new_id(); // "docId-2"
+```
 
 ### AST Types
 
