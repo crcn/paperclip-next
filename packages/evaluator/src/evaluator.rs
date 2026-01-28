@@ -18,6 +18,7 @@ pub enum EvalError {
 }
 
 /// Context for evaluation
+#[derive(Clone)]
 pub struct EvalContext {
     components: HashMap<String, Component>,
     tokens: HashMap<String, String>,
@@ -123,14 +124,33 @@ impl Evaluator {
 
     /// Evaluate a component by name
     fn evaluate_component(&self, name: &str) -> EvalResult<VNode> {
+        self.evaluate_component_with_props(name, &HashMap::new())
+    }
+
+    /// Evaluate a component with props
+    fn evaluate_component_with_props(
+        &self,
+        name: &str,
+        props: &HashMap<String, Value>,
+    ) -> EvalResult<VNode> {
         let component = self
             .context
             .components
             .get(name)
             .ok_or_else(|| EvalError::ComponentNotFound(name.to_string()))?;
 
+        // Create a new context scope with props as variables
+        let mut scoped_evaluator = Evaluator {
+            context: self.context.clone(),
+        };
+
+        // Bind props to variables
+        for (key, value) in props {
+            scoped_evaluator.context.set_variable(key.clone(), value.clone());
+        }
+
         if let Some(body) = &component.body {
-            self.evaluate_element(body)
+            scoped_evaluator.evaluate_element(body)
         } else {
             Ok(VNode::element("div"))
         }
@@ -177,13 +197,21 @@ impl Evaluator {
 
             Element::Instance {
                 name,
-                props: _props,
+                props,
                 children: _children,
                 ..
             } => {
-                // For now, just evaluate the component without prop binding
-                // Full implementation would bind props to context
-                self.evaluate_component(name)
+                // Evaluate component with props
+                // Props are evaluated in current context, then passed to component
+                let mut evaluated_props = HashMap::new();
+                for (key, expr) in props {
+                    let value = self.evaluate_expression(expr)?;
+                    evaluated_props.insert(key.clone(), value);
+                }
+
+                // Expand component - this returns the component's body with props applied
+                // The result is pure DOM elements, not a Component VNode
+                self.evaluate_component_with_props(name, &evaluated_props)
             }
 
             Element::Conditional {
@@ -421,6 +449,109 @@ mod tests {
             assert_eq!(styles.get("background"), Some(&"#FF0000".to_string()));
         } else {
             panic!("Expected element node");
+        }
+    }
+
+    #[test]
+    fn test_component_expansion_with_props() {
+        let source = r#"
+            component Greeting {
+                render div {
+                    text {name}
+                }
+            }
+
+            public component App {
+                render div {
+                    Greeting(name="World")
+                }
+            }
+        "#;
+
+        let doc = parse(source).expect("Failed to parse");
+        let mut evaluator = Evaluator::new();
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        // Should evaluate to a single public component (App)
+        assert_eq!(vdoc.nodes.len(), 1);
+
+        // App renders: <div><div>World</div></div>
+        // The outer div is from App, inner div is from Greeting expansion
+        if let VNode::Element { tag: outer_tag, children: outer_children, .. } = &vdoc.nodes[0] {
+            assert_eq!(outer_tag, "div");
+            assert_eq!(outer_children.len(), 1);
+
+            if let VNode::Element { tag: inner_tag, children: inner_children, .. } = &outer_children[0] {
+                assert_eq!(inner_tag, "div");
+                assert_eq!(inner_children.len(), 1);
+
+                if let VNode::Text { content } = &inner_children[0] {
+                    assert_eq!(content, "World");
+                } else {
+                    panic!("Expected text node with 'World'");
+                }
+            } else {
+                panic!("Expected inner div element (from Greeting)");
+            }
+        } else {
+            panic!("Expected outer div element (from App)");
+        }
+    }
+
+    #[test]
+    fn test_nested_component_expansion() {
+        let source = r#"
+            component Label {
+                render span {
+                    text {message}
+                }
+            }
+
+            component Button {
+                render button {
+                    Label(message={label})
+                }
+            }
+
+            public component App {
+                render div {
+                    Button(label="Click me")
+                }
+            }
+        "#;
+
+        let doc = parse(source).expect("Failed to parse");
+        let mut evaluator = Evaluator::new();
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        assert_eq!(vdoc.nodes.len(), 1);
+
+        // App -> <div> -> Button -> <button> -> Label -> <span> -> "Click me"
+        if let VNode::Element { tag: div_tag, children: div_children, .. } = &vdoc.nodes[0] {
+            assert_eq!(div_tag, "div");
+            assert_eq!(div_children.len(), 1);
+
+            if let VNode::Element { tag: button_tag, children: button_children, .. } = &div_children[0] {
+                assert_eq!(button_tag, "button");
+                assert_eq!(button_children.len(), 1);
+
+                if let VNode::Element { tag: span_tag, children: span_children, .. } = &button_children[0] {
+                    assert_eq!(span_tag, "span");
+                    assert_eq!(span_children.len(), 1);
+
+                    if let VNode::Text { content } = &span_children[0] {
+                        assert_eq!(content, "Click me");
+                    } else {
+                        panic!("Expected text node");
+                    }
+                } else {
+                    panic!("Expected span element");
+                }
+            } else {
+                panic!("Expected button element");
+            }
+        } else {
+            panic!("Expected div element");
         }
     }
 }
