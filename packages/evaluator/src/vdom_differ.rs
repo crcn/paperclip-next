@@ -192,12 +192,22 @@ fn diff_style_rules(
 ) -> Vec<VDocPatch> {
     let mut patches = Vec::new();
 
-    // Simple approach: if styles changed, send add/remove patches
-    // More sophisticated diffing could match rules by selector
+    // Build maps by selector for efficient matching
+    use std::collections::HashMap;
+    let mut old_map: HashMap<&str, &crate::vdom::CssRule> = HashMap::new();
+    let mut new_map: HashMap<&str, &crate::vdom::CssRule> = HashMap::new();
 
-    // Remove old rules not in new
+    for rule in old {
+        old_map.insert(&rule.selector, rule);
+    }
+
+    for rule in new {
+        new_map.insert(&rule.selector, rule);
+    }
+
+    // Find removed rules (in old but not in new)
     for (i, old_rule) in old.iter().enumerate() {
-        if !new.contains(old_rule) {
+        if !new_map.contains_key(old_rule.selector.as_str()) {
             patches.push(VDocPatch {
                 patch_type: Some(v_doc_patch::PatchType::RemoveStyleRule(
                     RemoveStyleRulePatch {
@@ -208,9 +218,36 @@ fn diff_style_rules(
         }
     }
 
-    // Add new rules not in old
+    // Find new rules (in new but not in old) or updated rules
     for new_rule in new {
-        if !old.contains(new_rule) {
+        if let Some(old_rule) = old_map.get(new_rule.selector.as_str()) {
+            // Rule exists - check if properties changed
+            if old_rule.properties != new_rule.properties {
+                // Properties changed - for now, remove and add
+                // In future, we could add an UpdateStyleRule patch
+                if let Some(old_index) = old.iter().position(|r| r.selector == new_rule.selector) {
+                    patches.push(VDocPatch {
+                        patch_type: Some(v_doc_patch::PatchType::RemoveStyleRule(
+                            RemoveStyleRulePatch {
+                                index: old_index as u32,
+                            }
+                        )),
+                    });
+                }
+                patches.push(VDocPatch {
+                    patch_type: Some(v_doc_patch::PatchType::AddStyleRule(
+                        AddStyleRulePatch {
+                            rule: Some(proto_vdom::CssRule {
+                                selector: new_rule.selector.clone(),
+                                properties: new_rule.properties.clone(),
+                            }),
+                        }
+                    )),
+                });
+            }
+            // else: no change, no patch needed
+        } else {
+            // New rule - add it
             patches.push(VDocPatch {
                 patch_type: Some(v_doc_patch::PatchType::AddStyleRule(
                     AddStyleRulePatch {

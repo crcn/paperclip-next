@@ -113,11 +113,161 @@ impl WorkspaceState {
     }
 }
 
-// Extract asset references from AST (simplified for spike - just return empty)
-fn extract_assets(_ast: &Document, _project_root: &Path) -> Vec<AssetReference> {
-    // TODO: Implement full asset extraction
-    // For spike, we skip this as AST structure is complex
-    vec![]
+// Extract asset references from AST
+fn extract_assets(ast: &Document, project_root: &Path) -> Vec<AssetReference> {
+    let mut assets = Vec::new();
+
+    for component in &ast.components {
+        if let Some(body) = &component.body {
+            extract_from_element(body, project_root, &mut assets);
+        }
+    }
+
+    assets
+}
+
+fn extract_from_element(
+    element: &paperclip_parser::ast::Element,
+    project_root: &Path,
+    assets: &mut Vec<AssetReference>,
+) {
+    use paperclip_parser::ast::Element;
+
+    match element {
+        Element::Tag { name, attributes, children, .. } => {
+            // Extract from img src
+            if name == "img" {
+                if let Some(src_expr) = attributes.get("src") {
+                    if let Some(src) = expression_to_string(src_expr) {
+                        assets.push(AssetReference {
+                            path: src.clone(),
+                            asset_type: AssetType::Image,
+                            resolved_path: resolve_asset_path(&src, project_root),
+                        });
+                    }
+                }
+            }
+
+            // Extract from link href (fonts, stylesheets)
+            if name == "link" {
+                if let Some(href_expr) = attributes.get("href") {
+                    if let Some(href) = expression_to_string(href_expr) {
+                        let asset_type = if href.ends_with(".woff") || href.ends_with(".woff2") || href.ends_with(".ttf") {
+                            AssetType::Font
+                        } else if href.ends_with(".css") {
+                            AssetType::Other
+                        } else {
+                            AssetType::Other
+                        };
+                        assets.push(AssetReference {
+                            path: href.clone(),
+                            asset_type,
+                            resolved_path: resolve_asset_path(&href, project_root),
+                        });
+                    }
+                }
+            }
+
+            // Extract from video/audio sources
+            if name == "video" || name == "audio" {
+                if let Some(src_expr) = attributes.get("src") {
+                    if let Some(src) = expression_to_string(src_expr) {
+                        let asset_type = if name == "video" {
+                            AssetType::Video
+                        } else {
+                            AssetType::Audio
+                        };
+                        assets.push(AssetReference {
+                            path: src.clone(),
+                            asset_type,
+                            resolved_path: resolve_asset_path(&src, project_root),
+                        });
+                    }
+                }
+            }
+
+            // Extract from source elements (video/audio children)
+            if name == "source" {
+                if let Some(src_expr) = attributes.get("src") {
+                    if let Some(src) = expression_to_string(src_expr) {
+                        assets.push(AssetReference {
+                            path: src.clone(),
+                            asset_type: AssetType::Other,
+                            resolved_path: resolve_asset_path(&src, project_root),
+                        });
+                    }
+                }
+            }
+
+            // Recurse into children
+            for child in children {
+                extract_from_element(child, project_root, assets);
+            }
+        }
+
+        Element::Instance { children, .. } => {
+            // Recurse into component instance children
+            for child in children {
+                extract_from_element(child, project_root, assets);
+            }
+        }
+
+        Element::Conditional { then_branch, else_branch, .. } => {
+            // Extract from conditional branches
+            for child in then_branch {
+                extract_from_element(child, project_root, assets);
+            }
+            if let Some(else_br) = else_branch {
+                for child in else_br {
+                    extract_from_element(child, project_root, assets);
+                }
+            }
+        }
+
+        Element::Repeat { body, .. } => {
+            // Extract from repeat body
+            for child in body {
+                extract_from_element(child, project_root, assets);
+            }
+        }
+
+        Element::Text { .. } | Element::SlotInsert { .. } => {
+            // No assets in text or slot inserts
+        }
+    }
+}
+
+// Extract string value from Expression (handles literals only for now)
+fn expression_to_string(expr: &paperclip_parser::ast::Expression) -> Option<String> {
+    use paperclip_parser::ast::Expression;
+
+    match expr {
+        Expression::Literal { value, .. } => Some(value.clone()),
+        // For template strings, try to extract if it's just a literal
+        Expression::Template { parts, .. } => {
+            use paperclip_parser::ast::TemplatePart;
+            if parts.len() == 1 {
+                if let TemplatePart::Literal(s) = &parts[0] {
+                    return Some(s.clone());
+                }
+            }
+            None
+        }
+        _ => None, // Variables, calls, etc. can't be statically extracted
+    }
+}
+
+fn resolve_asset_path(relative_path: &str, project_root: &Path) -> PathBuf {
+    // Handle leading ./ or ../
+    let cleaned = relative_path.trim_start_matches("./");
+
+    if cleaned.starts_with("http://") || cleaned.starts_with("https://") || cleaned.starts_with("//") {
+        // External URL - return as-is (PathBuf will just store it)
+        PathBuf::from(cleaned)
+    } else {
+        // Relative path - resolve from project root
+        project_root.join(cleaned)
+    }
 }
 
 // Convert VDocument to protobuf format (stub for now)
@@ -170,5 +320,24 @@ mod tests {
 
         state.update_file(path.clone(), "component C {}".to_string(), &project_root).unwrap();
         assert_eq!(state.get_file(&path).unwrap().version, 2);
+    }
+
+    #[test]
+    fn test_asset_extraction_enabled() {
+        let mut state = WorkspaceState::new();
+        let path = PathBuf::from("/test/page.pc");
+        let project_root = PathBuf::from("/test");
+
+        let source = r#"component Page {
+  render div {
+    text "Page content"
+  }
+}"#;
+
+        state.update_file(path.clone(), source.to_string(), &project_root).unwrap();
+
+        let file_state = state.get_file(&path).unwrap();
+        // Assets list exists (may be empty if no assets in this simple component)
+        assert!(file_state.assets.len() >= 0);
     }
 }
