@@ -1,14 +1,20 @@
 # paperclip-client
 
-TypeScript browser client with efficient Virtual DOM differ and patcher.
+TypeScript browser client with OT-style Virtual DOM differ and patcher.
 
 ## Features
 
-- ⚡ **Efficient diffing** - Minimal DOM updates
-- 🔄 **Smart patching** - Only updates what changed
+- ⚡ **OT-style patches** - Operational Transformation compatible
+- 🔄 **Pure diffing** - No side effects, completely serializable
 - 📦 **Zero dependencies** - Pure TypeScript Virtual DOM implementation
+- 🌐 **Platform-agnostic** - Works with DOM, SSR, React, or custom renderers
 - 🎨 **Complete coverage** - CREATE, REMOVE, REPLACE, UPDATE patches
 - ✅ **Type-safe** - Full TypeScript types
+- 🚫 **No globals** - Explicit dependencies, easy to test
+
+## Important Guidelines
+
+**⚠️ Avoid globals in web-related code!** This library uses explicit parameters instead of global state. See **DEVELOPMENT.md** for complete guidelines on writing composable, testable code.
 
 ## Installation
 
@@ -51,10 +57,10 @@ const element = createElement(vdoc.nodes[0]);
 document.body.appendChild(element);
 ```
 
-### Diffing and Patching
+### Diffing and Patching (OT-Style)
 
 ```typescript
-import { diff, patch } from "./src/vdom";
+import { diff, patch, domPatchApplier } from "./src/vdom";
 
 // Old Virtual DOM
 const oldVNode: VNode = {
@@ -74,14 +80,18 @@ const newVNode: VNode = {
   children: [{ type: "Text", content: "Click me now!" }], // Changed text
 };
 
+// Compute patches (pure - no DOM needed!)
+const patches = diff(oldVNode, newVNode);
+
+// Patches are now serializable!
+const json = JSON.stringify(patches);
+console.log(json); // Can send over network!
+
 // Get existing DOM element
 const element = document.querySelector("button");
 
-// Compute patches
-const patches = diff(oldVNode, newVNode, element);
-
-// Apply patches (only updates what changed)
-patch(patches);
+// Apply patches using DOM applier (only updates what changed)
+patch(patches, element, domPatchApplier());
 ```
 
 ### Complete Example
@@ -115,12 +125,13 @@ function update(vdoc: VDocument) {
   for (let i = 0; i < maxLength; i++) {
     const oldNode = currentVDoc.nodes[i] || null;
     const newNode = vdoc.nodes[i] || null;
-    const element = currentRoot.childNodes[i] || null;
 
-    patches.push(...diff(oldNode, newNode, element));
+    // Pure diff - no DOM element needed!
+    patches.push(...diff(oldNode, newNode, [i]));
   }
 
-  patch(patches);
+  // Apply patches using DOM applier
+  patch(patches, currentRoot, domPatchApplier());
   currentVDoc = vdoc;
 }
 
@@ -211,17 +222,21 @@ interface CssRule {
 
 #### `Patch`
 
-DOM patch operation (discriminated union):
+OT-style patch operation with path-based addressing (discriminated union):
 
 ```typescript
 type Patch =
-  | { type: "CREATE"; node: VNode; parent: Node; index: number }
-  | { type: "REMOVE"; element: Node }
-  | { type: "REPLACE"; oldElement: Node; newNode: VNode }
-  | { type: "UPDATE_ATTRS"; element: Element; attributes: Record<string, string> }
-  | { type: "UPDATE_STYLES"; element: Element; styles: Record<string, string> }
-  | { type: "UPDATE_TEXT"; element: Text; content: string };
+  | { type: "CREATE"; path: number[]; node: VNode; index: number }
+  | { type: "REMOVE"; path: number[] }
+  | { type: "REPLACE"; path: number[]; newNode: VNode }
+  | { type: "UPDATE_ATTRS"; path: number[]; attributes: Record<string, string> }
+  | { type: "UPDATE_STYLES"; path: number[]; styles: Record<string, string> }
+  | { type: "UPDATE_TEXT"; path: number[]; content: string };
 ```
+
+**Path format:** `[0, 2, 1]` means first child → third child → second child
+
+**Key feature:** No DOM references! Patches are pure data and fully serializable.
 
 ### Functions
 
@@ -242,97 +257,133 @@ const element = createElement(vnode);
 document.body.appendChild(element);
 ```
 
-#### `diff(oldNode: VNode | null, newNode: VNode | null, element: Node | null): Patch[]`
+#### `diff(oldNode: VNode | null, newNode: VNode | null, path?: number[]): Patch[]`
 
-Compute a list of patches to transform oldNode into newNode.
-
-```typescript
-const patches = diff(oldVNode, newVNode, existingElement);
-// Returns array of patch operations
-```
-
-#### `patch(patches: Patch[]): void`
-
-Apply a list of patches to the DOM.
+**Pure function** - Computes patches to transform oldNode into newNode without any DOM access.
 
 ```typescript
-const patches = diff(oldVNode, newVNode, element);
-patch(patches); // DOM is now updated
+const patches = diff(oldVNode, newVNode);
+// Returns array of serializable patch operations
 ```
 
-## Patch Types
+#### `patch<T>(patches: Patch[], target: T, applier: PatchApplier<T>): T`
+
+Apply patches to a target using the given applier strategy.
+
+```typescript
+const patches = diff(oldVNode, newVNode);
+patch(patches, element, domPatchApplier()); // DOM is now updated
+```
+
+#### `domPatchApplier(): PatchApplier<Element>`
+
+Factory function that returns a DOM patch applier.
+
+```typescript
+const applier = domPatchApplier();
+patch(patches, element, applier);
+```
+
+#### `PatchApplier<T>` interface
+
+Allows different patch application strategies:
+
+```typescript
+interface PatchApplier<T> {
+  apply(patches: Patch[], target: T): T;
+}
+
+// You can create custom appliers!
+const ssrApplier: PatchApplier<string> = {
+  apply(patches, html) {
+    // Generate HTML string from patches
+    return updatedHtml;
+  }
+};
+```
+
+## Patch Types (OT-Style)
+
+All patches use **path-based addressing** instead of DOM references.
 
 ### CREATE
 
-Create a new DOM node and insert it at the specified index.
+Create a new node at the specified path and index.
 
 ```typescript
 {
   type: "CREATE",
+  path: [0, 2],  // Parent's path
   node: { type: "Element", tag: "div", ... },
-  parent: parentElement,
-  index: 2
+  index: 2  // Insert at this index
 }
 ```
 
 ### REMOVE
 
-Remove a DOM node from the tree.
+Remove a node at the specified path.
 
 ```typescript
 {
   type: "REMOVE",
-  element: domElement
+  path: [0, 2, 1]  // Path to node to remove
 }
 ```
 
 ### REPLACE
 
-Replace an entire DOM node with a new one.
+Replace a node at the specified path with a new one.
 
 ```typescript
 {
   type: "REPLACE",
-  oldElement: oldDomElement,
+  path: [0, 1],  // Path to node to replace
   newNode: { type: "Element", tag: "span", ... }
 }
 ```
 
 ### UPDATE_ATTRS
 
-Update element attributes without replacing the element.
+Update element attributes at the specified path.
 
 ```typescript
 {
   type: "UPDATE_ATTRS",
-  element: domElement,
+  path: [0],  // Path to element
   attributes: { class: "active", "data-id": "123" }
 }
 ```
 
 ### UPDATE_STYLES
 
-Update inline styles without replacing the element.
+Update inline styles at the specified path.
 
 ```typescript
 {
   type: "UPDATE_STYLES",
-  element: domElement,
+  path: [0, 2],  // Path to element
   styles: { padding: "16px", background: "#FF0000" }
 }
 ```
 
 ### UPDATE_TEXT
 
-Update text content of a text node.
+Update text content at the specified path.
 
 ```typescript
 {
   type: "UPDATE_TEXT",
-  element: textNode,
+  path: [0, 1, 0],  // Path to text node
   content: "New text content"
 }
 ```
+
+### Why Path-Based?
+
+- ✅ **Serializable** - Can send over network (gRPC, WebSocket)
+- ✅ **Testable** - No DOM needed for testing
+- ✅ **OT-compatible** - Ready for collaborative editing
+- ✅ **Platform-agnostic** - Works with DOM, SSR, React, etc.
 
 ## Demo
 
@@ -512,6 +563,16 @@ Result in browser:
   Click me
 </button>
 ```
+
+## Development Guidelines
+
+See **DEVELOPMENT.md** for important guidelines on:
+- ⚠️ Avoiding global state in web code
+- Writing pure, composable functions
+- Using explicit dependencies instead of singletons
+- Testing strategies for pure functions
+
+See **OT_REFACTOR.md** for details on the OT-style architecture.
 
 ## License
 

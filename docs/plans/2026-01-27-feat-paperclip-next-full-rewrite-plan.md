@@ -505,12 +505,12 @@ This means AI-assisted workflows work identically whether you're using the built
 
 | Component | Old Location | Lines | Purpose |
 |-----------|--------------|-------|---------|
-| Parser | `libs/parser/` | ~3K | .pc → AST |
-| Proto/AST | `libs/proto/` | ~2K | AST definitions |
-| Evaluator | `libs/evaluator/` | ~4K | AST → Virtual HTML/CSS |
-| React Compiler | `libs/compiler-react/` | ~1K | Virtual → React code |
-| Workspace Server | `libs/workspace/` | ~5K | gRPC server, file watching |
-| Designer | `libs/designer/` | ~16K | React canvas UI |
+| Parser | `packages/parser/` | ~3K | .pc → AST |
+| Proto/AST | `packages/proto/` | ~2K | AST definitions |
+| Evaluator | `packages/evaluator/` | ~4K | AST → Virtual HTML/CSS |
+| React Compiler | `packages/compiler-react/` | ~1K | Virtual → React code |
+| Workspace Server | `packages/workspace/` | ~5K | gRPC server, file watching |
+| Designer | `packages/designer/` | ~16K | React canvas UI |
 | **MCP Server** | **NEW** | ~1K est. | AI tool integration |
 
 ---
@@ -873,7 +873,7 @@ Replicate the legacy designer pattern: measurements cached in state, tools recei
 **Files to create:**
 ```
 Cargo.toml (workspace)
-libs/
+packages/
   proto/
     Cargo.toml
     src/
@@ -976,7 +976,7 @@ public component Button {
 
 **Files to create:**
 ```
-libs/
+packages/
   parser/
     Cargo.toml
     src/
@@ -1032,7 +1032,7 @@ impl GraphManager {
 
 **Files to create:**
 ```
-libs/
+packages/
   evaluator/
     Cargo.toml
     src/
@@ -1073,7 +1073,7 @@ export const Button: React.FC<ButtonProps> = ({ children, className }) => (
 
 **Files to create:**
 ```
-libs/
+packages/
   compiler-react/
     Cargo.toml
     src/
@@ -1090,7 +1090,7 @@ libs/
 
 **Files to create:**
 ```
-libs/
+packages/
   cli/
     Cargo.toml
     src/
@@ -1148,7 +1148,7 @@ service Designer {
 
 **Files to create:**
 ```
-libs/
+packages/
   workspace/
     Cargo.toml
     src/
@@ -1292,7 +1292,7 @@ function validatePath(userPath: string, projectRoot: string): string {
 
 **Files to create:**
 ```
-libs/
+packages/
   mcp-server/
     Cargo.toml
     src/
@@ -2257,7 +2257,7 @@ Drop on existing element → sets background:
 
 **Files to create:**
 ```
-libs/
+packages/
   common/                           # Shared utilities (port from @shay/common)
     src/
       machine/

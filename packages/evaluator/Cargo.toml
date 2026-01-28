@@ -10,6 +10,10 @@ paperclip-parser = { path = "../parser" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+prost = "0.13"
+
+[build-dependencies]
+tonic-build = "0.12"
 
 [dev-dependencies]
 criterion.workspace = true

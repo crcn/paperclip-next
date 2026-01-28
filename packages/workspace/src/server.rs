@@ -1,15 +1,16 @@
 use crate::watcher::FileWatcher;
-use paperclip_evaluator::Evaluator;
-use paperclip_parser::parse;
+use crate::state::WorkspaceState;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use tonic::{Request, Response, Status};
 
 // Include generated proto code
+// workspace.proto uses extern_path to reference evaluator's patches
 pub mod proto {
-    tonic::include_proto!("paperclip.workspace");
+    include!(concat!(env!("OUT_DIR"), "/paperclip.workspace.rs"));
 }
 
 use proto::{
@@ -19,34 +20,36 @@ use proto::{
 
 pub struct WorkspaceServer {
     root_dir: PathBuf,
+    state: Arc<Mutex<WorkspaceState>>,
 }
 
 impl WorkspaceServer {
     pub fn new(root_dir: PathBuf) -> Self {
-        Self { root_dir }
+        Self {
+            root_dir,
+            state: Arc::new(Mutex::new(WorkspaceState::new())),
+        }
     }
 
     pub fn into_service(self) -> WorkspaceServiceServer<Self> {
         WorkspaceServiceServer::new(self)
     }
 
-    fn process_file(&self, file_path: &str) -> Result<String, String> {
+    fn process_file(&self, file_path: &str) -> Result<Vec<paperclip_evaluator::VDocPatch>, String> {
         // Read file
         let full_path = self.root_dir.join(file_path);
         let source = std::fs::read_to_string(&full_path)
             .map_err(|e| format!("Failed to read file: {}", e))?;
 
-        // Parse
-        let doc = parse(&source).map_err(|e| format!("Parse error: {:?}", e))?;
+        // Update state and get patches
+        let patches = self
+            .state
+            .lock()
+            .unwrap()
+            .update_file(full_path, source, &self.root_dir)
+            .map_err(|e| format!("State update error: {:?}", e))?;
 
-        // Evaluate
-        let mut evaluator = Evaluator::new();
-        let vdoc = evaluator
-            .evaluate(&doc)
-            .map_err(|e| format!("Evaluation error: {:?}", e))?;
-
-        // Serialize to JSON
-        serde_json::to_string(&vdoc).map_err(|e| format!("Serialization error: {}", e))
+        Ok(patches)
     }
 }
 
@@ -60,28 +63,38 @@ impl WorkspaceService for WorkspaceServer {
         request: Request<PreviewRequest>,
     ) -> Result<Response<Self::StreamPreviewStream>, Status> {
         let req = request.into_inner();
-        let file_path = req.file_path.clone();
+        let root_path = req.root_path.clone();
         let root_dir = self.root_dir.clone();
+        let state = self.state.clone();
 
         let (tx, rx) = mpsc::channel(100);
 
         // Send initial update
-        match self.process_file(&file_path) {
-            Ok(vdom_json) => {
+        match self.process_file(&root_path) {
+            Ok(patches) => {
+                let version = state
+                    .lock()
+                    .unwrap()
+                    .get_file(&root_dir.join(&root_path))
+                    .map(|s| s.version)
+                    .unwrap_or(0);
+
                 let update = PreviewUpdate {
-                    file_path: file_path.clone(),
-                    vdom_json,
+                    file_path: root_path.clone(),
+                    patches,
                     error: None,
                     timestamp: chrono::Utc::now().timestamp_millis(),
+                    version,
                 };
                 let _ = tx.send(Ok(update)).await;
             }
             Err(error) => {
                 let update = PreviewUpdate {
-                    file_path: file_path.clone(),
-                    vdom_json: String::new(),
+                    file_path: root_path.clone(),
+                    patches: vec![],
                     error: Some(error),
                     timestamp: chrono::Utc::now().timestamp_millis(),
+                    version: 0,
                 };
                 let _ = tx.send(Ok(update)).await;
             }
@@ -91,7 +104,7 @@ impl WorkspaceService for WorkspaceServer {
         tokio::spawn(async move {
             // Watch the directory containing the file
             let watch_path = root_dir.join(
-                PathBuf::from(&file_path)
+                PathBuf::from(&root_path)
                     .parent()
                     .unwrap_or(std::path::Path::new(".")),
             );
@@ -110,7 +123,7 @@ impl WorkspaceService for WorkspaceServer {
                     let is_our_file = event.paths.iter().any(|p| {
                         p.file_name()
                             .and_then(|n| n.to_str())
-                            .map(|n| file_path.contains(n))
+                            .map(|n| root_path.contains(n))
                             .unwrap_or(false)
                     });
 
@@ -118,16 +131,17 @@ impl WorkspaceService for WorkspaceServer {
                         continue;
                     }
 
-                    // Process file and send update
-                    let full_path = root_dir.join(&file_path);
+                    // Process file and send update with patches
+                    let full_path = root_dir.join(&root_path);
                     let source = match std::fs::read_to_string(&full_path) {
                         Ok(s) => s,
                         Err(e) => {
                             let update = PreviewUpdate {
-                                file_path: file_path.clone(),
-                                vdom_json: String::new(),
+                                file_path: root_path.clone(),
+                                patches: vec![],
                                 error: Some(format!("Failed to read file: {}", e)),
                                 timestamp: chrono::Utc::now().timestamp_millis(),
+                                version: 0,
                             };
                             if tx.send(Ok(update)).await.is_err() {
                                 break;
@@ -136,47 +150,26 @@ impl WorkspaceService for WorkspaceServer {
                         }
                     };
 
-                    let doc = match parse(&source) {
-                        Ok(d) => d,
-                        Err(e) => {
-                            let update = PreviewUpdate {
-                                file_path: file_path.clone(),
-                                vdom_json: String::new(),
-                                error: Some(format!("Parse error: {:?}", e)),
-                                timestamp: chrono::Utc::now().timestamp_millis(),
-                            };
-                            if tx.send(Ok(update)).await.is_err() {
-                                break;
-                            }
-                            continue;
-                        }
-                    };
+                    // Update state and get patches
+                    let result = {
+                        let mut state_guard = state.lock().unwrap();
+                        let patches = state_guard.update_file(full_path.clone(), source, &root_dir);
+                        let version = state_guard
+                            .get_file(&full_path)
+                            .map(|s| s.version)
+                            .unwrap_or(0);
+                        (patches, version)
+                    }; // Lock is dropped here
 
-                    let mut evaluator = Evaluator::new();
-                    let vdoc = match evaluator.evaluate(&doc) {
-                        Ok(v) => v,
+                    let (patches, version) = match result.0 {
+                        Ok(p) => (p, result.1),
                         Err(e) => {
                             let update = PreviewUpdate {
-                                file_path: file_path.clone(),
-                                vdom_json: String::new(),
-                                error: Some(format!("Evaluation error: {:?}", e)),
+                                file_path: root_path.clone(),
+                                patches: vec![],
+                                error: Some(format!("Processing error: {:?}", e)),
                                 timestamp: chrono::Utc::now().timestamp_millis(),
-                            };
-                            if tx.send(Ok(update)).await.is_err() {
-                                break;
-                            }
-                            continue;
-                        }
-                    };
-
-                    let vdom_json = match serde_json::to_string(&vdoc) {
-                        Ok(j) => j,
-                        Err(e) => {
-                            let update = PreviewUpdate {
-                                file_path: file_path.clone(),
-                                vdom_json: String::new(),
-                                error: Some(format!("Serialization error: {}", e)),
-                                timestamp: chrono::Utc::now().timestamp_millis(),
+                                version: 0,
                             };
                             if tx.send(Ok(update)).await.is_err() {
                                 break;
@@ -186,10 +179,11 @@ impl WorkspaceService for WorkspaceServer {
                     };
 
                     let update = PreviewUpdate {
-                        file_path: file_path.clone(),
-                        vdom_json,
+                        file_path: root_path.clone(),
+                        patches,
                         error: None,
                         timestamp: chrono::Utc::now().timestamp_millis(),
+                        version,
                     };
 
                     if tx.send(Ok(update)).await.is_err() {

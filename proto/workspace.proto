@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package paperclip.workspace;
 
+import "patches.proto";
+
 // Workspace service for real-time preview
 service WorkspaceService {
   // Stream preview updates for a file
@@ -13,15 +15,16 @@ service WorkspaceService {
 
 // Request to start preview streaming
 message PreviewRequest {
-  string file_path = 1;
+  string root_path = 1;
 }
 
-// Preview update containing Virtual DOM
+// Preview update containing VDocument patches
 message PreviewUpdate {
   string file_path = 1;
-  string vdom_json = 2;  // JSON-serialized Virtual DOM
+  repeated paperclip.patches.VDocPatch patches = 2;
   optional string error = 3;
   int64 timestamp = 4;
+  uint64 version = 5;
 }
 
 // Request to watch files

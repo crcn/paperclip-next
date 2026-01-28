@@ -74,7 +74,7 @@ cargo bench --workspace
 **Run the TypeScript Demo:**
 ```bash
 # Install dependencies
-cd client
+cd packages/client
 npm install
 
 # Start dev server
@@ -120,7 +120,7 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│                 Parser (libs/parser)                     │
+│              Parser (packages/parser)                    │
 │  • Tokenizer (logos)                                     │
 │  • Recursive descent parser                              │
 │  • AST generation                                        │
@@ -128,7 +128,7 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│               Evaluator (libs/evaluator)                 │
+│            Evaluator (packages/evaluator)                │
 │  • AST → Virtual DOM                                     │
 │  • Expression evaluation                                 │
 │  • Style application                                     │
@@ -136,7 +136,7 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│            Workspace Server (libs/workspace)             │
+│         Workspace Server (packages/workspace)            │
 │  • File watching (notify)                                │
 │  • gRPC streaming (Tonic)                                │
 │  • JSON serialization                                    │
@@ -144,7 +144,7 @@ This parses into an AST, evaluates into a Virtual DOM, and can be streamed to cl
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│              TypeScript Client (client/)                 │
+│         TypeScript Client (packages/client)              │
 │  • Virtual DOM differ                                    │
 │  • Efficient DOM patcher                                 │
 │  • Preview rendering                                     │

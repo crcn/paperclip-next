@@ -12,7 +12,7 @@ Successfully implemented and validated the complete core pipeline from scratch:
 
 ## What Was Built
 
-### 1. Parser (Rust) - `libs/parser/`
+### 1. Parser (Rust) - `packages/parser/`
 - ✅ **Tokenizer** using `logos` with zero-copy string slices
 - ✅ **Recursive descent parser** for complete .pc syntax
 - ✅ **AST generation** (components, styles, tokens, elements, expressions)
@@ -28,7 +28,7 @@ Successfully implemented and validated the complete core pipeline from scratch:
 - Token declarations
 - Import statements
 
-### 2. Evaluator (Rust) - `libs/evaluator/`
+### 2. Evaluator (Rust) - `packages/evaluator/`
 - ✅ **AST → Virtual DOM transformation**
 - ✅ **Expression evaluation** (literals, variables, binary operators, member access)
 - ✅ **Component rendering** with inline styles
@@ -42,7 +42,7 @@ Successfully implemented and validated the complete core pipeline from scratch:
 - Comment nodes for debugging
 - JSON serializable for streaming
 
-### 3. Workspace Server (Rust) - `libs/workspace/`
+### 3. Workspace Server (Rust) - `packages/workspace/`
 - ✅ **gRPC service** with Tonic for streaming
 - ✅ **File watcher** using notify crate for real-time updates
 - ✅ **Parse → Evaluate → Stream pipeline**
@@ -56,7 +56,7 @@ Successfully implemented and validated the complete core pipeline from scratch:
 - JSON-serialized Virtual DOM
 - Timestamp tracking for updates
 
-### 4. TypeScript Client - `client/`
+### 4. TypeScript Client - `packages/client/`
 - ✅ **Virtual DOM types** matching Rust evaluator output
 - ✅ **Efficient diff algorithm** for minimal DOM updates
 - ✅ **Patch function** applying changes incrementally
@@ -167,7 +167,7 @@ cargo bench --workspace
 
 ### Try TypeScript Demo
 ```bash
-cd client
+cd packages/client
 npm install
 npm run dev
 # Open http://localhost:3000
@@ -189,7 +189,7 @@ cargo run --bin paperclip-server examples
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   Parser (libs/parser)                       │
+│                Parser (packages/parser)                      │
 │  • Tokenizer: logos (zero-copy, ~347ns)                     │
 │  • Parser: Recursive descent (~2µs)                          │
 │  • AST: Components, styles, expressions                      │
@@ -197,7 +197,7 @@ cargo run --bin paperclip-server examples
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 Evaluator (libs/evaluator)                   │
+│              Evaluator (packages/evaluator)                  │
 │  • Expression evaluation (~745ns)                            │
 │  • Component rendering (~3µs)                                │
 │  • Virtual DOM generation                                    │
@@ -205,7 +205,7 @@ cargo run --bin paperclip-server examples
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Workspace Server (libs/workspace)               │
+│           Workspace Server (packages/workspace)              │
 │  • File watcher: notify (real-time)                          │
 │  • gRPC streaming: Tonic                                     │
 │  • JSON serialization: serde                                 │
@@ -213,7 +213,7 @@ cargo run --bin paperclip-server examples
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│               TypeScript Client (client/)                    │
+│          TypeScript Client (packages/client)                 │
 │  • Virtual DOM differ (efficient)                            │
 │  • DOM patcher (minimal updates)                             │
 │  • Preview rendering                                         │

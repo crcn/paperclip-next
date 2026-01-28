@@ -1,0 +1,61 @@
+syntax = "proto3";
+package paperclip.patches;
+
+import "vdom.proto";
+
+// VDocument patch operations
+message VDocPatch {
+  oneof patch_type {
+    InitializePatch initialize = 1;
+    CreateNodePatch create_node = 2;
+    RemoveNodePatch remove_node = 3;
+    ReplaceNodePatch replace_node = 4;
+    UpdateAttributesPatch update_attributes = 5;
+    UpdateStylesPatch update_styles = 6;
+    UpdateTextPatch update_text = 7;
+    AddStyleRulePatch add_style_rule = 8;
+    RemoveStyleRulePatch remove_style_rule = 9;
+  }
+}
+
+message InitializePatch {
+  paperclip.vdom.VDocument vdom = 1;
+}
+
+message CreateNodePatch {
+  repeated uint32 path = 1;
+  paperclip.vdom.VNode node = 2;
+  uint32 index = 3;
+}
+
+message RemoveNodePatch {
+  repeated uint32 path = 1;
+}
+
+message ReplaceNodePatch {
+  repeated uint32 path = 1;
+  paperclip.vdom.VNode new_node = 2;
+}
+
+message UpdateAttributesPatch {
+  repeated uint32 path = 1;
+  map<string, string> attributes = 2;
+}
+
+message UpdateStylesPatch {
+  repeated uint32 path = 1;
+  map<string, string> styles = 2;
+}
+
+message UpdateTextPatch {
+  repeated uint32 path = 1;
+  string content = 2;
+}
+
+message AddStyleRulePatch {
+  paperclip.vdom.CssRule rule = 1;
+}
+
+message RemoveStyleRulePatch {
+  uint32 index = 1;
+}

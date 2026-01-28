@@ -1,4 +1,4 @@
-import { VDocument, VNode, diff, patch, createElement } from "./vdom";
+import { VDocument, VNode, diff, patch, createElement, domPatchApplier } from "./vdom";
 
 /**
  * Simple demo of the Virtual DOM differ/patcher
@@ -105,6 +105,9 @@ const vdoc3: VDocument = {
 };
 
 // State
+// NOTE: This demo uses module-level state for simplicity.
+// For production code, avoid globals - use factories, dependency injection,
+// or pass state explicitly. See DEVELOPMENT.md for guidelines.
 let currentVDoc: VDocument | null = null;
 let currentRoot: Element | null = null;
 let currentIndex = 0;
@@ -131,20 +134,20 @@ function update(vdoc: VDocument) {
     return;
   }
 
-  // Diff each root node
+  // Diff each root node (pure - no DOM references)
   const patches = [];
   const maxLength = Math.max(currentVDoc.nodes.length, vdoc.nodes.length);
 
   for (let i = 0; i < maxLength; i++) {
     const oldNode = currentVDoc.nodes[i] || null;
     const newNode = vdoc.nodes[i] || null;
-    const element = currentRoot.childNodes[i] || null;
 
-    patches.push(...diff(oldNode, newNode, element));
+    // Pure diff - no DOM element needed!
+    patches.push(...diff(oldNode, newNode, [i]));
   }
 
-  // Apply patches
-  patch(patches);
+  // Apply patches using DOM applier
+  patch(patches, currentRoot, domPatchApplier());
 
   currentVDoc = vdoc;
 }
