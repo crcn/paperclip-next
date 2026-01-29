@@ -4,6 +4,47 @@
 /// structure changes, and code movement. Unlike AST IDs (too low-level)
 /// or VDOM paths (too fragile), semantic IDs represent the conceptual
 /// location of a node: "the button in the footer slot of Card instance X"
+///
+/// # CRITICAL INVARIANT: Uniqueness Scope
+///
+/// **SemanticID must be unique within a VDOM TREE (evaluation output),
+/// NOT just within a source document.**
+///
+/// ## Why This Matters for Hot Reload
+///
+/// A VDOM tree may span multiple source files due to imports. When a component
+/// is defined in one file but instantiated in another:
+///
+/// ```ignore
+/// // file_a.pc - Component definition
+/// component Button { render button { text "Click" } }
+///
+/// // file_b.pc - Component usage
+/// import { Button } from "./file_a.pc"
+/// component Card { render Button() }
+/// ```
+///
+/// When evaluating `Card`:
+/// - The ROOT document being evaluated is `file_b.pc`
+/// - Button instances appear in Card's VDOM tree
+/// - Semantic IDs are unique within Card's entire VDOM (including imported components)
+/// - **NOT** unique per source file
+///
+/// ## Hot Reload Implications
+///
+/// When `file_a.pc` changes:
+/// 1. We need to patch ALL Button instances across ALL importing files
+/// 2. Those instances exist in other documents' VDOM trees (like Card in file_b)
+/// 3. Patch routing uses the VDOM tree structure, not source file boundaries
+/// 4. Semantic IDs must remain stable across hot reload of imported components
+///
+/// ## Bundle-Level Operations
+///
+/// For operations across the entire bundle, use `(DocumentID, SemanticID)` tuples:
+/// - `DocumentID`: Identifies which document's VDOM tree (the root evaluation context)
+/// - `SemanticID`: Identifies a node within that VDOM tree
+///
+/// This prevents accidental coupling between files while enabling correct hot reload.
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
