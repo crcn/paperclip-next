@@ -1,0 +1,15 @@
+[package]
+name = "paperclip-linter"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex = "1.10"
+
+[dev-dependencies]

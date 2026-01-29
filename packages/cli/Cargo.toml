@@ -19,6 +19,7 @@ paperclip-compiler-react = { path = "../compiler-react" }
 paperclip-compiler-css = { path = "../compiler-css" }
 paperclip-compiler-html = { path = "../compiler-html" }
 paperclip-evaluator = { path = "../evaluator" }
+paperclip-linter = { path = "../linter" }
 paperclip-vision = { path = "../vision", optional = true }
 
 # CLI

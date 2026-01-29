@@ -1,0 +1,28 @@
+[package]
+name = "paperclip-editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperclip-parser = { path = "../parser" }
+paperclip-evaluator = { path = "../evaluator" }
+
+# CRDT backend (Yjs for Rust)
+yrs = { version = "0.18", optional = true }
+
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+anyhow = "1.0"
+
+[features]
+default = []
+collaboration = ["yrs"]
+history = []  # Future: undo/redo
+
+[[test]]
+name = "integration"
+path = "tests/integration_tests.rs"

@@ -11,7 +11,7 @@ High-performance AST evaluator that transforms Paperclip components into Virtual
 - 🔑 **Semantic Identity** - Stable, refactoring-safe node IDs
 - 📦 **Bundle Support** - Cross-file component resolution
 - 🎯 **Stable Patches** - Semantic ID-based diffing
-- ✅ **Well-tested** - 102 passing tests
+- ✅ **Well-tested** - 112 passing tests
 
 ## Installation
 

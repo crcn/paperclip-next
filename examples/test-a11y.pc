@@ -1,0 +1,89 @@
+// Test file with accessibility violations
+
+public component ImageGallery {
+  render div {
+    // Missing alt text on image
+    img (src="photo1.jpg") {}
+
+    // Image with alt text (good)
+    img (src="photo2.jpg", alt="A beautiful sunset") {}
+
+    // Button without text
+    button (class="icon-button") {}
+
+    // Button with text (good)
+    button {
+      text "Click me"
+    }
+
+    // Link without text
+    a (href="/about") {}
+
+    // Link with text (good)
+    a (href="/home") {
+      text "Home"
+    }
+  }
+}
+
+public component LoginForm {
+  render form {
+    // Input without label
+    input (type="text", placeholder="Username") {}
+
+    // Input with id (can be labeled)
+    input (type="password", id="password") {}
+
+    // Hidden input (should not warn)
+    input (type="hidden", name="csrf") {}
+
+    // Select without label
+    select {
+      text "Choose option"
+    }
+  }
+}
+
+public component InvalidARIA {
+  render div {
+    // Invalid ARIA role
+    div (role="invalid-role") {
+      text "Content"
+    }
+
+    // Valid ARIA role (good)
+    div (role="button") {
+      text "Click me"
+    }
+  }
+}
+
+public component InteractiveDiv {
+  render div {
+    // Non-semantic interactive element
+    div (onclick="handleClick()") {
+      text "Click this div"
+    }
+
+    // Semantic button (good)
+    button {
+      text "Click this button"
+    }
+  }
+}
+
+public component HeadingStructure {
+  render div {
+    h1 {
+      text "Main Title"
+    }
+
+    h3 {
+      text "Subheading (skips h2)"
+    }
+
+    h2 {
+      text "Proper subheading"
+    }
+  }
+}

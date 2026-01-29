@@ -3,7 +3,7 @@ mod config;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use commands::{compile, designer, init, CompileArgs, DesignerArgs, InitArgs};
+use commands::{compile, designer, init, lint, CompileArgs, DesignerArgs, InitArgs, LintArgs};
 
 /// Paperclip CLI - Visual component builder for the AI age
 #[derive(Parser, Debug)]
@@ -21,6 +21,9 @@ enum Command {
 
     /// Compile .pc files to target format
     Compile(CompileArgs),
+
+    /// Lint .pc files for common issues
+    Lint(LintArgs),
 
     /// Start the visual designer (coming soon)
     Designer(DesignerArgs),
@@ -168,6 +171,7 @@ fn main() {
     let result = match cli.command {
         Command::Init(args) => init(args, &cwd),
         Command::Compile(args) => compile(args, &cwd),
+        Command::Lint(args) => lint(args, &cwd),
         Command::Designer(args) => designer(args, &cwd),
 
         #[cfg(feature = "vision")]

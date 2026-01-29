@@ -7,7 +7,7 @@ High-performance parser for the Paperclip visual component language.
 - ⚡ **Blazing fast** - Parses 1000-line files in 25 microseconds
 - 🔤 **Zero-copy tokenization** - Using `logos` with string slices
 - 🌳 **Complete AST** - Components, styles, tokens, expressions
-- ✅ **Well-tested** - 12 passing tests
+- ✅ **Well-tested** - 39 passing tests
 - 🎨 **CSS support** - All CSS properties including dashes (margin-bottom, line-height)
 
 ## Installation

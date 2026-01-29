@@ -36,6 +36,12 @@ mod tests_slots;
 #[cfg(test)]
 mod tests_error_recovery;
 
+#[cfg(test)]
+mod tests_expressions;
+
+#[cfg(test)]
+mod tests_integration;
+
 pub use bundle::{AssetReference, AssetType, Bundle, BundleError, FileSystem, MockFileSystem, RealFileSystem};
 pub use css_evaluator::CssRule;
 pub use css_evaluator::{CssError, CssEvaluator, CssResult, VirtualCssDocument};

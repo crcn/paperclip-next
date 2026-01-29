@@ -1,0 +1,16 @@
+{
+  "component_name": "Card",
+  "source_path": "test-components/test-card.pc",
+  "views": [
+    {
+      "view_name": "default",
+      "component_name": "Card",
+      "path": "./test-vision-all/Card.default.png",
+      "width": 1920,
+      "height": 1080,
+      "viewport": "Desktop",
+      "timestamp": "2026-01-28T23:53:36.198130+00:00"
+    }
+  ],
+  "generated_at": "2026-01-28T23:53:36.198160+00:00"
+}

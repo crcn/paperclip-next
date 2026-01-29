@@ -249,10 +249,307 @@ impl Document {
             components: Vec::new(),
         }
     }
+
+    /// Find an element by its span ID
+    pub fn find_element(&self, id: &str) -> Option<&Element> {
+        for component in &self.components {
+            if let Some(body) = &component.body {
+                if let Some(elem) = Self::find_element_recursive(body, id) {
+                    return Some(elem);
+                }
+            }
+        }
+        None
+    }
+
+    /// Find an element by ID (mutable)
+    pub fn find_element_mut(&mut self, id: &str) -> Option<&mut Element> {
+        for component in &mut self.components {
+            if let Some(body) = &mut component.body {
+                if let Some(elem) = Self::find_element_recursive_mut(body, id) {
+                    return Some(elem);
+                }
+            }
+        }
+        None
+    }
+
+    fn find_element_recursive<'a>(elem: &'a Element, id: &str) -> Option<&'a Element> {
+        if elem.span().id == id {
+            return Some(elem);
+        }
+
+        match elem {
+            Element::Tag { children, .. } => {
+                for child in children {
+                    if let Some(found) = Self::find_element_recursive(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Instance { children, .. } => {
+                for child in children {
+                    if let Some(found) = Self::find_element_recursive(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Conditional { then_branch, else_branch, .. } => {
+                for child in then_branch {
+                    if let Some(found) = Self::find_element_recursive(child, id) {
+                        return Some(found);
+                    }
+                }
+                if let Some(else_elems) = else_branch {
+                    for child in else_elems {
+                        if let Some(found) = Self::find_element_recursive(child, id) {
+                            return Some(found);
+                        }
+                    }
+                }
+            }
+            Element::Repeat { body, .. } => {
+                for child in body {
+                    if let Some(found) = Self::find_element_recursive(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Insert { content, .. } => {
+                for child in content {
+                    if let Some(found) = Self::find_element_recursive(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Text { .. } | Element::SlotInsert { .. } => {}
+        }
+
+        None
+    }
+
+    fn find_element_recursive_mut<'a>(elem: &'a mut Element, id: &str) -> Option<&'a mut Element> {
+        if elem.span().id == id {
+            return Some(elem);
+        }
+
+        match elem {
+            Element::Tag { children, .. } => {
+                for child in children {
+                    if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Instance { children, .. } => {
+                for child in children {
+                    if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Conditional { then_branch, else_branch, .. } => {
+                for child in then_branch {
+                    if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+                if let Some(else_elems) = else_branch {
+                    for child in else_elems {
+                        if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                            return Some(found);
+                        }
+                    }
+                }
+            }
+            Element::Repeat { body, .. } => {
+                for child in body {
+                    if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Insert { content, .. } => {
+                for child in content {
+                    if let Some(found) = Self::find_element_recursive_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            Element::Text { .. } | Element::SlotInsert { .. } => {}
+        }
+
+        None
+    }
+
+    /// Check if an element is inside a repeat template
+    pub fn is_in_repeat_template(&self, id: &str) -> bool {
+        for component in &self.components {
+            if let Some(body) = &component.body {
+                if Self::is_in_repeat_recursive(body, id, false) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn is_in_repeat_recursive(elem: &Element, target_id: &str, in_repeat: bool) -> bool {
+        if elem.span().id == target_id {
+            return in_repeat;
+        }
+
+        match elem {
+            Element::Repeat { body, .. } => {
+                // Inside a repeat template
+                for child in body {
+                    if Self::is_in_repeat_recursive(child, target_id, true) {
+                        return true;
+                    }
+                }
+            }
+            Element::Tag { children, .. } | Element::Instance { children, .. } => {
+                for child in children {
+                    if Self::is_in_repeat_recursive(child, target_id, in_repeat) {
+                        return true;
+                    }
+                }
+            }
+            Element::Conditional { then_branch, else_branch, .. } => {
+                for child in then_branch {
+                    if Self::is_in_repeat_recursive(child, target_id, in_repeat) {
+                        return true;
+                    }
+                }
+                if let Some(else_elems) = else_branch {
+                    for child in else_elems {
+                        if Self::is_in_repeat_recursive(child, target_id, in_repeat) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            Element::Insert { content, .. } => {
+                for child in content {
+                    if Self::is_in_repeat_recursive(child, target_id, in_repeat) {
+                        return true;
+                    }
+                }
+            }
+            Element::Text { .. } | Element::SlotInsert { .. } => {}
+        }
+
+        false
+    }
+
+    /// Check if moving node to parent would create a cycle
+    pub fn would_create_cycle(&self, node_id: &str, parent_id: &str) -> bool {
+        // A cycle occurs if parent is a descendant of node
+        self.is_descendant_of(parent_id, node_id)
+    }
+
+    /// Check if potential_descendant is a descendant of ancestor
+    fn is_descendant_of(&self, potential_descendant: &str, ancestor: &str) -> bool {
+        if potential_descendant == ancestor {
+            return true;
+        }
+
+        if let Some(ancestor_elem) = self.find_element(ancestor) {
+            return Self::contains_element(ancestor_elem, potential_descendant);
+        }
+
+        false
+    }
+
+    fn contains_element(elem: &Element, target_id: &str) -> bool {
+        if elem.span().id == target_id {
+            return true;
+        }
+
+        match elem {
+            Element::Tag { children, .. } | Element::Instance { children, .. } => {
+                children.iter().any(|child| Self::contains_element(child, target_id))
+            }
+            Element::Conditional { then_branch, else_branch, .. } => {
+                then_branch.iter().any(|child| Self::contains_element(child, target_id))
+                    || else_branch.as_ref().map_or(false, |els| {
+                        els.iter().any(|child| Self::contains_element(child, target_id))
+                    })
+            }
+            Element::Repeat { body, .. } => {
+                body.iter().any(|child| Self::contains_element(child, target_id))
+            }
+            Element::Insert { content, .. } => {
+                content.iter().any(|child| Self::contains_element(child, target_id))
+            }
+            Element::Text { .. } | Element::SlotInsert { .. } => false,
+        }
+    }
+
+    /// Check if child can be validly placed inside parent
+    pub fn is_valid_parent_child(&self, _parent: &Element, _child: &Element) -> bool {
+        // For now, allow all parent-child relationships
+        // Can add specific rules later (e.g., no text in certain elements)
+        true
+    }
 }
 
 impl Default for Document {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Element {
+    /// Get the span of this element
+    pub fn span(&self) -> &Span {
+        match self {
+            Element::Tag { span, .. } => span,
+            Element::Text { span, .. } => span,
+            Element::Instance { span, .. } => span,
+            Element::Conditional { span, .. } => span,
+            Element::Repeat { span, .. } => span,
+            Element::SlotInsert { span, .. } => span,
+            Element::Insert { span, .. } => span,
+        }
+    }
+
+    /// Get mutable span
+    pub fn span_mut(&mut self) -> &mut Span {
+        match self {
+            Element::Tag { span, .. } => span,
+            Element::Text { span, .. } => span,
+            Element::Instance { span, .. } => span,
+            Element::Conditional { span, .. } => span,
+            Element::Repeat { span, .. } => span,
+            Element::SlotInsert { span, .. } => span,
+            Element::Insert { span, .. } => span,
+        }
+    }
+
+    /// Get children if this is a container element
+    pub fn children(&self) -> Option<&Vec<Element>> {
+        match self {
+            Element::Tag { children, .. } => Some(children),
+            Element::Instance { children, .. } => Some(children),
+            _ => None,
+        }
+    }
+
+    /// Get mutable children if this is a container element
+    pub fn children_mut(&mut self) -> Option<&mut Vec<Element>> {
+        match self {
+            Element::Tag { children, .. } => Some(children),
+            Element::Instance { children, .. } => Some(children),
+            _ => None,
+        }
+    }
+
+    /// Get tag name if this is a Tag element
+    pub fn tag_name(&self) -> Option<&str> {
+        match self {
+            Element::Tag { tag_name, .. } => Some(tag_name),
+            _ => None,
+        }
     }
 }

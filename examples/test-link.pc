@@ -1,0 +1,9 @@
+public component TestLink {
+  render div {
+    a (href="/test") {}
+
+    a (href="/good") {
+      text "Good link"
+    }
+  }
+}

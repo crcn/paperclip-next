@@ -1,0 +1,3 @@
+component Test {
+  render a (href="/test") {}
+}

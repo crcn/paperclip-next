@@ -1,0 +1,16 @@
+{
+  "component_name": "Button",
+  "source_path": "test-button.pc",
+  "views": [
+    {
+      "view_name": "default",
+      "component_name": "Button",
+      "path": "./test-vision-mobile/Button.default.png",
+      "width": 1920,
+      "height": 1080,
+      "viewport": "Desktop",
+      "timestamp": "2026-01-28T23:53:27.577348+00:00"
+    }
+  ],
+  "generated_at": "2026-01-28T23:53:27.577362+00:00"
+}

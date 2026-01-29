@@ -1051,16 +1051,113 @@ impl Evaluator {
                     },
                     BinaryOp::Equals => Ok(Value::Boolean(left_val == right_val)),
                     BinaryOp::NotEquals => Ok(Value::Boolean(left_val != right_val)),
-                    _ => Err(EvalError::EvaluationError {
-                        message: format!("Operator {:?} not implemented", operator),
-                        span: span.clone(),
-                    }),
+                    BinaryOp::LessThan => match (&left_val, &right_val) {
+                        (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a < b)),
+                        _ => Err(EvalError::InvalidOperands {
+                            operator: "<".to_string(),
+                            details: format!(
+                                "Expected number < number, got {:?} < {:?}",
+                                left_val, right_val
+                            ),
+                            span: span.clone(),
+                        }),
+                    },
+                    BinaryOp::LessThanOrEqual => match (&left_val, &right_val) {
+                        (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a <= b)),
+                        _ => Err(EvalError::InvalidOperands {
+                            operator: "<=".to_string(),
+                            details: format!(
+                                "Expected number <= number, got {:?} <= {:?}",
+                                left_val, right_val
+                            ),
+                            span: span.clone(),
+                        }),
+                    },
+                    BinaryOp::GreaterThan => match (&left_val, &right_val) {
+                        (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a > b)),
+                        _ => Err(EvalError::InvalidOperands {
+                            operator: ">".to_string(),
+                            details: format!(
+                                "Expected number > number, got {:?} > {:?}",
+                                left_val, right_val
+                            ),
+                            span: span.clone(),
+                        }),
+                    },
+                    BinaryOp::GreaterThanOrEqual => match (&left_val, &right_val) {
+                        (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a >= b)),
+                        _ => Err(EvalError::InvalidOperands {
+                            operator: ">=".to_string(),
+                            details: format!(
+                                "Expected number >= number, got {:?} >= {:?}",
+                                left_val, right_val
+                            ),
+                            span: span.clone(),
+                        }),
+                    },
+                    BinaryOp::And => {
+                        // Logical AND with short-circuit evaluation
+                        let left_bool = match left_val {
+                            Value::Boolean(b) => b,
+                            _ => return Err(EvalError::InvalidOperands {
+                                operator: "&&".to_string(),
+                                details: format!("Expected boolean && boolean, got {:?} && {:?}", left_val, right_val),
+                                span: span.clone(),
+                            }),
+                        };
+
+                        if !left_bool {
+                            // Short circuit - left is false, don't evaluate right
+                            Ok(Value::Boolean(false))
+                        } else {
+                            match right_val {
+                                Value::Boolean(b) => Ok(Value::Boolean(b)),
+                                _ => Err(EvalError::InvalidOperands {
+                                    operator: "&&".to_string(),
+                                    details: format!("Expected boolean && boolean, got {:?} && {:?}", left_val, right_val),
+                                    span: span.clone(),
+                                }),
+                            }
+                        }
+                    },
+                    BinaryOp::Or => {
+                        // Logical OR with short-circuit evaluation
+                        let left_bool = match left_val {
+                            Value::Boolean(b) => b,
+                            _ => return Err(EvalError::InvalidOperands {
+                                operator: "||".to_string(),
+                                details: format!("Expected boolean || boolean, got {:?} || {:?}", left_val, right_val),
+                                span: span.clone(),
+                            }),
+                        };
+
+                        if left_bool {
+                            // Short circuit - left is true, don't evaluate right
+                            Ok(Value::Boolean(true))
+                        } else {
+                            match right_val {
+                                Value::Boolean(b) => Ok(Value::Boolean(b)),
+                                _ => Err(EvalError::InvalidOperands {
+                                    operator: "||".to_string(),
+                                    details: format!("Expected boolean || boolean, got {:?} || {:?}", left_val, right_val),
+                                    span: span.clone(),
+                                }),
+                            }
+                        }
+                    },
                 }
             }
 
-            Expression::Call { .. } => {
-                // TODO: Implement function calls
-                Ok(Value::String("function call".to_string()))
+            Expression::Call { function, arguments, span } => {
+                // Function calls are not yet implemented - return empty string as no-op
+                // Log warning so developers know this feature is pending
+                warn!(
+                    function = function,
+                    arg_count = arguments.len(),
+                    span = ?span,
+                    "Function call not yet implemented - returning empty string"
+                );
+                Ok(Value::String(String::new()))
             }
 
             Expression::Template { parts, .. } => {

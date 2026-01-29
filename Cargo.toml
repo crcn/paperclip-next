@@ -2,15 +2,18 @@
 resolver = "2"
 members = [
     "packages/parser",
+    "packages/editor",
     "packages/evaluator",
     "packages/workspace",
     "packages/inference",
     "packages/compiler-react",
     "packages/compiler-css",
     "packages/compiler-html",
+    "packages/linter",
     "packages/cli",
     "packages/wasm",
     "packages/vision",
+    "packages/sourcemap",
 ]
 
 [workspace.package]
@@ -46,6 +49,9 @@ tracing-subscriber = "0.3"
 notify = "6.1"
 chrono = "0.4"
 tokio-stream = "0.1"
+
+# Source maps
+sourcemap = "8.0"
 
 # Testing
 criterion = "0.5"

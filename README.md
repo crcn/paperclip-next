@@ -60,10 +60,11 @@ This repository contains a working proof-of-concept demonstrating the core pipel
 # Test Rust code
 cargo test --workspace
 
-# Results: 152+ tests passing
+# Results: 150+ tests passing across all packages
 # - 39 parser tests
 # - 112 evaluator tests (includes slots + validator)
 # - 1 workspace test
+# - Additional tests in compiler, linter, editor, inference, vision, sourcemap
 ```
 
 **Run Benchmarks:**
@@ -194,17 +195,37 @@ See `PHASE_3_4_COMPLETE.md` for implementation details.
 │  • Deterministic ID generation (CRC32)                   │
 │  • Recursive descent parser                              │
 │  • AST with sequential IDs                               │
-└──────┬─────────────┬────────────────────────────────────┘
-       │             │
-       │             ▼
-       │    ┌─────────────────────────────────────────────┐
-       │    │  React Compiler (packages/compiler-react)   │
-       │    │  • AST → React/JSX                          │
-       │    │  • Component generation                     │
-       │    │  • Props & hooks support                    │
-       │    └─────────────────────────────────────────────┘
-       │
-       ▼
+└──┬───────┬─────────┬──────────┬────────────────────────┘
+   │       │         │          │
+   │       │         │          ▼
+   │       │         │   ┌──────────────────────────────┐
+   │       │         │   │ Linter (packages/linter)     │
+   │       │         │   │  • Configurable rules        │
+   │       │         │   │  • Diagnostics               │
+   │       │         │   └──────────────────────────────┘
+   │       │         │
+   │       │         ▼
+   │       │   ┌──────────────────────────────────────────┐
+   │       │   │  Inference (packages/inference)          │
+   │       │   │  • Multi-pass type inference             │
+   │       │   │  • TypeScript/Rust codegen               │
+   │       │   └──────────────────────────────────────────┘
+   │       │
+   │       ▼
+   │   ┌─────────────────────────────────────────────────┐
+   │   │  Compilers                                       │
+   │   │  ┌───────────────────────────────────────────┐  │
+   │   │  │ React (packages/compiler-react)           │  │
+   │   │  │  • AST → React/JSX + TypeScript           │  │
+   │   │  └───────────────────────────────────────────┘  │
+   │   │  ┌───────────────────────────────────────────┐  │
+   │   │  │ CSS (packages/compiler-css)               │  │
+   │   │  │  • AST → Scoped CSS                       │  │
+   │   │  └───────────────────────────────────────────┘  │
+   │   │  • Source Maps (packages/sourcemap)             │
+   │   └─────────────────────────────────────────────────┘
+   │
+   ▼
 ┌─────────────────────────────────────────────────────────┐
 │            Evaluator (packages/evaluator)                │
 │  • AST → Virtual DOM                                     │
@@ -212,9 +233,17 @@ See `PHASE_3_4_COMPLETE.md` for implementation details.
 │  • Expression evaluation                                 │
 │  • Style application                                     │
 │  • Bundle/cross-file resolution                          │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ▼
+└────┬─────────────┬──────────────────────────────────────┘
+     │             │
+     │             ▼
+     │     ┌──────────────────────────────────────────────┐
+     │     │  Editor (packages/editor)                    │
+     │     │  • Document lifecycle                        │
+     │     │  • Mutation system                           │
+     │     │  • Collaboration-ready (CRDT)                │
+     │     └──────────────────────────────────────────────┘
+     │
+     ▼
 ┌─────────────────────────────────────────────────────────┐
 │         Workspace Server (packages/workspace)            │
 │  • File watching (notify)                                │
@@ -229,6 +258,19 @@ See `PHASE_3_4_COMPLETE.md` for implementation details.
 │  • Virtual DOM differ                                    │
 │  • Efficient DOM patcher                                 │
 │  • Preview rendering                                     │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│         Vision (packages/vision)                         │
+│  • Screenshot capture                                    │
+│  • Component documentation                               │
+│  • @view annotations                                     │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│         WASM (packages/wasm)                             │
+│  • Browser/Node.js bindings                              │
+│  • Bundler integration (Vite, Webpack)                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -274,8 +316,14 @@ See the full implementation plan in `docs/plans/2026-01-27-feat-paperclip-next-f
 **Phase 1 (Core Engine):**
 - Incremental parsing with tree-sitter
 - GraphManager for dependency resolution
-- ✅ React compiler (packages/compiler-react)
+- ✅ React compiler (packages/compiler-react) with TypeScript definitions
 - ✅ CSS compiler (packages/compiler-css)
+- ✅ Type inference engine (packages/inference)
+- ✅ Linter with configurable rules (packages/linter)
+- ✅ Source map generation (packages/sourcemap)
+- ✅ Editor with mutation system (packages/editor)
+- ✅ Vision screenshot capture (packages/vision)
+- ✅ WASM bindings (packages/wasm)
 - Yew compiler
 - Performance benchmarks (<10ms parse, <20ms evaluate) ✅ **EXCEEDED** by 1000x
 
@@ -302,6 +350,33 @@ Every pixel on the canvas must trace to editable source. This is the same invari
 - **Engineers register live components** - for interactive behavior
 - **AI assists both** - via MCP tools with canvas context
 
+## Package Overview
+
+### Core Packages
+- **[packages/parser](packages/parser/README.md)** - Fast, zero-copy parser with 39 tests
+- **[packages/evaluator](packages/evaluator/README.md)** - AST → Virtual DOM with 112 tests
+- **[packages/cli](packages/cli/README.md)** - Command-line interface
+
+### Compiler Packages
+- **[packages/compiler-react](packages/compiler-react/README.md)** - React/JSX + TypeScript output
+- **[packages/compiler-css](packages/compiler-css/README.md)** - Scoped CSS generation
+- **[packages/sourcemap](packages/sourcemap/README.md)** - Source map utilities
+
+### Tooling Packages
+- **[packages/linter](packages/linter/README.md)** - Configurable linting rules
+- **[packages/inference](packages/inference/README.md)** - Multi-pass type inference
+- **[packages/editor](packages/editor/README.md)** - Document editing with mutation system
+- **[packages/vision](packages/vision/README.md)** - Screenshot capture for documentation
+
+### Integration Packages
+- **[packages/workspace](packages/workspace/README.md)** - gRPC server with file watching
+- **[packages/client](packages/client/README.md)** - TypeScript Virtual DOM client
+- **[packages/wasm](packages/wasm/README.md)** - WebAssembly bindings
+
+### Build Tool Integrations
+- **[packages/plugin-vite](packages/plugin-vite/README.md)** - Vite plugin
+- **[packages/loader-webpack](packages/loader-webpack/README.md)** - Webpack loader
+
 ## Contributing
 
 This is a rewrite from scratch. The old codebase serves as reference, but we're building fresh with modern tooling.
@@ -315,8 +390,13 @@ This is a rewrite from scratch. The old codebase serves as reference, but we're 
   - ✅ **CSS** (AST → Scoped stylesheets)
   - 🔲 Yew (coming soon)
   - 🔲 HTML (coming soon)
+- **Linter:** Rust + configurable rules
+- **Inference:** Multi-pass type inference engine
+- **Editor:** Document editing with mutation system (collaboration-ready)
+- **Vision:** Screenshot capture for visual documentation
 - **Server:** Rust + Tonic (gRPC)
 - **Client:** TypeScript + Virtual DOM
+- **Source Maps:** Industry-standard source map generation
 - **(Future) Designer:** React
 
 ## License

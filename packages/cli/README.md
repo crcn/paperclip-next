@@ -90,6 +90,35 @@ paperclip compile --target html
 - HTML: `.html` files (coming soon)
 - CSS: `.css` files (coming soon)
 
+### `paperclip lint`
+
+Lint Paperclip files for errors and warnings.
+
+```bash
+paperclip lint
+```
+
+**Options:**
+- `[PATH]` - File or directory to lint [default: .]
+- `--config <FILE>` - Path to lint configuration file
+- `--format <FORMAT>` - Output format (text, json) [default: text]
+- `--fix` - Automatically fix issues where possible (coming soon)
+
+**Examples:**
+```bash
+# Lint current directory
+paperclip lint
+
+# Lint specific file
+paperclip lint src/button.pc
+
+# Lint with custom config
+paperclip lint --config .paperclip-lint.json
+
+# JSON output for CI
+paperclip lint --format json
+```
+
 ### `paperclip designer`
 
 Start the visual designer (coming soon).
@@ -216,13 +245,14 @@ cargo test --package paperclip-cli
 
 - ✅ Project initialization
 - ✅ React compilation (.jsx)
+- ✅ CSS compilation
 - ✅ TypeScript definitions (.d.ts)
+- ✅ Linting with configurable rules
 - ✅ Stdout output
 - ✅ Config file support
 - ✅ Color-coded output
 - ⬜ Watch mode
 - ⬜ HTML compilation
-- ⬜ CSS compilation
 - ⬜ Visual designer
 - ⬜ Live reload
 - ⬜ Production optimizations
@@ -248,4 +278,6 @@ Error: Source directory does not exist: "./nonexistent"
 
 - [Paperclip Parser](../parser/README.md)
 - [React Compiler](../compiler-react/README.md)
+- [CSS Compiler](../compiler-css/README.md)
+- [Linter](../linter/README.md)
 - [Main Documentation](../../README.md)
