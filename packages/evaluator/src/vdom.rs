@@ -18,9 +18,6 @@ pub enum VNode {
         /// Explicit key for repeat items (from key attribute)
         #[serde(skip_serializing_if = "Option::is_none")]
         key: Option<String>,
-        /// Legacy AST-based ID (deprecated, will be removed)
-        #[serde(skip_serializing_if = "Option::is_none")]
-        id: Option<String>,
     },
 
     /// Text node
@@ -49,7 +46,6 @@ impl VNode {
             children: Vec::new(),
             semantic_id,
             key: None,
-            id: None,
         }
     }
 
@@ -100,17 +96,6 @@ impl VNode {
         } = self
         {
             children.extend(new_children);
-        }
-        self
-    }
-
-    pub fn with_id(mut self, id: impl Into<String>) -> Self {
-        if let VNode::Element {
-            id: ref mut node_id,
-            ..
-        } = self
-        {
-            *node_id = Some(id.into());
         }
         self
     }

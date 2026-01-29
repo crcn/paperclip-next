@@ -337,7 +337,6 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                     attributes: attributes.clone(),
                     styles: styles.clone(),
                     children: children.iter().map(convert_vnode_to_proto).collect(),
-                    id: None,
                 },
             )),
         },
@@ -382,7 +381,6 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                                 },
                             )),
                         }],
-                        id: None,
                     },
                 )),
             }
@@ -410,7 +408,6 @@ mod tests {
                 children: vec![],
                 semantic_id: SemanticID::root(),
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -436,7 +433,6 @@ mod tests {
                 children: vec![],
                 semantic_id: SemanticID::root(),
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -516,7 +512,6 @@ mod tests {
                     children: vec![],
                     semantic_id: elem1_id.clone(),
                     key: None,
-                    id: None,
                 },
                 VNode::Element {
                     tag: "div".to_string(),
@@ -529,7 +524,6 @@ mod tests {
                     children: vec![],
                     semantic_id: elem2_id.clone(),
                     key: None,
-                    id: None,
                 },
             ],
             styles: vec![],
@@ -549,7 +543,6 @@ mod tests {
                     children: vec![],
                     semantic_id: elem2_id.clone(),
                     key: None,
-                    id: None,
                 },
                 VNode::Element {
                     tag: "div".to_string(),
@@ -562,7 +555,6 @@ mod tests {
                     children: vec![],
                     semantic_id: elem1_id.clone(),
                     key: None,
-                    id: None,
                 },
             ],
             styles: vec![],
@@ -595,7 +587,6 @@ mod tests {
                 children: vec![],
                 semantic_id: SemanticID::root(),
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -608,7 +599,6 @@ mod tests {
                 children: vec![],
                 semantic_id: SemanticID::root(),
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };

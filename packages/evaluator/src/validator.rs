@@ -275,7 +275,6 @@ mod tests {
                 children: vec![],
                 semantic_id,
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -304,7 +303,6 @@ mod tests {
                     children: vec![],
                     semantic_id: semantic_id.clone(),
                     key: None,
-                    id: None,
                 },
                 VNode::Element {
                     tag: "div".to_string(),
@@ -313,7 +311,6 @@ mod tests {
                     children: vec![],
                     semantic_id: semantic_id.clone(),
                     key: None,
-                    id: None,
                 },
             ],
             styles: vec![],
@@ -341,7 +338,6 @@ mod tests {
                 children: vec![],
                 semantic_id,
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -392,7 +388,6 @@ mod tests {
                         children: vec![],
                         semantic_id: semantic_id_1,
                         key: Some("user-123".to_string()),
-                        id: None,
                     },
                     VNode::Element {
                         tag: "li".to_string(),
@@ -401,7 +396,6 @@ mod tests {
                         children: vec![],
                         semantic_id: semantic_id_2,
                         key: Some("user-123".to_string()),
-                        id: None,
                     },
                 ],
                 semantic_id: SemanticID::new(vec![SemanticSegment::Element {
@@ -410,7 +404,6 @@ mod tests {
                     ast_id: "ul-1".to_string(),
                 }]),
                 key: None,
-                id: None,
             }],
             styles: vec![],
         };
@@ -454,7 +447,6 @@ mod tests {
                     children: vec![],
                     semantic_id: semantic_id_1,
                     key: None,
-                    id: None,
                 },
                 VNode::Element {
                     tag: "li".to_string(),
@@ -463,7 +455,6 @@ mod tests {
                     children: vec![],
                     semantic_id: semantic_id_2,
                     key: None,
-                    id: None,
                 },
             ],
             styles: vec![],

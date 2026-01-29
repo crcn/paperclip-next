@@ -251,7 +251,6 @@ mod tests {
             styles: HashMap::new(),
             children: vec![],
             key: None,
-            id: None,
         };
 
         // Apply overrides

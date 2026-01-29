@@ -16,7 +16,7 @@ message ElementNode {
   map<string, string> attributes = 2;
   map<string, string> styles = 3;
   repeated VNode children = 4;
-  optional string id = 5;
+  // Field 5 (id) removed - use semantic_id instead
 }
 
 message TextNode {
@@ -31,7 +31,7 @@ message ComponentNode {
   string component_id = 1;
   map<string, string> props = 2;
   repeated VNode children = 3;
-  optional string id = 4;
+  // Field 4 (id) removed - use semantic_id instead
 }
 
 message VDocument {
