@@ -40,25 +40,32 @@ The Paperclip architecture has been through multiple spikes (0.2, 0.4, 0.5, 0.10
 
 ### 1. Critical Issues (Must Fix)
 
-#### 1.1 Component Recursion Protection Missing ⚠️ CRITICAL
+#### 1.1 Component Recursion Protection ✅ COMPLETE (Verified by Reviewers)
 
-**Location**: `packages/evaluator/src/evaluator.rs:92` (component_stack field exists but not used)
+**Location**: `packages/evaluator/src/evaluator.rs:417-446`
 
-**Problem**: Direct and indirect component recursion causes stack overflow with cryptic error messages.
+**Status**: ✅ **ALREADY IMPLEMENTED AND TESTED**
 
 ```rust
-component AB {
-    render div {
-        AB()  // ⚠️ Stack overflow, no protection
-    }
+// evaluator.rs:417-446
+if self.context.component_stack.contains(&name.to_string()) {
+    let mut call_stack = self.context.component_stack.clone();
+    call_stack.push(name.to_string());
+
+    return Err(EvalError::RecursiveComponent {
+        component: name.to_string(),
+        call_stack,
+        hint,  // Includes helpful message about data-driven recursion
+    });
 }
 ```
 
 **Current State**:
 - ✅ `component_stack` field added to `EvalContext` (line 92)
-- ❌ Stack tracking NOT implemented in evaluation logic
-- ❌ No cycle detection before component evaluation
-- ❌ No helpful error message (just "fatal runtime error: stack overflow, aborting")
+- ✅ Stack tracking IMPLEMENTED in evaluation logic (lines 417-446)
+- ✅ Cycle detection before component evaluation
+- ✅ Helpful error messages with call stack and hints
+- ✅ Tested in `packages/evaluator/tests/test_recursion.rs` (direct, indirect, conditional)
 
 **Impact**:
 - Poor developer experience
@@ -100,11 +107,15 @@ component TreeNode {
 - This prevents false positives for legitimate recursive patterns like tree rendering
 - Can be refined in Phase 2 after initial protection is in place
 
-**Files to Change**:
-- `packages/evaluator/src/evaluator.rs` - Add cycle detection logic
-- `packages/evaluator/tests/test_recursion.rs` - Add error handling tests (both structural and data-driven cases)
+**Remaining Work**:
+- ⚠️ **TODO**: Add support for data-driven recursion (scoping stack across repeat boundaries)
+- This is enhancement, not bug fix - current behavior is safe
 
-**Severity**: CRITICAL - Poor DX, blocks legitimate patterns
+**Files Already Complete**:
+- ✅ `packages/evaluator/src/evaluator.rs` - Cycle detection implemented
+- ✅ `packages/evaluator/tests/test_recursion.rs` - Comprehensive tests exist
+
+**Severity**: ~~CRITICAL~~ → **COMPLETE** (Enhancement: data-driven recursion scoping remains as future work)
 
 ---
 
@@ -286,28 +297,32 @@ slot unknownSlot                   // Slot resolution failure → FATAL
 
 ### 2. Module Boundary Issues (API Crispness)
 
-#### 2.1 Bundle API Leaks Internal Structure ⚠️ MEDIUM
+#### 2.1 Bundle API Encapsulation ✅ MOSTLY COMPLETE (Verified by Reviewers)
 
-**Location**: `packages/bundle/src/bundle.rs:82`
+**Location**: `packages/bundle/src/bundle.rs:82-97`
 
-**Problem**: Bundle exposes too much internal state, enabling clients to bypass abstractions.
+**Status**: ✅ **FIELDS ALREADY PRIVATE**
 
 **Current API Surface**:
 ```rust
 pub struct Bundle {
-    documents: HashMap<PathBuf, Document>,  // ❌ Public field
-    graph: GraphManager,                     // ❌ Public field
-    resolver: Resolver,                      // ❌ Public field
-    assets: HashMap<...>,                    // ❌ Public field
-    document_ids: HashMap<...>,              // ❌ Public field
+    documents: HashMap<PathBuf, Document>,  // ✅ ALREADY Private
+    graph: GraphManager,                     // ✅ ALREADY Private
+    resolver: Resolver,                      // ✅ ALREADY Private
+    assets: HashMap<...>,                    // ✅ ALREADY Private
+    document_ids: HashMap<...>,              // ✅ ALREADY Private
 }
 ```
 
-**Issues**:
-- Direct field access bypasses validation
-- Internal representation exposed (hard to refactor)
-- No single entry point for queries
-- GraphManager and Resolver can be modified directly
+**What's Actually Working**:
+- ✅ All fields are private (no `pub` keyword)
+- ✅ Access only through public methods
+- ✅ GraphManager and Resolver cannot be modified directly
+- ✅ Encapsulation is preserved
+
+**Remaining Work** (Enhancement, not bug):
+- ⚠️ Add explicit accessor methods for common queries
+- ⚠️ Document lifetime ownership rules (see below)
 
 **Recommended API (Crisp Boundaries)**:
 ```rust
@@ -442,34 +457,57 @@ impl EvalContext {
 2. How do AST IDs relate to Semantic IDs?
 3. When should keys be used vs semantic IDs?
 
-**Critical Architectural Invariant - Semantic ID Uniqueness Scope**:
+**Critical Architectural Invariant - Semantic ID Uniqueness Scope** (CORRECTED per Kieran's review):
 
 ```rust
-/// INVARIANT: SemanticID must be unique within a document,
-///            but NOT globally unique across the bundle.
+/// INVARIANT: SemanticID must be unique within a VDOM TREE (evaluation output),
+///            NOT just within a source document.
 ///
-/// Uniqueness is scoped to (DocumentID, SemanticID) pairs.
+/// A VDOM tree may span multiple source documents due to imports.
+/// Uniqueness is scoped to the evaluation context, not the source file.
 ///
-/// Why:
-/// - Prevents accidental coupling between files
-/// - Allows same component names in different files
-/// - Bundle-level operations must always include document context
+/// Why this matters for hot reload:
+/// - When file_a.pc changes, we need to patch ALL instances of its components
+/// - Those instances may appear in file_b.pc's VDOM tree
+/// - The DocumentID in VNode refers to the ROOT evaluation document (file_b),
+///   NOT the component definition document (file_a)
+/// - Patch routing uses VDOM tree structure, not source file structure
 pub struct SemanticID { ... }
 ```
 
-**Example of what this prevents**:
+**CRITICAL EXAMPLE - Cross-File Hot Reload**:
 ```rust
 // file_a.pc
-component Button { ... }  // SemanticID: "Button"
+component Button { ... }  // Defined here
 
 // file_b.pc
-component Button { ... }  // SemanticID: "Button" (same, but different document)
+import { Button } from "./file_a.pc"
+component Card {
+  render Button()  // Button instance in Card's VDOM
+}
 
-// ❌ Wrong: Assume global uniqueness
-patches.apply_to(semantic_id);  // Which Button?
+// When evaluating Card:
+// - Root DocumentID = "file_b" (the document being evaluated)
+// - Button's SemanticID must be unique within Card's VDOM tree
+// - Hot reload of file_a must patch Button instances in ALL importing VDOMs
 
-// ✅ Correct: Bundle-level uniqueness
-patches.apply_to(document_id, semantic_id);  // Specific Button
+// ⚠️ WRONG (original plan): SemanticID scoped to source file
+// Would break: Can't route patch from Button definition to Card's VDOM
+
+// ✅ CORRECT: SemanticID scoped to VDOM tree (evaluation output)
+// Patches route correctly: Change Button → Patch all Button instances
+```
+
+**Test Required** (identified by Kieran):
+```rust
+#[test]
+fn test_hot_reload_imported_component() {
+    // 1. Evaluate Card (imports Button from file_a)
+    // 2. Modify Button definition in file_a
+    // 3. Re-evaluate Card's VDOM
+    // 4. Verify semantic IDs remain stable for Button instances
+    // 5. Verify patches route correctly to Button in Card's tree
+}
 ```
 
 **Recommended Clarification**:
@@ -848,17 +886,21 @@ impl Bundle {
 
 ## Acceptance Criteria
 
-### Phase 1: Critical Fixes
-- [ ] Component recursion detection implemented with helpful error messages
-- [ ] Test suite validates recursion errors (direct, indirect, conditional, data-driven)
-- [ ] OT claims language updated to "deterministic, serializable patch protocol (single-writer)"
-- [ ] VNode `id` field DELETED entirely (no backwards compatibility)
-- [ ] VNode `semantic_id` made required (non-optional)
-- [ ] VNode key requirements clarified and enforced for repeat blocks
-- [ ] Client-side keyed diffing implemented using semantic_id + key
-- [ ] Evaluation determinism contract documented and tested
-- [ ] Error recovery boundaries documented (leaf nodes only, not structural)
-- [ ] **Semantic identity usage documented** (moved from Phase 2) with uniqueness scope rules
+### Phase 1: Critical Fixes & Corrections
+- [x] Component recursion detection - **ALREADY COMPLETE** (verified at evaluator.rs:417-446)
+- [x] Test suite validates recursion errors - **ALREADY COMPLETE** (test_recursion.rs:1-283)
+- [x] **FIX CRITICAL BUG**: Semantic ID scope invariant (per-VDOM-tree, not per-source-file) - **COMPLETE** (packages/semantics/src/identity.rs:1-50)
+- [ ] **ADD CRITICAL TEST**: Cross-file hot reload for imported components - **DEFERRED** (requires bundle evaluation with import resolution)
+- [x] **ADD CRITICAL TEST**: Determinism test (byte-identical evaluation outputs) - **COMPLETE** (tests/test_determinism.rs)
+- [x] **ADD CRITICAL TEST**: Duplicate key detection in repeat blocks - **ALREADY COMPLETE** (validator.rs:354)
+- [x] OT claims language updated to "deterministic, serializable patch protocol (single-writer)" - **COMPLETE** (ARCHITECTURAL_CONCERNS.md, STATUS.md)
+- [x] VNode `id` field DELETED entirely (dead code - always None) - **COMPLETE** (packages/evaluator/src/vdom.rs)
+- [x] VNode `semantic_id` made required (non-optional) - **ALREADY COMPLETE** (was never optional)
+- [ ] VNode key requirements enforced for repeat blocks (auto-generate with warning) - **TODO** (requires parser + evaluator changes)
+- [ ] Client-side keyed diffing implemented using semantic_id + key - **TODO** (TypeScript client work)
+- [x] Evaluation determinism contract documented - **COMPLETE** (packages/evaluator/src/evaluator.rs:1-100)
+- [x] Error recovery boundaries documented (leaf nodes only, not structural - with slot/repeat rules) - **COMPLETE** (packages/evaluator/src/evaluator.rs:48-68)
+- [x] **Semantic identity usage documented** with CORRECTED uniqueness scope rules - **COMPLETE** (packages/semantics/src/identity.rs, evaluator.rs, vdom_differ.rs)
 
 ### Phase 2: API Hardening
 - [ ] Bundle fields made private, accessor methods added
@@ -868,10 +910,11 @@ impl Bundle {
 - [ ] EvalContext fields made private with documented accessors
 
 ### Phase 3: Documentation & Testing
-- [ ] CSS syntax documentation updated to match parser
-- [ ] Identity system guide written (when to use each ID type)
-- [ ] FileSystem trait adopted in workspace and editor packages
-- [ ] Architecture decision log created for ID generation strategies
+- [x] CSS syntax documentation updated to match parser - **COMPLETE** (docs/CSS_SYNTAX.md)
+- [x] Module-level documentation added - **COMPLETE** (evaluator.rs, vdom.rs, vdom_differ.rs)
+- [ ] Identity system guide written (when to use each ID type) - **TODO** (comprehensive guide)
+- [ ] FileSystem trait adopted in workspace and editor packages - **TODO** (Phase 2 work)
+- [ ] Architecture decision log created for ID generation strategies - **TODO** (documentation work)
 - [ ] Determinism tests added (same input → byte-identical output)
 
 ### Phase 4: Modularization (Optional)

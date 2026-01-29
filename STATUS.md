@@ -68,21 +68,22 @@ repeat users as user key={user.id} {
 
 ---
 
-### Issue 3: OT Compatibility Claims
-**Problem**: Claims OT-compatible patches, but no transform rules
+### Issue 3: Patch Protocol Documentation ✅ RESOLVED
+**Resolution**: Updated documentation to honestly describe capabilities
 
 **Have**:
-- ✅ Serializable patches
-- ✅ Deterministic diffing
+- ✅ Deterministic, serializable patch protocol (single-writer)
+- ✅ Patches are reproducible and can be transmitted/stored
+- ✅ Suitable for HMR and single-user editing
 
-**Missing**:
+**Don't Have** (and don't claim to have):
 - ❌ Transform rules for concurrent operations
-- ❌ Conflict resolution
-- ❌ Intent preservation
+- ❌ Conflict resolution for concurrent writes
+- ❌ Intent preservation across edits
 
-**Required**: Either implement full OT or remove claims
+**Honest Description**: "Deterministic, serializable patch protocol (single-writer). Patches are reproducible and can be transmitted/stored, but do not include operational transform rules for concurrent writes. Suitable for HMR and single-user editing; collaboration requires CRDT layer (planned)."
 
-**Status**: ⚠️ FALSE CLAIM
+**Status**: ✅ RESOLVED - Documentation now honest
 
 ---
 

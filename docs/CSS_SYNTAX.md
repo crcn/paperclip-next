@@ -4,29 +4,31 @@ Based on the original Paperclip language specification.
 
 ## Overview
 
-Paperclip is a domain-specific language for building UI components that compile to HTML, CSS, and framework-specific code. It uses simplified CSS syntax that compiles directly to standard CSS with generated selectors.
+Paperclip is a domain-specific language for building UI components that compile to HTML, CSS, and framework-specific code. It uses standard CSS syntax within `style {}` blocks and compiles to CSS with generated selectors.
 
-**Key Difference:** No colons or semicolons in property declarations. Use whitespace instead.
+**Current Implementation:** Standard CSS syntax (colons and semicolons required).
 
 ```paperclip
 style {
-    color: red           // ✗ Traditional CSS
-    color red            // ✓ Paperclip
+    color: red;           // ✓ Current syntax
+    padding: 10px 20px;   // ✓ Standard CSS
 }
 ```
 
+**Note:** Simplified syntax (no colons/semicolons) is planned for future versions.
+
 ## CSS Properties
 
-Standard CSS properties work exactly the same, just with cleaner syntax:
+Standard CSS properties work exactly as in regular CSS:
 
 ```paperclip
 style {
-    color red
-    background #333
-    padding 10px 20px
-    width calc(100% - 20px)
-    background url("./image.png")
-    font-family Inter, sans-serif
+    color: red;
+    background: #333;
+    padding: 10px 20px;
+    width: calc(100% - 20px);
+    background: url("./image.png");
+    font-family: Inter, sans-serif;
 }
 ```
 
@@ -45,9 +47,9 @@ Use in styles:
 
 ```paperclip
 style {
-    color var(gray01)
-    font-family var(fontFamily01)
-    padding var(spacing04)
+    color: var(gray01);
+    font-family: var(fontFamily01);
+    padding: var(spacing04);
 }
 ```
 
@@ -57,7 +59,7 @@ With imports:
 import "./theme.pc" as theme
 
 style {
-    color var(theme.primaryColor)
+    color: var(theme.primaryColor);
 }
 ```
 
@@ -67,14 +69,14 @@ Reusable groups of CSS declarations that compile to CSS classes:
 
 ```paperclip
 public style defaultFont {
-    font-family Inter, sans-serif
-    font-size 11px
-    color #333
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    color: #333;
 }
 
 // Extend other styles
 public style largeFont extends defaultFont {
-    font-size 16px
+    font-size: 16px;
 }
 ```
 
@@ -83,7 +85,7 @@ Use in components:
 ```paperclip
 div {
     style extends defaultFont {
-        padding 10px
+        padding: 10px;
     }
 }
 ```
@@ -130,16 +132,16 @@ public component Button {
 
     render button {
         style {
-            background blue
-            padding 12px
+            background: blue;
+            padding: 12px;
         }
 
         style variant hover {
-            background darkblue
+            background: darkblue;
         }
 
         style variant danger {
-            background red
+            background: red;
         }
 
         slot children {
@@ -161,12 +163,12 @@ component Card {
 
     render div {
         style {
-            background white
+            background: white;
         }
 
         // Applies only when mobile AND dark AND hover
         style variant mobile + dark + hover {
-            background #000
+            background: #000;
         }
     }
 }
@@ -179,13 +181,13 @@ Styles on elements compile to CSS with generated class names:
 ```paperclip
 div myLabel {
     style {
-        color red
-        padding 10px
+        color: red;
+        padding: 10px;
     }
 
     span nested {
         style {
-            font-size 14px
+            font-size: 14px;
         }
         text "Hello"
     }
@@ -212,8 +214,8 @@ Text can have styles (renders as `<span>` when styled):
 ```paperclip
 text myLabel "Hello world" {
     style {
-        color red
-        font-weight bold
+        color: red;
+        font-weight: bold;
     }
 }
 ```
@@ -228,10 +230,10 @@ public trigger mobile {
 }
 
 public style card {
-    background white
-    border 1px solid var(theme.borderColor)
-    border-radius 8px
-    padding 24px
+    background: white;
+    border: 1px solid var(theme.borderColor);
+    border-radius: 8px;
+    padding: 24px;
 }
 
 public component Card {
@@ -240,21 +242,21 @@ public component Card {
 
     render div root {
         style extends card {
-            box-shadow 0 2px 4px rgba(0,0,0,0.1)
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         style variant hover {
-            box-shadow 0 4px 8px rgba(0,0,0,0.15)
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
         style variant mobile {
-            padding 16px
+            padding: 16px;
         }
 
         div header {
             style {
-                margin-bottom 16px
-                font-weight 600
+                margin-bottom: 16px;
+                font-weight: 600;
             }
             slot headerContent {
                 text "Default Header"
@@ -263,7 +265,7 @@ public component Card {
 
         div body {
             style {
-                color var(theme.textColor)
+                color: var(theme.textColor);
             }
             slot children
         }
@@ -285,7 +287,7 @@ Example compilation:
 ```paperclip
 div {
     style {
-        color red
+        color: red;
     }
     text "Hello"
 }
@@ -311,7 +313,7 @@ div {
 4. ✅ Supports all CSS pseudo-classes via triggers (`:hover`, `:focus`, `:active`, etc.)
 5. ✅ Supports media queries via triggers
 6. ✅ Style mixins become reusable CSS classes
-7. ⚠️ Simplified syntax: no colons, no semicolons
+7. ✅ Standard CSS syntax: colons and semicolons required (simplified syntax planned for future)
 
 ## See Also
 

@@ -1,3 +1,73 @@
+//! # VDOM Differ - Semantic ID-Aware Diffing
+//!
+//! Generates patches to transform one Virtual DOM into another using semantic IDs for stable matching.
+//!
+//! ## Purpose
+//!
+//! When source files change during hot module reload, we need to update the rendered preview
+//! without losing UI state (scroll position, focus, input values, etc.). The differ generates
+//! minimal patches that preserve element identity across refactoring.
+//!
+//! ## Semantic ID-Based Matching
+//!
+//! Unlike traditional VDOM differs that match by position or key, this differ uses **semantic IDs**
+//! as the primary matching criterion. Semantic IDs are stable across:
+//!
+//! - Component renames (Button → PrimaryButton)
+//! - Element reordering (move element from position 2 to position 0)
+//! - Structural changes (add/remove parent wrappers)
+//!
+//! ## Diffing Algorithm
+//!
+//! ```text
+//! 1. Match nodes by semantic ID (not position)
+//! 2. For matched nodes:
+//!    - Update if attributes/styles changed
+//!    - Recursively diff children
+//! 3. For unmatched old nodes: Delete
+//! 4. For unmatched new nodes: Insert
+//! ```
+//!
+//! ## Patch Types
+//!
+//! - **InsertNode**: Add new node at semantic path
+//! - **DeleteNode**: Remove node at semantic path
+//! - **UpdateAttributes**: Change element attributes
+//! - **UpdateStyles**: Change inline styles
+//! - **ReplaceNode**: Replace entire subtree (type changed)
+//! - **UpdateText**: Change text content
+//!
+//! ## Keyed Diffing for Repeat Blocks
+//!
+//! Elements with explicit keys (from `key` attribute) use keyed diffing within their parent.
+//! This handles list reordering correctly:
+//!
+//! ```paperclip
+//! repeat users {
+//!   div key={user.id} { text user.name }
+//! }
+//! ```
+//!
+//! Without keys, inserting at the top of a list causes all subsequent elements to update
+//! (incorrect). With keys, only the new element is inserted (correct).
+//!
+//! ## Determinism
+//!
+//! Patch generation is deterministic: same inputs produce same patches (byte-for-byte identical).
+//! This is critical for:
+//! - Reproducible builds
+//! - Snapshot testing
+//! - Future collaboration features (CRDT layer)
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use paperclip_evaluator::{diff_vdocument, VirtualDomDocument};
+//!
+//! let patches = diff_vdocument(&old_vdom, &new_vdom);
+//! // Send patches to client for efficient UI update
+//! ```
+
 use crate::vdom::{VNode, VirtualDomDocument};
 use paperclip_semantics::SemanticID;
 

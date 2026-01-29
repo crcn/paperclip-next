@@ -1,3 +1,43 @@
+//! # Virtual DOM (VDOM)
+//!
+//! Paperclip's Virtual DOM representation for hot module reload and client-side rendering.
+//!
+//! ## Purpose
+//!
+//! The VDOM provides an intermediate representation between Paperclip's AST and rendered output.
+//! It enables efficient diffing and patching for live preview updates.
+//!
+//! ## Core Types
+//!
+//! - **VNode**: Virtual DOM node (Element, Text, Comment, or Error)
+//! - **VirtualDomDocument**: Complete VDOM tree with associated CSS rules
+//! - **CssRule**: CSS rule with selector and properties
+//!
+//! ## Identity System
+//!
+//! Every `VNode::Element` has a **semantic_id** (required) that uniquely identifies it within
+//! the VDOM tree. Semantic IDs are stable across refactoring (component renames, element moves, etc.).
+//!
+//! **Key Field**: Elements in repeat blocks should have explicit keys for stable diffing.
+//! Auto-generated keys may not survive data reordering.
+//!
+//! ## Error Nodes
+//!
+//! `VNode::Error` nodes represent evaluation errors that don't crash the entire preview.
+//! They include the error message, source span, and semantic ID for proper diffing.
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use paperclip_evaluator::VNode;
+//! use paperclip_semantics::SemanticID;
+//!
+//! let node = VNode::element("div", SemanticID::root())
+//!     .with_attr("class", "container")
+//!     .with_style("color", "red")
+//!     .with_child(VNode::text("Hello"));
+//! ```
+
 use paperclip_parser::ast::Span;
 use paperclip_semantics::SemanticID;
 use serde::{Deserialize, Serialize};

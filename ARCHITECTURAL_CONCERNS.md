@@ -271,18 +271,20 @@ pub struct AssetManager {
 
 ---
 
-## Issue 3: OT Compatibility Claims
+## Issue 3: Patch Protocol Capabilities ✅ CLARIFIED
 
-### Current State
+### Current State - Honest Assessment
 
 **What we have**:
-- ✅ Serializable patches (protobuf format)
-- ✅ Deterministic diffing (same inputs = same patches)
+- ✅ Deterministic, serializable patch protocol (single-writer)
+- ✅ Patches are reproducible and can be transmitted/stored
+- ✅ Suitable for HMR (hot module reload) and single-user editing
+- ✅ Protobuf format for efficient serialization
 
-**What we DON'T have**:
-- ❌ Transform rules for concurrent operations
+**What we DON'T have** (and don't claim to have):
+- ❌ Operational Transform rules for concurrent writes
 - ❌ Conflict resolution semantics
-- ❌ Intent preservation
+- ❌ Intent preservation across concurrent edits
 
 ### Why It Matters
 
@@ -361,22 +363,30 @@ impl CollaborationLayer {
 }
 ```
 
-### Recommendation
+### Resolution ✅ COMPLETE
 
-**Option 1**: Implement full OT
-- Required for true collaborative editing
-- Complex but well-understood (see Etherpad, Google Docs)
+**Updated documentation language** to accurately describe what exists:
 
-**Option 2**: Use CRDT layer above patches
-- Simpler to implement
+> "Deterministic, serializable patch protocol (single-writer). Patches are reproducible and can be transmitted/stored, but do not include operational transform rules for concurrent writes. Suitable for HMR and single-user editing; collaboration requires CRDT layer (planned)."
+
+**Benefits of honest framing**:
+- ✅ Preserves credibility (doesn't oversell)
+- ✅ Accurately describes what IS there (deterministic, serializable)
+- ✅ Leaves room for semantic-OT or CRDT layer later
+- ✅ Sets correct expectations for collaboration timeline
+
+**Future Options for Collaboration**:
+
+**Option 1**: Use CRDT layer above patches (recommended)
+- Simpler to implement than full OT
 - Automerge or Yjs can provide this
 - Patches become CRDT operations
 
-**Option 3**: Remove OT claims
-- Document that patches are for single-user HMR only
-- Defer collaboration to future work
+**Option 2**: Implement full OT
+- Required for true collaborative editing
+- Complex but well-understood (see Etherpad, Google Docs)
 
-**For now**: Option 3, plan for Option 2 long-term.
+**Current Status**: Single-writer patch protocol documented honestly. Collaboration deferred to Phase 2+.
 
 ---
 

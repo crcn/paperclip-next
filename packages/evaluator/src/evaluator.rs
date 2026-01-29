@@ -1,3 +1,94 @@
+//! # Paperclip Evaluator
+//!
+//! Evaluates Paperclip AST to Virtual DOM and CSS.
+//!
+//! ## Purpose
+//!
+//! The evaluator transforms parsed Paperclip documents into virtual DOM trees and CSS rules.
+//! It handles component instantiation, prop passing, slot composition, conditionals, and
+//! repeat blocks.
+//!
+//! ## Determinism Contract
+//!
+//! **INVARIANT: Evaluation is fully deterministic.**
+//!
+//! For any Document + EvalContext state, `evaluate()` MUST produce identical output on every invocation:
+//!
+//! - Same AST → Same VDOM structure (byte-for-byte identical)
+//! - Same AST → Same semantic IDs
+//! - Same AST → Same CSS output
+//! - No HashMap iteration order leaks (Rust's SipHash provides deterministic iteration)
+//! - No non-deterministic ID generation (CRC32 is deterministic, counters reset per-eval)
+//! - No time/random/environment dependence
+//! - No floating-point non-associativity issues
+//!
+//! **Why determinism matters:**
+//! - **Diffing correctness**: Client-side differ assumes deterministic VDOMs
+//! - **Caching**: Memoization requires pure functions
+//! - **Collaboration**: CRDT merges require deterministic resolution
+//! - **Reproducibility**: AI tools need predictable outputs
+//! - **Testing**: Snapshot tests break with non-determinism
+//!
+//! **Tests**: See `tests/test_determinism.rs` for validation.
+//!
+//! ## Recursion Protection
+//!
+//! Component recursion is detected and prevented via component stack tracking.
+//! See `EvalContext::component_stack` and the cycle detection at component instantiation.
+//!
+//! **Structural recursion** (direct or indirect cycles) is always an error:
+//! ```paperclip
+//! component A { render A() }  // Error: recursive component
+//! ```
+//!
+//! **Data-driven recursion** (bounded by data structures) is allowed:
+//! ```paperclip
+//! component TreeNode {
+//!   render div {
+//!     text node.label
+//!     repeat child in node.children {
+//!       TreeNode(node=child)  // OK: bounded by data
+//!     }
+//!   }
+//! }
+//! ```
+//!
+//! ## Error Recovery Boundaries
+//!
+//! Error recovery is **only allowed at expression and leaf-node boundaries**, not at structural boundaries:
+//!
+//! **✅ Recoverable** (expression/leaf boundary):
+//! - `text { user.invalid.property }` → VNode::Error
+//! - `style { color: bad.value }` → Style-level error or VNode::Error
+//!
+//! **❌ NOT recoverable** (structural boundary):
+//! - `SomeComponent()` → Component resolution failure is FATAL
+//! - `slot unknownSlot` → Slot resolution failure is FATAL
+//!
+//! **Why**: Component instantiation failure means no context to safely continue.
+//! Half-constructed trees break semantic guarantees.
+//!
+//! ## Semantic Identity System
+//!
+//! Every VNode has a `semantic_id` that uniquely identifies it within the VDOM tree.
+//! Semantic IDs are stable across refactoring (rename component, move elements, etc.).
+//!
+//! **Uniqueness scope**: Per-VDOM-tree (evaluation output), NOT per-source-file.
+//! See `packages/semantics/src/identity.rs` for full details.
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use paperclip_evaluator::Evaluator;
+//! use paperclip_parser::parse;
+//!
+//! let source = "component Button { render button { text \"Click\" } }";
+//! let doc = parse(source)?;
+//!
+//! let mut evaluator = Evaluator::new();
+//! let vdom = evaluator.evaluate(&doc)?;
+//! ```
+
 use crate::css_evaluator::CssEvaluator;
 use crate::css_optimizer::optimize_css_rules;
 use crate::css_minifier::minify_css_rules;
