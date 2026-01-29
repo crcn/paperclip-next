@@ -43,7 +43,11 @@ fn parse_component_views(component: &Component) -> Vec<ViewSpec> {
 /// - `@view default`
 /// - `@view hover - Hover state`
 /// - `@viewport mobile`
-fn parse_view_line(line: &str, component_name: &str, current_viewport: &mut Viewport) -> Option<ViewSpec> {
+fn parse_view_line(
+    line: &str,
+    component_name: &str,
+    current_viewport: &mut Viewport,
+) -> Option<ViewSpec> {
     let trimmed = line.trim();
 
     // Parse @viewport directive
@@ -83,8 +87,7 @@ fn parse_view_line(line: &str, component_name: &str, current_viewport: &mut View
 
 /// Load and parse a .pc file, extracting view specifications
 pub fn load_views_from_file(path: &std::path::Path) -> Result<(Document, Vec<ViewSpec>)> {
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| VisionError::Io(e))?;
+    let source = std::fs::read_to_string(path).map_err(|e| VisionError::Io(e))?;
 
     let doc = parse_with_path(&source, &path.to_string_lossy())
         .map_err(|e| VisionError::Parse(format!("{:?}", e)))?;

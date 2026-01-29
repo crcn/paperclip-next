@@ -1,5 +1,5 @@
-use crate::semantic_identity::SemanticID;
 use paperclip_parser::ast::Span;
+use paperclip_semantics::SemanticID;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

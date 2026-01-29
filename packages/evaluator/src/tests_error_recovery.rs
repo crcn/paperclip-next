@@ -65,7 +65,9 @@ fn test_error_in_attribute_expression() {
 
     if let VNode::Element { attributes, .. } = &vdoc.nodes[0] {
         // Attribute should contain error message
-        let title = attributes.get("title").expect("Title attribute should exist");
+        let title = attributes
+            .get("title")
+            .expect("Title attribute should exist");
         assert!(
             title.contains("Error"),
             "Attribute should contain error: {}",
@@ -101,7 +103,11 @@ fn test_partial_evaluation_with_mixed_errors() {
     assert_eq!(vdoc.nodes.len(), 1);
 
     if let VNode::Element { children, .. } = &vdoc.nodes[0] {
-        assert_eq!(children.len(), 5, "Should have 5 children (3 valid, 2 errors)");
+        assert_eq!(
+            children.len(),
+            5,
+            "Should have 5 children (3 valid, 2 errors)"
+        );
 
         // First child: valid text
         matches!(&children[0], VNode::Text { content } if content == "Valid text");
@@ -149,8 +155,13 @@ fn test_error_in_conditional_expression() {
 
     if let VNode::Element { children, .. } = &vdoc.nodes[0] {
         // The conditional error should be one of the children
-        let has_error = children.iter().any(|child| matches!(child, VNode::Error { .. }));
-        assert!(has_error, "Should have at least one error node for invalid condition");
+        let has_error = children
+            .iter()
+            .any(|child| matches!(child, VNode::Error { .. }));
+        assert!(
+            has_error,
+            "Should have at least one error node for invalid condition"
+        );
     }
 }
 
@@ -267,10 +278,7 @@ fn test_error_in_component_prop() {
     let mut evaluator = Evaluator::new();
     let result = evaluator.evaluate(&doc);
 
-    assert!(
-        result.is_ok(),
-        "Should not crash on invalid component prop"
-    );
+    assert!(result.is_ok(), "Should not crash on invalid component prop");
     let vdoc = result.unwrap();
 
     // Should have one public component (Parent)
@@ -327,10 +335,7 @@ fn test_type_error_in_member_access() {
         .set_variable("someNumber".to_string(), Value::Number(42.0));
     let result = evaluator.evaluate(&doc);
 
-    assert!(
-        result.is_ok(),
-        "Should not crash on invalid member access"
-    );
+    assert!(result.is_ok(), "Should not crash on invalid member access");
     let vdoc = result.unwrap();
 
     if let VNode::Element { children, .. } = &vdoc.nodes[0] {
@@ -444,7 +449,6 @@ fn test_error_in_conditional_branch_body() {
     }
 }
 
-
 #[test]
 fn test_multiple_errors_in_repeat_body() {
     let source = r#"
@@ -463,8 +467,16 @@ fn test_multiple_errors_in_repeat_body() {
     evaluator.context.set_variable(
         "items".to_string(),
         Value::Array(vec![
-            Value::Object([("id".to_string(), Value::Number(1.0))].into_iter().collect()),
-            Value::Object([("id".to_string(), Value::Number(2.0))].into_iter().collect()),
+            Value::Object(
+                [("id".to_string(), Value::Number(1.0))]
+                    .into_iter()
+                    .collect(),
+            ),
+            Value::Object(
+                [("id".to_string(), Value::Number(2.0))]
+                    .into_iter()
+                    .collect(),
+            ),
         ]),
     );
     let result = evaluator.evaluate(&doc);

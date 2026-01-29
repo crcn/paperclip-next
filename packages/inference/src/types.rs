@@ -106,13 +106,16 @@ impl Type {
 
         // Literal to base type unification
         match (t1, t2) {
-            (Literal(LiteralType::String(_)), String) | (String, Literal(LiteralType::String(_))) => {
+            (Literal(LiteralType::String(_)), String)
+            | (String, Literal(LiteralType::String(_))) => {
                 return String;
             }
-            (Literal(LiteralType::Number(_)), Number) | (Number, Literal(LiteralType::Number(_))) => {
+            (Literal(LiteralType::Number(_)), Number)
+            | (Number, Literal(LiteralType::Number(_))) => {
                 return Number;
             }
-            (Literal(LiteralType::Boolean(_)), Boolean) | (Boolean, Literal(LiteralType::Boolean(_))) => {
+            (Literal(LiteralType::Boolean(_)), Boolean)
+            | (Boolean, Literal(LiteralType::Boolean(_))) => {
                 return Boolean;
             }
             _ => {}
@@ -201,26 +204,17 @@ impl Type {
 
     /// Check if this type is numeric
     pub fn is_numeric(&self) -> bool {
-        matches!(
-            self,
-            Type::Number | Type::Literal(LiteralType::Number(_))
-        )
+        matches!(self, Type::Number | Type::Literal(LiteralType::Number(_)))
     }
 
     /// Check if this type is string-like
     pub fn is_stringlike(&self) -> bool {
-        matches!(
-            self,
-            Type::String | Type::Literal(LiteralType::String(_))
-        )
+        matches!(self, Type::String | Type::Literal(LiteralType::String(_)))
     }
 
     /// Check if this type is boolean-like
     pub fn is_boolean(&self) -> bool {
-        matches!(
-            self,
-            Type::Boolean | Type::Literal(LiteralType::Boolean(_))
-        )
+        matches!(self, Type::Boolean | Type::Literal(LiteralType::Boolean(_)))
     }
 
     /// Convert Unknown types to Any (for final output)

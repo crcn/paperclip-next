@@ -31,8 +31,8 @@ fn check_properties(
     let mut diagnostics = Vec::new();
 
     // Regex to match negative values (e.g., -10px, -1rem, -5%)
-    let re = Regex::new(r"-\d+(\.\d+)?(%|px|rem|em|vh|vw|pt|pc|in|cm|mm|ex|ch|vmin|vmax)\b")
-        .unwrap();
+    let re =
+        Regex::new(r"-\d+(\.\d+)?(%|px|rem|em|vh|vw|pt|pc|in|cm|mm|ex|ch|vmin|vmax)\b").unwrap();
 
     // Properties to check for negative values
     let spacing_properties = [

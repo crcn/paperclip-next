@@ -1,6 +1,6 @@
 //! Integration tests for editor crate
 
-use paperclip_editor::{Document, EditSession, Pipeline, Mutation};
+use paperclip_editor::{Document, EditSession, Mutation, Pipeline};
 use std::path::PathBuf;
 
 #[test]
@@ -14,10 +14,7 @@ fn test_document_lifecycle() {
         }
     "#;
 
-    let mut doc = Document::from_source(
-        PathBuf::from("button.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("button.pc"), source.to_string()).unwrap();
 
     // Check initial state
     assert_eq!(doc.version, 0);
@@ -31,10 +28,7 @@ fn test_document_lifecycle() {
 #[test]
 fn test_edit_session_workflow() {
     let source = "component Test { render div {} }";
-    let doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     let mut session = EditSession::new("test-client".to_string(), doc);
 
@@ -52,10 +46,7 @@ fn test_edit_session_workflow() {
 #[test]
 fn test_pipeline_execution() {
     let source = "component Test { render div {} }";
-    let doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     let mut pipeline = Pipeline::new(doc);
 

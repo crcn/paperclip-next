@@ -1,4 +1,4 @@
-use crate::state::WorkspaceState;
+use crate::state::{StateError, WorkspaceState};
 use crate::watcher::FileWatcher;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -6,6 +6,11 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use tonic::{Request, Response, Status};
+
+/// Helper to convert various errors to Status
+fn to_status<E: std::fmt::Display>(e: E) -> Status {
+    Status::internal(e.to_string())
+}
 
 // Include generated proto code
 // workspace.proto uses extern_path to reference evaluator's patches
@@ -35,19 +40,20 @@ impl WorkspaceServer {
         WorkspaceServiceServer::new(self)
     }
 
-    fn process_file(&self, file_path: &str) -> Result<Vec<paperclip_evaluator::VDocPatch>, String> {
+    fn process_file(
+        &self,
+        file_path: &str,
+    ) -> Result<Vec<paperclip_evaluator::VDocPatch>, StateError> {
         // Read file
         let full_path = self.root_dir.join(file_path);
-        let source = std::fs::read_to_string(&full_path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let source = std::fs::read_to_string(&full_path)?;
 
         // Update state and get patches
         let patches = self
             .state
             .lock()
             .unwrap()
-            .update_file(full_path, source, &self.root_dir)
-            .map_err(|e| format!("State update error: {:?}", e))?;
+            .update_file(full_path, source, &self.root_dir)?;
 
         Ok(patches)
     }
@@ -85,6 +91,8 @@ impl WorkspaceService for WorkspaceServer {
                     error: None,
                     timestamp: chrono::Utc::now().timestamp_millis(),
                     version,
+                    acknowledged_mutation_ids: vec![],
+                    changed_by_client_id: None,
                 };
                 let _ = tx.send(Ok(update)).await;
             }
@@ -92,9 +100,11 @@ impl WorkspaceService for WorkspaceServer {
                 let update = PreviewUpdate {
                     file_path: root_path.clone(),
                     patches: vec![],
-                    error: Some(error),
+                    error: Some(error.to_string()),
                     timestamp: chrono::Utc::now().timestamp_millis(),
                     version: 0,
+                    acknowledged_mutation_ids: vec![],
+                    changed_by_client_id: None,
                 };
                 let _ = tx.send(Ok(update)).await;
             }
@@ -142,6 +152,8 @@ impl WorkspaceService for WorkspaceServer {
                                 error: Some(format!("Failed to read file: {}", e)),
                                 timestamp: chrono::Utc::now().timestamp_millis(),
                                 version: 0,
+                                acknowledged_mutation_ids: vec![],
+                                changed_by_client_id: None,
                             };
                             if tx.send(Ok(update)).await.is_err() {
                                 break;
@@ -170,6 +182,8 @@ impl WorkspaceService for WorkspaceServer {
                                 error: Some(format!("Processing error: {:?}", e)),
                                 timestamp: chrono::Utc::now().timestamp_millis(),
                                 version: 0,
+                                acknowledged_mutation_ids: vec![],
+                                changed_by_client_id: None,
                             };
                             if tx.send(Ok(update)).await.is_err() {
                                 break;
@@ -184,6 +198,8 @@ impl WorkspaceService for WorkspaceServer {
                         error: None,
                         timestamp: chrono::Utc::now().timestamp_millis(),
                         version,
+                        acknowledged_mutation_ids: vec![],
+                        changed_by_client_id: None,
                     };
 
                     if tx.send(Ok(update)).await.is_err() {
@@ -247,5 +263,287 @@ impl WorkspaceService for WorkspaceServer {
         Ok(Response::new(
             Box::pin(output_stream) as Self::WatchFilesStream
         ))
+    }
+
+    async fn apply_mutation(
+        &self,
+        request: Request<proto::MutationRequest>,
+    ) -> Result<Response<proto::MutationResponse>, Status> {
+        let req = request.into_inner();
+
+        // For now, return a stub ack response
+        // TODO: Implement full mutation handling with CRDT integration
+        let response = proto::MutationResponse {
+            result: Some(proto::mutation_response::Result::Ack(proto::MutationAck {
+                mutation_id: req
+                    .mutation
+                    .as_ref()
+                    .and_then(|m| Some(m.mutation_id.clone()))
+                    .unwrap_or_default(),
+                new_version: req.expected_version + 1,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+            })),
+        };
+
+        Ok(Response::new(response))
+    }
+
+    async fn get_document_outline(
+        &self,
+        request: Request<proto::OutlineRequest>,
+    ) -> Result<Response<proto::OutlineResponse>, Status> {
+        let req = request.into_inner();
+        let file_path = self.root_dir.join(&req.file_path);
+
+        // Read and parse file
+        let source = std::fs::read_to_string(&file_path).map_err(to_status)?;
+
+        let ast = paperclip_parser::parse(&source).map_err(to_status)?;
+
+        // Build outline from AST
+        let mut nodes = vec![];
+
+        // Extract components and their children
+        for component in ast.components.iter() {
+            let component_id = component.span.id.clone();
+            let mut child_ids = vec![];
+
+            // Extract children from component body
+            if let Some(body) = &component.body {
+                extract_element_nodes(
+                    body,
+                    Some(&component_id),
+                    &mut nodes,
+                    &mut child_ids,
+                    &source,
+                );
+            }
+
+            nodes.push(proto::OutlineNode {
+                node_id: component_id,
+                r#type: proto::NodeType::Component as i32,
+                parent_id: None,
+                child_ids,
+                span: Some(span_to_source_span(&component.span, &source)),
+                label: Some(component.name.clone()),
+            });
+        }
+
+        let version = self
+            .state
+            .lock()
+            .unwrap()
+            .get_file(&file_path)
+            .map(|s| s.version)
+            .unwrap_or(0);
+
+        Ok(Response::new(proto::OutlineResponse { nodes, version }))
+    }
+}
+
+/// Convert byte offset span to line/column span
+fn span_to_source_span(span: &paperclip_parser::Span, source: &str) -> proto::SourceSpan {
+    let (start_line, start_col) = byte_offset_to_line_col(source, span.start);
+    let (end_line, end_col) = byte_offset_to_line_col(source, span.end);
+
+    proto::SourceSpan {
+        start_line: start_line as u32,
+        start_col: start_col as u32,
+        end_line: end_line as u32,
+        end_col: end_col as u32,
+    }
+}
+
+/// Convert byte offset to line and column (0-indexed)
+fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 0;
+    let mut col = 0;
+    let mut current_offset = 0;
+
+    for ch in source.chars() {
+        if current_offset >= offset {
+            break;
+        }
+
+        if ch == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+
+        current_offset += ch.len_utf8();
+    }
+
+    (line, col)
+}
+
+/// Extract outline nodes from an element tree
+fn extract_element_nodes(
+    element: &paperclip_parser::Element,
+    parent_id: Option<&str>,
+    nodes: &mut Vec<proto::OutlineNode>,
+    parent_child_ids: &mut Vec<String>,
+    source: &str,
+) {
+    use paperclip_parser::Element;
+
+    match element {
+        Element::Tag {
+            tag_name,
+            name,
+            children,
+            span,
+            ..
+        } => {
+            let node_id = span.id.clone();
+            let mut child_ids = vec![];
+
+            // Recursively extract children
+            for child in children {
+                extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+            }
+
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Element as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids,
+                span: Some(span_to_source_span(span, source)),
+                label: name.clone().or_else(|| Some(tag_name.clone())),
+            });
+        }
+        Element::Text { content, span } => {
+            let node_id = span.id.clone();
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Text as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids: vec![],
+                span: Some(span_to_source_span(span, source)),
+                label: Some("text".to_string()),
+            });
+        }
+        Element::Instance {
+            name,
+            children,
+            span,
+            ..
+        } => {
+            let node_id = span.id.clone();
+            let mut child_ids = vec![];
+
+            // Recursively extract children
+            for child in children {
+                extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+            }
+
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Element as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids,
+                span: Some(span_to_source_span(span, source)),
+                label: Some(format!("<{}>", name)),
+            });
+        }
+        Element::Conditional {
+            then_branch,
+            else_branch,
+            span,
+            ..
+        } => {
+            let node_id = span.id.clone();
+            let mut child_ids = vec![];
+
+            // Extract children from both branches
+            for child in then_branch {
+                extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+            }
+            if let Some(else_branch) = else_branch {
+                for child in else_branch {
+                    extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+                }
+            }
+
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Conditional as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids,
+                span: Some(span_to_source_span(span, source)),
+                label: Some("if".to_string()),
+            });
+        }
+        Element::Repeat {
+            item_name,
+            body,
+            span,
+            ..
+        } => {
+            let node_id = span.id.clone();
+            let mut child_ids = vec![];
+
+            // Extract children from repeat body
+            for child in body {
+                extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+            }
+
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Repeat as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids,
+                span: Some(span_to_source_span(span, source)),
+                label: Some(format!("repeat {}", item_name)),
+            });
+        }
+        Element::Insert {
+            slot_name,
+            content,
+            span,
+        } => {
+            let node_id = span.id.clone();
+            let mut child_ids = vec![];
+
+            // Extract children from insert content
+            for child in content {
+                extract_element_nodes(child, Some(&node_id), nodes, &mut child_ids, source);
+            }
+
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Insert as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids,
+                span: Some(span_to_source_span(span, source)),
+                label: Some(format!("insert {}", slot_name)),
+            });
+        }
+        Element::SlotInsert { name, span } => {
+            let node_id = span.id.clone();
+            parent_child_ids.push(node_id.clone());
+
+            nodes.push(proto::OutlineNode {
+                node_id,
+                r#type: proto::NodeType::Insert as i32,
+                parent_id: parent_id.map(|s| s.to_string()),
+                child_ids: vec![],
+                span: Some(span_to_source_span(span, source)),
+                label: Some(format!("slot {}", name)),
+            });
+        }
     }
 }

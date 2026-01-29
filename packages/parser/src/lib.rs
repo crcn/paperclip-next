@@ -2,6 +2,7 @@ pub mod ast;
 mod debug_test;
 pub mod error;
 pub mod id_generator;
+pub mod lossless_serializer;
 pub mod parser;
 pub mod serializer;
 pub mod tokenizer;
@@ -20,6 +21,7 @@ mod tests_serializer;
 
 pub use error::{ParseError, ParseResult};
 pub use id_generator::{get_document_id, IDGenerator};
+pub use lossless_serializer::LosslessSerializer;
 pub use parser::{parse, parse_with_path, Parser};
 pub use serializer::{serialize, Serializer};
 pub use tokenizer::{tokenize, Token};

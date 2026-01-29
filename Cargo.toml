@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    "packages/common",
+    "packages/semantics",
+    "packages/bundle",
     "packages/parser",
     "packages/editor",
     "packages/evaluator",

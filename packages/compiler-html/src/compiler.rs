@@ -1,5 +1,31 @@
 use paperclip_parser::ast::*;
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur during HTML compilation
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("Invalid expression: {0}")]
+    InvalidExpression(String),
+
+    #[error("Unsupported feature: {0}")]
+    UnsupportedFeature(String),
+
+    #[error("Compilation error: {0}")]
+    Generic(String),
+}
+
+impl From<String> for CompileError {
+    fn from(s: String) -> Self {
+        CompileError::Generic(s)
+    }
+}
+
+impl From<&str> for CompileError {
+    fn from(s: &str) -> Self {
+        CompileError::Generic(s.to_string())
+    }
+}
 
 /// Options for HTML compilation
 #[derive(Debug, Clone)]
@@ -77,7 +103,10 @@ impl Context {
 }
 
 /// Compile a Paperclip document to HTML
-pub fn compile_to_html(document: &Document, options: CompileOptions) -> Result<String, String> {
+pub fn compile_to_html(
+    document: &Document,
+    options: CompileOptions,
+) -> Result<String, CompileError> {
     let mut ctx = Context::new(options);
 
     // Add DOCTYPE
@@ -129,7 +158,7 @@ fn compile_head(_document: &Document, ctx: &mut Context) {
     ctx.add_line("</head>");
 }
 
-fn compile_component_as_html(component: &Component, ctx: &mut Context) -> Result<(), String> {
+fn compile_component_as_html(component: &Component, ctx: &mut Context) -> Result<(), CompileError> {
     // Add component as a section with ID
     ctx.add_line(&format!(
         "<section id=\"{}\" class=\"paperclip-component\">",
@@ -147,7 +176,7 @@ fn compile_component_as_html(component: &Component, ctx: &mut Context) -> Result
     Ok(())
 }
 
-fn compile_element(element: &Element, ctx: &mut Context) -> Result<(), String> {
+fn compile_element(element: &Element, ctx: &mut Context) -> Result<(), CompileError> {
     match element {
         Element::Tag {
             tag_name,
@@ -170,7 +199,10 @@ fn compile_element(element: &Element, ctx: &mut Context) -> Result<(), String> {
             span: _,
         } => {
             // Render instance as a div with component name as class
-            ctx.add_line(&format!("<div class=\"component-{}\">", name.to_lowercase()));
+            ctx.add_line(&format!(
+                "<div class=\"component-{}\">",
+                name.to_lowercase()
+            ));
             ctx.indent();
             for child in children {
                 compile_element(child, ctx)?;
@@ -212,7 +244,11 @@ fn compile_element(element: &Element, ctx: &mut Context) -> Result<(), String> {
             Ok(())
         }
 
-        Element::Insert { slot_name: _, content, span: _ } => {
+        Element::Insert {
+            slot_name: _,
+            content,
+            span: _,
+        } => {
             // Insert directive - render content
             ctx.add_line("<!-- Insert directive -->");
             for element in content {
@@ -229,7 +265,7 @@ fn compile_tag(
     styles: &[StyleBlock],
     children: &[Element],
     ctx: &mut Context,
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     // Opening tag
     if ctx.options.pretty {
         ctx.add_indent();
@@ -293,7 +329,7 @@ fn compile_tag(
     Ok(())
 }
 
-fn compile_attribute(name: &str, expr: &Expression, ctx: &mut Context) -> Result<(), String> {
+fn compile_attribute(name: &str, expr: &Expression, ctx: &mut Context) -> Result<(), CompileError> {
     ctx.add(name);
     ctx.add("=\"");
 
@@ -346,11 +382,25 @@ fn escape_html(text: &str) -> String {
 fn is_self_closing(tag: &str) -> bool {
     matches!(
         tag,
-        "img" | "input" | "br" | "hr" | "meta" | "link" | "area" | "base" | "col" | "embed"
-            | "param" | "source" | "track" | "wbr"
+        "img"
+            | "input"
+            | "br"
+            | "hr"
+            | "meta"
+            | "link"
+            | "area"
+            | "base"
+            | "col"
+            | "embed"
+            | "param"
+            | "source"
+            | "track"
+            | "wbr"
     )
 }
 
 fn has_element_children(children: &[Element]) -> bool {
-    children.iter().any(|child| !matches!(child, Element::Text { .. }))
+    children
+        .iter()
+        .any(|child| !matches!(child, Element::Text { .. }))
 }

@@ -70,6 +70,7 @@ pub struct Component {
     pub frame: Option<FrameAnnotation>,
     pub variants: Vec<Variant>,
     pub slots: Vec<Slot>,
+    pub overrides: Vec<Override>,
     pub body: Option<Element>,
     pub span: Span,
 }
@@ -106,6 +107,22 @@ pub struct Variant {
 pub struct Slot {
     pub name: String,
     pub default_content: Vec<Element>,
+    pub span: Span,
+}
+
+/// Override definition (target nested instances)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Override {
+    /// Dot-separated path to target (e.g., ["Button", "Icon"])
+    pub path: Vec<String>,
+
+    /// Styles to apply
+    pub styles: Vec<StyleBlock>,
+
+    /// Attributes to override
+    pub attributes: HashMap<String, Expression>,
+
+    /// Source location
     pub span: Span,
 }
 
@@ -294,7 +311,11 @@ impl Document {
                     }
                 }
             }
-            Element::Conditional { then_branch, else_branch, .. } => {
+            Element::Conditional {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 for child in then_branch {
                     if let Some(found) = Self::find_element_recursive(child, id) {
                         return Some(found);
@@ -348,7 +369,11 @@ impl Document {
                     }
                 }
             }
-            Element::Conditional { then_branch, else_branch, .. } => {
+            Element::Conditional {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 for child in then_branch {
                     if let Some(found) = Self::find_element_recursive_mut(child, id) {
                         return Some(found);
@@ -415,7 +440,11 @@ impl Document {
                     }
                 }
             }
-            Element::Conditional { then_branch, else_branch, .. } => {
+            Element::Conditional {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 for child in then_branch {
                     if Self::is_in_repeat_recursive(child, target_id, in_repeat) {
                         return true;
@@ -467,21 +496,28 @@ impl Document {
         }
 
         match elem {
-            Element::Tag { children, .. } | Element::Instance { children, .. } => {
-                children.iter().any(|child| Self::contains_element(child, target_id))
-            }
-            Element::Conditional { then_branch, else_branch, .. } => {
-                then_branch.iter().any(|child| Self::contains_element(child, target_id))
+            Element::Tag { children, .. } | Element::Instance { children, .. } => children
+                .iter()
+                .any(|child| Self::contains_element(child, target_id)),
+            Element::Conditional {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                then_branch
+                    .iter()
+                    .any(|child| Self::contains_element(child, target_id))
                     || else_branch.as_ref().map_or(false, |els| {
-                        els.iter().any(|child| Self::contains_element(child, target_id))
+                        els.iter()
+                            .any(|child| Self::contains_element(child, target_id))
                     })
             }
-            Element::Repeat { body, .. } => {
-                body.iter().any(|child| Self::contains_element(child, target_id))
-            }
-            Element::Insert { content, .. } => {
-                content.iter().any(|child| Self::contains_element(child, target_id))
-            }
+            Element::Repeat { body, .. } => body
+                .iter()
+                .any(|child| Self::contains_element(child, target_id)),
+            Element::Insert { content, .. } => content
+                .iter()
+                .any(|child| Self::contains_element(child, target_id)),
             Element::Text { .. } | Element::SlotInsert { .. } => false,
         }
     }

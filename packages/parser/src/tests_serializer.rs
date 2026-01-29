@@ -1,6 +1,6 @@
+use crate::ast::{Element, Expression, TemplatePart};
 /// Tests to verify serializer can round-trip all new expression types
 use crate::*;
-use crate::ast::{Element, Expression, TemplatePart};
 
 #[test]
 fn test_roundtrip_binary_operations() {
@@ -42,7 +42,8 @@ fn test_roundtrip_complex_binary_expressions() {
 
 #[test]
 fn test_roundtrip_function_calls() {
-    let source = r#"public component Test { render div { text {formatDate(date, "YYYY-MM-DD")} } }"#;
+    let source =
+        r#"public component Test { render div { text {formatDate(date, "YYYY-MM-DD")} } }"#;
     let doc = parse(source).unwrap();
     let serialized = serialize(&doc);
     let reparsed = parse(&serialized).unwrap();
@@ -52,7 +53,12 @@ fn test_roundtrip_function_calls() {
     // Verify function call structure
     if let Some(Element::Tag { children, .. }) = &reparsed.components[0].body {
         if let Some(Element::Text { content, .. }) = children.first() {
-            if let Expression::Call { function, arguments, .. } = content {
+            if let Expression::Call {
+                function,
+                arguments,
+                ..
+            } = content
+            {
                 assert_eq!(function, "formatDate");
                 assert_eq!(arguments.len(), 2);
             } else {
@@ -180,11 +186,22 @@ public component Card {
     let reparsed = parse(&serialized).unwrap();
 
     // Verify element names preserved
-    if let Some(Element::Tag { tag_name, name, children, .. }) = &reparsed.components[0].body {
+    if let Some(Element::Tag {
+        tag_name,
+        name,
+        children,
+        ..
+    }) = &reparsed.components[0].body
+    {
         assert_eq!(tag_name, "div");
         assert_eq!(name, &Some("container".to_string()));
 
-        if let Some(Element::Tag { tag_name: child_tag, name: child_name, .. }) = children.first() {
+        if let Some(Element::Tag {
+            tag_name: child_tag,
+            name: child_name,
+            ..
+        }) = children.first()
+        {
             assert_eq!(child_tag, "div");
             assert_eq!(child_name, &Some("header".to_string()));
         }
@@ -210,7 +227,10 @@ public component Card {
 
     // Verify insert directive preserved
     if let Some(Element::Tag { children, .. }) = &reparsed.components[0].body {
-        if let Some(Element::Insert { slot_name, content, .. }) = children.first() {
+        if let Some(Element::Insert {
+            slot_name, content, ..
+        }) = children.first()
+        {
             assert_eq!(slot_name, "icon");
             assert_eq!(content.len(), 1);
         } else {
@@ -272,7 +292,13 @@ public component Button {
     // Verify major structures preserved
     assert_eq!(doc.triggers.len(), reparsed.triggers.len());
     assert_eq!(doc.components.len(), reparsed.components.len());
-    assert_eq!(doc.components[0].variants.len(), reparsed.components[0].variants.len());
-    assert_eq!(doc.components[0].slots.len(), reparsed.components[0].slots.len());
+    assert_eq!(
+        doc.components[0].variants.len(),
+        reparsed.components[0].variants.len()
+    );
+    assert_eq!(
+        doc.components[0].slots.len(),
+        reparsed.components[0].slots.len()
+    );
     assert!(reparsed.components[0].script.is_some());
 }

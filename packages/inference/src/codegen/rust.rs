@@ -103,7 +103,10 @@ impl CodeGenerator for RustGenerator {
         ];
 
         for (prop_name, prop_type) in props {
-            lines.push(format!("    {},", self.generate_property(prop_name, prop_type)));
+            lines.push(format!(
+                "    {},",
+                self.generate_property(prop_name, prop_type)
+            ));
         }
 
         lines.push("}".to_string());

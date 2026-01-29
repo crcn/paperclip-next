@@ -47,10 +47,9 @@ public component Button {
 
     println!("\n✨ Captured {} views:", screenshots.len());
     for screenshot in &screenshots {
-        println!("  - {} ({}x{})",
-            screenshot.view_name,
-            screenshot.width,
-            screenshot.height
+        println!(
+            "  - {} ({}x{})",
+            screenshot.view_name, screenshot.width, screenshot.height
         );
         println!("    → {}", screenshot.path.display());
     }
@@ -64,10 +63,9 @@ public component Button {
 
     println!("✨ Captured {} mobile views:", mobile_screenshots.len());
     for screenshot in &mobile_screenshots {
-        println!("  - {} ({}x{})",
-            screenshot.view_name,
-            screenshot.width,
-            screenshot.height
+        println!(
+            "  - {} ({}x{})",
+            screenshot.view_name, screenshot.width, screenshot.height
         );
     }
 

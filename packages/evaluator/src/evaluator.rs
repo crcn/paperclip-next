@@ -1,8 +1,8 @@
-use crate::bundle::Bundle;
-use crate::semantic_identity::{SemanticID, SemanticSegment};
 use crate::utils::get_style_namespace;
 use crate::vdom::{VNode, VirtualDomDocument};
+use paperclip_bundle::Bundle;
 use paperclip_parser::ast::*;
+use paperclip_semantics::{SemanticID, SemanticSegment};
 use std::collections::HashMap;
 use std::path::Path;
 use thiserror::Error;
@@ -577,10 +577,11 @@ impl Evaluator {
 
                 if condition_value.is_truthy() {
                     // Push ConditionalBranch segment for then branch
-                    self.context.push_segment(SemanticSegment::ConditionalBranch {
-                        condition_id: span.id.clone(),
-                        branch: crate::semantic_identity::Branch::Then,
-                    });
+                    self.context
+                        .push_segment(SemanticSegment::ConditionalBranch {
+                            condition_id: span.id.clone(),
+                            branch: paperclip_semantics::Branch::Then,
+                        });
 
                     // Evaluate then branch (return first node, or wrapper if multiple)
                     let result = if then_branch.len() == 1 {
@@ -620,10 +621,11 @@ impl Evaluator {
                     result
                 } else if let Some(else_branch) = else_branch {
                     // Push ConditionalBranch segment for else branch
-                    self.context.push_segment(SemanticSegment::ConditionalBranch {
-                        condition_id: span.id.clone(),
-                        branch: crate::semantic_identity::Branch::Else,
-                    });
+                    self.context
+                        .push_segment(SemanticSegment::ConditionalBranch {
+                            condition_id: span.id.clone(),
+                            branch: paperclip_semantics::Branch::Else,
+                        });
 
                     let result = if else_branch.len() == 1 {
                         self.evaluate_element(&else_branch[0])
@@ -696,18 +698,19 @@ impl Evaluator {
                 if let Value::Array(items) = collection_value {
                     for (index, _item) in items.iter().enumerate() {
                         // Check if first child has explicit key attribute
-                        let explicit_key = if let Some(Element::Tag { attributes, .. }) = body.first() {
-                            attributes
-                                .get("key")
-                                .and_then(|expr| match self.evaluate_expression(expr) {
-                                    Ok(Value::String(s)) => Some(s),
-                                    Ok(Value::Number(n)) => Some(n.to_string()),
-                                    Ok(other) => Some(other.to_string()),
-                                    Err(_) => None,
+                        let explicit_key =
+                            if let Some(Element::Tag { attributes, .. }) = body.first() {
+                                attributes.get("key").and_then(|expr| {
+                                    match self.evaluate_expression(expr) {
+                                        Ok(Value::String(s)) => Some(s),
+                                        Ok(Value::Number(n)) => Some(n.to_string()),
+                                        Ok(other) => Some(other.to_string()),
+                                        Err(_) => None,
+                                    }
                                 })
-                        } else {
-                            None
-                        };
+                            } else {
+                                None
+                            };
 
                         // Track whether we have an explicit key before consuming it
                         let has_explicit_key = explicit_key.is_some();
@@ -781,7 +784,7 @@ impl Evaluator {
                     // Use inserted content
                     self.context.push_segment(SemanticSegment::Slot {
                         name: name.clone(),
-                        variant: crate::semantic_identity::SlotVariant::Inserted,
+                        variant: paperclip_semantics::SlotVariant::Inserted,
                     });
 
                     // If single child, return it directly
@@ -840,10 +843,17 @@ impl Evaluator {
                     let slot = match component.slots.iter().find(|s| &s.name == name) {
                         Some(s) => s,
                         None => {
-                            warn!(slot_name = name, component = component_name, "Slot not found in component");
+                            warn!(
+                                slot_name = name,
+                                component = component_name,
+                                "Slot not found in component"
+                            );
                             let semantic_id = self.context.get_semantic_id();
                             return Ok(VNode::error(
-                                format!("Error: Slot '{}' not found in component '{}'", name, component_name),
+                                format!(
+                                    "Error: Slot '{}' not found in component '{}'",
+                                    name, component_name
+                                ),
                                 Some(span.clone()),
                                 semantic_id,
                             ));
@@ -855,7 +865,7 @@ impl Evaluator {
 
                     self.context.push_segment(SemanticSegment::Slot {
                         name: name.clone(),
-                        variant: crate::semantic_identity::SlotVariant::Default,
+                        variant: paperclip_semantics::SlotVariant::Default,
                     });
 
                     // If single default child, return it directly
@@ -904,7 +914,11 @@ impl Evaluator {
                 }
             }
 
-            Element::Insert { slot_name, content, span } => {
+            Element::Insert {
+                slot_name,
+                content,
+                span,
+            } => {
                 // Insert directive is used to explicitly provide slot content
                 // This should typically be handled at the component instance level
                 // For now, we'll evaluate the content as a fragment
@@ -1099,11 +1113,16 @@ impl Evaluator {
                         // Logical AND with short-circuit evaluation
                         let left_bool = match left_val {
                             Value::Boolean(b) => b,
-                            _ => return Err(EvalError::InvalidOperands {
-                                operator: "&&".to_string(),
-                                details: format!("Expected boolean && boolean, got {:?} && {:?}", left_val, right_val),
-                                span: span.clone(),
-                            }),
+                            _ => {
+                                return Err(EvalError::InvalidOperands {
+                                    operator: "&&".to_string(),
+                                    details: format!(
+                                        "Expected boolean && boolean, got {:?} && {:?}",
+                                        left_val, right_val
+                                    ),
+                                    span: span.clone(),
+                                })
+                            }
                         };
 
                         if !left_bool {
@@ -1114,21 +1133,29 @@ impl Evaluator {
                                 Value::Boolean(b) => Ok(Value::Boolean(b)),
                                 _ => Err(EvalError::InvalidOperands {
                                     operator: "&&".to_string(),
-                                    details: format!("Expected boolean && boolean, got {:?} && {:?}", left_val, right_val),
+                                    details: format!(
+                                        "Expected boolean && boolean, got {:?} && {:?}",
+                                        left_val, right_val
+                                    ),
                                     span: span.clone(),
                                 }),
                             }
                         }
-                    },
+                    }
                     BinaryOp::Or => {
                         // Logical OR with short-circuit evaluation
                         let left_bool = match left_val {
                             Value::Boolean(b) => b,
-                            _ => return Err(EvalError::InvalidOperands {
-                                operator: "||".to_string(),
-                                details: format!("Expected boolean || boolean, got {:?} || {:?}", left_val, right_val),
-                                span: span.clone(),
-                            }),
+                            _ => {
+                                return Err(EvalError::InvalidOperands {
+                                    operator: "||".to_string(),
+                                    details: format!(
+                                        "Expected boolean || boolean, got {:?} || {:?}",
+                                        left_val, right_val
+                                    ),
+                                    span: span.clone(),
+                                })
+                            }
                         };
 
                         if left_bool {
@@ -1139,16 +1166,23 @@ impl Evaluator {
                                 Value::Boolean(b) => Ok(Value::Boolean(b)),
                                 _ => Err(EvalError::InvalidOperands {
                                     operator: "||".to_string(),
-                                    details: format!("Expected boolean || boolean, got {:?} || {:?}", left_val, right_val),
+                                    details: format!(
+                                        "Expected boolean || boolean, got {:?} || {:?}",
+                                        left_val, right_val
+                                    ),
                                     span: span.clone(),
                                 }),
                             }
                         }
-                    },
+                    }
                 }
             }
 
-            Expression::Call { function, arguments, span } => {
+            Expression::Call {
+                function,
+                arguments,
+                span,
+            } => {
                 // Function calls are not yet implemented - return empty string as no-op
                 // Log warning so developers know this feature is pending
                 warn!(

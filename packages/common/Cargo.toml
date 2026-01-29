@@ -1,0 +1,13 @@
+[package]
+name = "paperclip-common"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+paperclip-parser = { path = "../parser" }
+
+[dev-dependencies]

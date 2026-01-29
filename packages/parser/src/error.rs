@@ -16,7 +16,10 @@ pub enum ParseError {
     UnexpectedEof { span: Box<Range<usize>> },
 
     #[error("Invalid syntax at {}: {message}", span.start)]
-    InvalidSyntax { span: Box<Range<usize>>, message: String },
+    InvalidSyntax {
+        span: Box<Range<usize>>,
+        message: String,
+    },
 
     #[error("Lexer error at {}", span.start)]
     LexerError { span: Box<Range<usize>> },
@@ -37,7 +40,9 @@ impl ParseError {
     }
 
     pub fn unexpected_eof_span(span: Range<usize>) -> Self {
-        Self::UnexpectedEof { span: Box::new(span) }
+        Self::UnexpectedEof {
+            span: Box::new(span),
+        }
     }
 
     pub fn invalid_syntax_span(span: Range<usize>, message: impl Into<String>) -> Self {
@@ -48,7 +53,9 @@ impl ParseError {
     }
 
     pub fn lexer_error_span(span: Range<usize>) -> Self {
-        Self::LexerError { span: Box::new(span) }
+        Self::LexerError {
+            span: Box::new(span),
+        }
     }
 
     // Backward-compatible position-based constructors (convert pos to pos..pos+1)
@@ -65,7 +72,9 @@ impl ParseError {
     }
 
     pub fn unexpected_eof(pos: usize) -> Self {
-        Self::UnexpectedEof { span: Box::new(pos..pos + 1) }
+        Self::UnexpectedEof {
+            span: Box::new(pos..pos + 1),
+        }
     }
 
     pub fn invalid_syntax(pos: usize, message: impl Into<String>) -> Self {
@@ -76,7 +85,9 @@ impl ParseError {
     }
 
     pub fn lexer_error(pos: usize) -> Self {
-        Self::LexerError { span: Box::new(pos..pos + 1) }
+        Self::LexerError {
+            span: Box::new(pos..pos + 1),
+        }
     }
 
     // Utility accessors
@@ -106,17 +117,17 @@ pub mod pretty {
 
         // Build report inline to avoid lifetime issues
         let report = match error {
-            ParseError::UnexpectedToken { expected, found, .. } => {
-                Report::build(ReportKind::Error, file_path, span.start)
-                    .with_message("Unexpected token")
-                    .with_label(
-                        Label::new((file_path, span.clone()))
-                            .with_message(format!("expected {}, found {}", expected, found))
-                            .with_color(Color::Red),
-                    )
-                    .with_help(get_context_help(expected, found))
-                    .finish()
-            }
+            ParseError::UnexpectedToken {
+                expected, found, ..
+            } => Report::build(ReportKind::Error, file_path, span.start)
+                .with_message("Unexpected token")
+                .with_label(
+                    Label::new((file_path, span.clone()))
+                        .with_message(format!("expected {}, found {}", expected, found))
+                        .with_color(Color::Red),
+                )
+                .with_help(get_context_help(expected, found))
+                .finish(),
             ParseError::UnexpectedEof { .. } => {
                 Report::build(ReportKind::Error, file_path, span.start)
                     .with_message("Unexpected end of file")

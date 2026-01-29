@@ -6,7 +6,7 @@
 //! including pending mutations (for optimistic updates) and
 //! current selection state.
 
-use crate::{Document, Mutation, EditorError};
+use crate::{Document, EditorError, Mutation};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Single edit session (single-user or one client in multi-user)
@@ -143,10 +143,7 @@ mod tests {
     #[test]
     fn test_session_creation() {
         let source = "component Test { render div {} }";
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         let session = EditSession::new("client-1".to_string(), doc);
 
@@ -158,10 +155,7 @@ mod tests {
     #[test]
     fn test_optimistic_mutations() {
         let source = "component Test { render div {} }";
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         let mut session = EditSession::new("client-1".to_string(), doc);
 
@@ -179,10 +173,7 @@ mod tests {
     #[test]
     fn test_mutation_rejection() {
         let source = "component Test { render div {} }";
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         let session = EditSession::new("client-1".to_string(), doc);
 

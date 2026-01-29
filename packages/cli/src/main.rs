@@ -65,7 +65,7 @@ fn vision_capture(
     viewport_str: String,
     scale: f64,
 ) -> Result<(), anyhow::Error> {
-    use paperclip_vision::{CaptureOptions, VisionCapture, Viewport};
+    use paperclip_vision::{CaptureOptions, Viewport, VisionCapture};
 
     println!("🎥 {} Paperclip Vision", "Starting".green().bold());
     println!("   Input:  {}", input.display());
@@ -132,7 +132,10 @@ fn vision_capture(
             }
         }
     } else {
-        return Err(anyhow::anyhow!("Input path does not exist: {}", input.display()));
+        return Err(anyhow::anyhow!(
+            "Input path does not exist: {}",
+            input.display()
+        ));
     }
 
     println!();
@@ -176,9 +179,12 @@ fn main() {
 
         #[cfg(feature = "vision")]
         Command::Vision { command } => match command {
-            VisionCommand::Capture { input, output, viewport, scale } => {
-                vision_capture(input, output, viewport, scale)
-            }
+            VisionCommand::Capture {
+                input,
+                output,
+                viewport,
+                scale,
+            } => vision_capture(input, output, viewport, scale),
         },
     };
 

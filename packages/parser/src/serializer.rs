@@ -412,9 +412,7 @@ impl Serializer {
             }
 
             Element::Insert {
-                slot_name,
-                content,
-                ..
+                slot_name, content, ..
             } => {
                 self.write_indent(output);
                 output.push_str("insert ");
@@ -528,7 +526,6 @@ impl Serializer {
         self.write_indent(output);
         output.push_str("}\n");
     }
-
 
     fn serialize_expression(&self, expr: &Expression, output: &mut String) {
         // Wrap in braces for attribute values and text content
@@ -680,6 +677,14 @@ impl Default for Serializer {
 pub fn serialize(doc: &Document) -> String {
     let mut serializer = Serializer::new();
     serializer.serialize(doc)
+}
+
+/// Helper function to serialize a single component (used by lossless serializer)
+pub fn serialize_component(component: &Component) -> String {
+    let mut serializer = Serializer::new();
+    let mut output = String::new();
+    serializer.serialize_component(component, &mut output);
+    output
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
-use crate::bundle::Bundle;
 use crate::utils::get_style_namespace;
+use paperclip_bundle::Bundle;
 use paperclip_parser::ast::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -340,7 +340,8 @@ impl CssEvaluator {
                 ..
             } => {
                 // Generate class name using AST ID
-                let class_name = get_style_namespace(Some(tag_name.as_str()), &span.id, component_name);
+                let class_name =
+                    get_style_namespace(Some(tag_name.as_str()), &span.id, component_name);
 
                 // Collect styles from style blocks
                 if !styles.is_empty() {

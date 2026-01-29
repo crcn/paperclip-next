@@ -1,0 +1,38 @@
+// Example .pc file with live component reference
+// This tests Spike 0.5: Live Component Preview Loading
+
+public component BookingForm {
+    render div {
+        style {
+            padding: 20px
+            max-width: 400px
+            margin: 0 auto
+            background: #f9f9f9
+            border-radius: 8px
+        }
+
+        // Static .pc content
+        div {
+            style {
+                margin-bottom: 20px
+            }
+            text "Book Your Appointment!"
+        }
+
+        // Live React component - DatePicker
+        // Syntax: component_name(prop=value)
+        // The evaluator should generate a ComponentNode in the Virtual DOM
+        DatePicker(label="Select Date", initialDate="2026-02-01")
+
+        // More static content
+        div {
+            style {
+                margin-top: 20px
+                padding: 12px
+                background: white
+                border-radius: 4px
+            }
+            text "After selecting a date, you can proceed with booking."
+        }
+    }
+}

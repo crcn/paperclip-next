@@ -11,6 +11,8 @@ async = ["tokio"]
 
 [dependencies]
 paperclip-parser = { path = "../parser" }
+paperclip-semantics = { path = "../semantics" }
+paperclip-bundle = { path = "../bundle" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

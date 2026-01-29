@@ -1,0 +1,38 @@
+{
+  "name": "@paperclip/common",
+  "version": "0.1.0",
+  "description": "Common utilities and patterns for Paperclip applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./machine": {
+      "types": "./dist/machine/index.d.ts",
+      "import": "./dist/machine/index.js"
+    },
+    "./machine/react": {
+      "types": "./dist/machine/react/index.d.ts",
+      "import": "./dist/machine/react/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "react": "^18.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "packageManager": "yarn@4.1.0"
+}

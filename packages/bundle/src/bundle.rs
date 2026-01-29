@@ -1,4 +1,4 @@
-use crate::graph_manager::{GraphError, GraphManager};
+use crate::graph::{GraphError, GraphManager};
 use crate::resolver::{Resolver, ResolverError};
 use paperclip_parser::ast::*;
 use paperclip_parser::get_document_id;
@@ -6,36 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-// Re-export FileSystem traits from resolver
-pub use crate::resolver::{FileSystem, RealFileSystem};
-
-/// Mock file system for testing
-pub struct MockFileSystem {
-    pub existing_files: HashSet<PathBuf>,
-}
-
-impl MockFileSystem {
-    pub fn new() -> Self {
-        Self {
-            existing_files: HashSet::new(),
-        }
-    }
-
-    pub fn add_file(&mut self, path: PathBuf) {
-        self.existing_files.insert(path);
-    }
-}
-
-impl FileSystem for MockFileSystem {
-    fn exists(&self, path: &Path) -> bool {
-        self.existing_files.contains(path)
-    }
-
-    fn canonicalize(&self, path: &Path) -> Result<PathBuf, std::io::Error> {
-        // For mock, just return the path as-is
-        Ok(path.to_path_buf())
-    }
-}
+// Re-export FileSystem traits from common-rs
+pub use paperclip_common::{FileSystem, MockFileSystem, RealFileSystem};
 
 #[derive(Error, Debug)]
 pub enum BundleError {
@@ -203,22 +175,24 @@ impl Bundle {
 
             for import in &document.imports {
                 // Resolve import path using resolver
-                let import_resolved = self
-                    .resolver
-                    .resolve_import_path(&import.path, file_path, project_root, fs)?;
+                let import_resolved =
+                    self.resolver
+                        .resolve_import_path(&import.path, file_path, project_root, fs)?;
 
                 file_deps.push(import_resolved.clone());
 
                 // Store alias mapping in resolver
                 if let Some(ref alias) = import.alias {
-                    self.resolver
-                        .add_alias(file_path.clone(), alias.clone(), import_resolved.clone());
+                    self.resolver.add_alias(
+                        file_path.clone(),
+                        alias.clone(),
+                        import_resolved.clone(),
+                    );
                 }
             }
 
             // Set dependencies in graph manager
-            self.graph
-                .set_dependencies(file_path.clone(), file_deps);
+            self.graph.set_dependencies(file_path.clone(), file_deps);
         }
 
         // Check for circular dependencies using graph manager
@@ -234,7 +208,6 @@ impl Bundle {
     /// Check if two paths refer to the same file
 
     /// Detect circular dependencies using DFS
-
 
     /// Get document by path
     pub fn get_document(&self, path: &Path) -> Option<&Document> {

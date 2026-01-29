@@ -111,14 +111,22 @@ impl CodeGenerator for TypeScriptGenerator {
 
     fn generate_property(&self, name: &str, prop: &PropertyType) -> String {
         let optional_marker = if prop.optional { "?" } else { "" };
-        format!("{}{}: {}", name, optional_marker, self.generate_type(&prop.type_))
+        format!(
+            "{}{}: {}",
+            name,
+            optional_marker,
+            self.generate_type(&prop.type_)
+        )
     }
 
     fn generate_interface(&self, name: &str, props: &[(String, PropertyType)]) -> String {
         let mut lines = vec![format!("export interface {} {{", name)];
 
         for (prop_name, prop_type) in props {
-            lines.push(format!("  {};", self.generate_property(prop_name, prop_type)));
+            lines.push(format!(
+                "  {};",
+                self.generate_property(prop_name, prop_type)
+            ));
         }
 
         lines.push("}".to_string());
@@ -230,10 +238,7 @@ mod tests {
             type_: Type::Number,
             optional: true,
         };
-        assert_eq!(
-            gen.generate_property("age", &optional_prop),
-            "age?: number"
-        );
+        assert_eq!(gen.generate_property("age", &optional_prop), "age?: number");
     }
 
     #[test]

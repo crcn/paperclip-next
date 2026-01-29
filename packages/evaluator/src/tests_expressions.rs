@@ -13,16 +13,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(5.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(5.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -38,16 +38,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(15.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(15.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -63,16 +63,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(10.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(10.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -88,16 +88,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(10.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(10.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -113,17 +113,19 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("isActive".to_string(), Value::Boolean(true));
-    evaluator.context.set_variable("isVisible".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isActive".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isVisible".to_string(), Value::Boolean(true));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -139,17 +141,19 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("isActive".to_string(), Value::Boolean(false));
-    evaluator.context.set_variable("isVisible".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isActive".to_string(), Value::Boolean(false));
+    evaluator
+        .context
+        .set_variable("isVisible".to_string(), Value::Boolean(true));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "false"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "false"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -165,17 +169,19 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("isActive".to_string(), Value::Boolean(false));
-    evaluator.context.set_variable("isVisible".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isActive".to_string(), Value::Boolean(false));
+    evaluator
+        .context
+        .set_variable("isVisible".to_string(), Value::Boolean(true));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -191,17 +197,19 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("isActive".to_string(), Value::Boolean(true));
-    evaluator.context.set_variable("isVisible".to_string(), Value::Boolean(false));
+    evaluator
+        .context
+        .set_variable("isActive".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isVisible".to_string(), Value::Boolean(false));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -217,17 +225,17 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("date".to_string(), Value::String("2024-01-01".to_string()));
+    evaluator
+        .context
+        .set_variable("date".to_string(), Value::String("2024-01-01".to_string()));
 
     // Should succeed (not error) and return empty string
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, ""),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, ""),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -243,16 +251,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("name".to_string(), Value::String("World".to_string()));
+    evaluator
+        .context
+        .set_variable("name".to_string(), Value::String("World".to_string()));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "Hello World!"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "Hello World!"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -268,18 +276,22 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("firstName".to_string(), Value::String("John".to_string()));
-    evaluator.context.set_variable("lastName".to_string(), Value::String("Doe".to_string()));
-    evaluator.context.set_variable("age".to_string(), Value::Number(30.0));
+    evaluator
+        .context
+        .set_variable("firstName".to_string(), Value::String("John".to_string()));
+    evaluator
+        .context
+        .set_variable("lastName".to_string(), Value::String("Doe".to_string()));
+    evaluator
+        .context
+        .set_variable("age".to_string(), Value::Number(30.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "User John Doe (30 years old)"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "User John Doe (30 years old)"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -295,16 +307,16 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(5.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(5.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "Count plus one: 6"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "Count plus one: 6"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -320,19 +332,23 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("a".to_string(), Value::Number(2.0));
-    evaluator.context.set_variable("b".to_string(), Value::Number(3.0));
-    evaluator.context.set_variable("c".to_string(), Value::Number(4.0));
+    evaluator
+        .context
+        .set_variable("a".to_string(), Value::Number(2.0));
+    evaluator
+        .context
+        .set_variable("b".to_string(), Value::Number(3.0));
+    evaluator
+        .context
+        .set_variable("c".to_string(), Value::Number(4.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     // Should be 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "14"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "14"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -348,18 +364,20 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("a".to_string(), Value::Number(7.0));
-    evaluator.context.set_variable("b".to_string(), Value::Number(3.0));
+    evaluator
+        .context
+        .set_variable("a".to_string(), Value::Number(7.0));
+    evaluator
+        .context
+        .set_variable("b".to_string(), Value::Number(3.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     // Should be (a > 5) && (b < 10) = true && true = true
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -375,18 +393,20 @@ public component Test {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(5.0));
-    evaluator.context.set_variable("isSpecial".to_string(), Value::Boolean(false));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(5.0));
+    evaluator
+        .context
+        .set_variable("isSpecial".to_string(), Value::Boolean(false));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
     // Should be (5 > 0 && 5 <= 10) || false = true || false = true
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "true"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "true"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }

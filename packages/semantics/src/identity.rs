@@ -4,7 +4,6 @@
 /// structure changes, and code movement. Unlike AST IDs (too low-level)
 /// or VDOM paths (too fragile), semantic IDs represent the conceptual
 /// location of a node: "the button in the footer slot of Card instance X"
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -25,10 +24,7 @@ pub enum SemanticSegment {
     },
 
     /// Slot reference within component
-    Slot {
-        name: String,
-        variant: SlotVariant,
-    },
+    Slot { name: String, variant: SlotVariant },
 
     /// Element within component body
     Element {

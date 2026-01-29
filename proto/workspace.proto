@@ -11,6 +11,12 @@ service WorkspaceService {
 
   // Watch files in a directory
   rpc WatchFiles(WatchRequest) returns (stream FileEvent);
+
+  // Apply a semantic mutation to a document
+  rpc ApplyMutation(MutationRequest) returns (MutationResponse);
+
+  // Get document outline (AST structure for layers panel)
+  rpc GetDocumentOutline(OutlineRequest) returns (OutlineResponse);
 }
 
 // Request to start preview streaming
@@ -25,6 +31,10 @@ message PreviewUpdate {
   optional string error = 3;
   int64 timestamp = 4;
   uint64 version = 5;
+
+  // NEW: Include mutation acknowledgments
+  repeated string acknowledged_mutation_ids = 6;
+  optional string changed_by_client_id = 7;
 }
 
 // Request to watch files
@@ -44,4 +54,143 @@ message FileEvent {
   EventType event_type = 1;
   string file_path = 2;
   int64 timestamp = 3;
+}
+
+// ============================================================================
+// Mutation Support (Phase 1)
+// ============================================================================
+
+// Request to apply a semantic mutation
+message MutationRequest {
+  string client_id = 1;
+  string file_path = 2;
+  Mutation mutation = 3;
+  uint64 expected_version = 4;  // Optimistic concurrency control
+}
+
+// Response to mutation application
+message MutationResponse {
+  oneof result {
+    MutationAck ack = 1;
+    MutationRebased rebased = 2;
+    MutationNoop noop = 3;
+  }
+}
+
+// Mutation was accepted and applied
+message MutationAck {
+  string mutation_id = 1;
+  uint64 new_version = 2;
+  int64 timestamp = 3;
+}
+
+// Mutation was transformed (rebased) due to concurrent changes
+message MutationRebased {
+  string original_mutation_id = 1;
+  Mutation transformed_mutation = 2;
+  uint64 new_version = 3;
+  string reason = 4;
+}
+
+// Mutation had no effect (e.g., node already deleted)
+message MutationNoop {
+  string mutation_id = 1;
+  string reason = 2;
+}
+
+// Semantic AST operation
+message Mutation {
+  string mutation_id = 1;
+  int64 timestamp = 2;
+
+  oneof mutation_type {
+    MoveElement move_element = 3;
+    UpdateText update_text = 4;
+    SetInlineStyle set_inline_style = 5;
+    SetAttribute set_attribute = 6;
+    RemoveNode remove_node = 7;
+    InsertElement insert_element = 8;
+  }
+}
+
+// Move an element to a new parent at index
+message MoveElement {
+  string node_id = 1;
+  string new_parent_id = 2;
+  uint32 index = 3;
+}
+
+// Update text content (atomic replacement)
+message UpdateText {
+  string node_id = 1;
+  string content = 2;
+}
+
+// Set an inline style property
+message SetInlineStyle {
+  string node_id = 1;
+  string property = 2;
+  string value = 3;
+}
+
+// Set an attribute value
+message SetAttribute {
+  string node_id = 1;
+  string name = 2;
+  string value = 3;
+}
+
+// Remove a node from the tree
+message RemoveNode {
+  string node_id = 1;
+}
+
+// Insert a new element (rare - most creation via templates)
+message InsertElement {
+  string parent_id = 1;
+  uint32 index = 2;
+  string element_json = 3;  // Serialized AST element
+}
+
+// ============================================================================
+// Document Outline Support (Phase 1)
+// ============================================================================
+
+// Request document outline
+message OutlineRequest {
+  string file_path = 1;
+}
+
+// Document outline response
+message OutlineResponse {
+  repeated OutlineNode nodes = 1;
+  uint64 version = 2;
+}
+
+// Single node in document outline
+message OutlineNode {
+  string node_id = 1;
+  NodeType type = 2;
+  optional string parent_id = 3;
+  repeated string child_ids = 4;
+  SourceSpan span = 5;
+  optional string label = 6;  // e.g., component name, tag name
+}
+
+// Node type enum
+enum NodeType {
+  COMPONENT = 0;
+  ELEMENT = 1;
+  TEXT = 2;
+  CONDITIONAL = 3;
+  REPEAT = 4;
+  INSERT = 5;
+}
+
+// Source code location
+message SourceSpan {
+  uint32 start_line = 1;
+  uint32 start_col = 2;
+  uint32 end_line = 3;
+  uint32 end_col = 4;
 }

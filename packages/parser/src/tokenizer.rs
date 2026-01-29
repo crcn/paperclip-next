@@ -29,6 +29,9 @@ pub enum Token<'src> {
     #[token("slot")]
     Slot,
 
+    #[token("override")]
+    Override,
+
     #[token("import")]
     Import,
 
@@ -193,6 +196,7 @@ impl<'src> fmt::Display for Token<'src> {
             Token::TokenKeyword => write!(f, "token"),
             Token::Variant => write!(f, "variant"),
             Token::Slot => write!(f, "slot"),
+            Token::Override => write!(f, "override"),
             Token::Import => write!(f, "import"),
             Token::As => write!(f, "as"),
             Token::From => write!(f, "from"),

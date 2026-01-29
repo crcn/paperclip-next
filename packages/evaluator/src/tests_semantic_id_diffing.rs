@@ -30,7 +30,11 @@ fn test_component_reordering_no_patches() {
 
     // Diffing identical VDOMs should produce no patches
     let patches = diff_vdocument(&vdom1, &vdom2);
-    assert_eq!(patches.len(), 0, "Identical VDOMs should produce no patches");
+    assert_eq!(
+        patches.len(),
+        0,
+        "Identical VDOMs should produce no patches"
+    );
 }
 
 #[test]

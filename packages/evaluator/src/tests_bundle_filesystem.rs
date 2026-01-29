@@ -11,7 +11,7 @@ mod filesystem_tests {
     fn test_mock_filesystem_import_resolution() {
         // Test that imports are resolved correctly with mock file system
         let mut bundle = Bundle::new();
-        let mut mock_fs = bundle::MockFileSystem::new();
+        let mut mock_fs = paperclip_bundle::MockFileSystem::new();
 
         // Add files to mock filesystem
         mock_fs.add_file(PathBuf::from("/project/colors.pc"));
@@ -45,7 +45,7 @@ mod filesystem_tests {
     fn test_alias_resolution_with_mock_fs() {
         // Test that namespaced lookups work correctly with alias mapping
         let mut bundle = Bundle::new();
-        let mut mock_fs = bundle::MockFileSystem::new();
+        let mut mock_fs = paperclip_bundle::MockFileSystem::new();
 
         mock_fs.add_file(PathBuf::from("/app/theme.pc"));
         mock_fs.add_file(PathBuf::from("/app/button.pc"));
@@ -88,7 +88,7 @@ mod filesystem_tests {
     fn test_multiple_imports_with_different_aliases() {
         // Test that multiple imports with different aliases work correctly
         let mut bundle = Bundle::new();
-        let mut mock_fs = bundle::MockFileSystem::new();
+        let mut mock_fs = paperclip_bundle::MockFileSystem::new();
 
         mock_fs.add_file(PathBuf::from("/src/colors.pc"));
         mock_fs.add_file(PathBuf::from("/src/fonts.pc"));
@@ -146,7 +146,7 @@ mod filesystem_tests {
     fn test_import_not_found_with_mock_fs() {
         // Test that missing imports are properly detected with mock FS
         let mut bundle = Bundle::new();
-        let mock_fs = bundle::MockFileSystem::new();
+        let mock_fs = paperclip_bundle::MockFileSystem::new();
 
         // Only add main file, not the imported file
         let main_source = r#"

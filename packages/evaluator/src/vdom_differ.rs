@@ -1,5 +1,5 @@
-use crate::semantic_identity::SemanticID;
 use crate::vdom::{VNode, VirtualDomDocument};
+use paperclip_semantics::SemanticID;
 
 // Include generated protobuf types
 pub mod proto {
@@ -210,7 +210,11 @@ fn diff_vnodes_same_path(old: &VNode, new: &VNode, path: Vec<u32>) -> Vec<VDocPa
             }
 
             // Diff children using semantic ID matching
-            patches.extend(diff_children_by_semantic_id(old_children, new_children, path));
+            patches.extend(diff_children_by_semantic_id(
+                old_children,
+                new_children,
+                path,
+            ));
         }
         (VNode::Text { content: old_text }, VNode::Text { content: new_text }) => {
             if old_text != new_text {
@@ -483,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_diff_with_semantic_id_reordering() {
-        use crate::semantic_identity::{SemanticID, SemanticSegment};
+        use paperclip_semantics::{SemanticID, SemanticSegment};
 
         // Create two elements with different semantic IDs
         let elem1_id = SemanticID::new(vec![SemanticSegment::Element {

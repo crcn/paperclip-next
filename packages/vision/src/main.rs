@@ -78,7 +78,10 @@ fn run_capture(
         "tablet" => Viewport::Tablet,
         "desktop" => Viewport::Desktop,
         _ => {
-            error!("Invalid viewport: {}. Use: mobile, tablet, or desktop", viewport_str);
+            error!(
+                "Invalid viewport: {}. Use: mobile, tablet, or desktop",
+                viewport_str
+            );
             std::process::exit(1);
         }
     };

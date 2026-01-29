@@ -1,10 +1,14 @@
+use crate::compiler::CompileError;
 use crate::context::{CompileOptions, CompilerContext};
-use paperclip_inference::{CodeGenerator, InferenceEngine, InferenceOptions};
 use paperclip_inference::codegen::typescript::TypeScriptGenerator;
+use paperclip_inference::{CodeGenerator, InferenceEngine, InferenceOptions};
 use paperclip_parser::ast::*;
 
 /// Compile TypeScript definition file (.d.ts) for a Paperclip document
-pub fn compile_definitions(document: &Document, _options: CompileOptions) -> Result<String, String> {
+pub fn compile_definitions(
+    document: &Document,
+    _options: CompileOptions,
+) -> Result<String, CompileError> {
     let ctx = CompilerContext::new(_options);
 
     // Add imports
@@ -43,7 +47,10 @@ fn compile_component_definition(component: &Component, ctx: &CompilerContext) {
     let inferred_props = match engine.infer_component_props(component) {
         Ok(props) => props,
         Err(e) => {
-            eprintln!("Warning: Failed to infer props for {}: {}", component_name, e);
+            eprintln!(
+                "Warning: Failed to infer props for {}: {}",
+                component_name, e
+            );
             std::collections::BTreeMap::new()
         }
     };

@@ -1,8 +1,8 @@
 /// Tests for slot implementation with semantic IDs
 use crate::evaluator::Evaluator;
-use crate::semantic_identity::{SemanticSegment, SlotVariant};
 use crate::vdom::VNode;
 use paperclip_parser::parse_with_path;
+use paperclip_semantics::{SemanticSegment, SlotVariant};
 
 #[test]
 fn test_slot_with_default_content() {
@@ -211,7 +211,11 @@ fn test_named_slot() {
         }
 
         // Body
-        if let VNode::Element { children: body_children, .. } = &children[1] {
+        if let VNode::Element {
+            children: body_children,
+            ..
+        } = &children[1]
+        {
             if let VNode::Text { content } = &body_children[0] {
                 assert_eq!(content, "Body");
             }
@@ -292,7 +296,11 @@ fn test_component_instance_syntax_variants() {
         assert_eq!(children.len(), 2);
 
         // First Card (without parens)
-        if let VNode::Element { children: card1_children, .. } = &children[0] {
+        if let VNode::Element {
+            children: card1_children,
+            ..
+        } = &children[0]
+        {
             if let VNode::Text { content } = &card1_children[0] {
                 assert_eq!(content, "Without parens");
             } else {
@@ -301,7 +309,11 @@ fn test_component_instance_syntax_variants() {
         }
 
         // Second Card (with parens)
-        if let VNode::Element { children: card2_children, .. } = &children[1] {
+        if let VNode::Element {
+            children: card2_children,
+            ..
+        } = &children[1]
+        {
             if let VNode::Text { content } = &card2_children[0] {
                 assert_eq!(content, "With parens");
             } else {

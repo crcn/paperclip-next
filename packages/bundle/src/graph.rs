@@ -2,7 +2,6 @@
 ///
 /// Manages the dependency graph for a collection of documents,
 /// tracking which files import which other files and detecting circular dependencies.
-
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use thiserror::Error;

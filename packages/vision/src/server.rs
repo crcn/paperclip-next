@@ -22,18 +22,19 @@ impl RenderServer {
     /// Create a new server on a random available port
     pub fn new(html_content: String) -> Result<Self> {
         // Bind to random port
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| VisionError::Io(e))?;
-        let port = listener.local_addr()
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| VisionError::Io(e))?;
+        let port = listener
+            .local_addr()
             .map_err(|e| VisionError::Io(e))?
             .port();
 
         // Create tiny_http server from listener
-        let server = Server::from_listener(listener, None)
-            .map_err(|e| VisionError::Io(std::io::Error::new(
+        let server = Server::from_listener(listener, None).map_err(|e| {
+            VisionError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 e.to_string(),
-            )))?;
+            ))
+        })?;
 
         Ok(Self {
             server,
@@ -54,17 +55,20 @@ impl RenderServer {
 
         // Accept one request
         if let Ok(Some(request)) = server.recv_timeout(timeout) {
-            let response = Response::from_string(&self.html_content)
-                .with_header(
-                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=UTF-8"[..])
-                        .unwrap(),
-                );
+            let response = Response::from_string(&self.html_content).with_header(
+                tiny_http::Header::from_bytes(
+                    &b"Content-Type"[..],
+                    &b"text/html; charset=UTF-8"[..],
+                )
+                .unwrap(),
+            );
 
-            request.respond(response)
-                .map_err(|e| VisionError::Io(std::io::Error::new(
+            request.respond(response).map_err(|e| {
+                VisionError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     e.to_string(),
-                )))?;
+                ))
+            })?;
         }
 
         Ok(())

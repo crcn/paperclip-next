@@ -1,7 +1,7 @@
-use wasm_bindgen::prelude::*;
-use paperclip_parser::{parse_with_path, get_document_id};
-use paperclip_compiler_react::{compile_to_react, compile_definitions, CompileOptions};
 use paperclip_compiler_css::compile_to_css;
+use paperclip_compiler_react::{compile_definitions, compile_to_react, CompileOptions};
+use paperclip_parser::{get_document_id, parse_with_path};
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -29,7 +29,11 @@ impl CompileResult {
 
 /// Compile a .pc file to React/JSX
 #[wasm_bindgen(js_name = compileToReact)]
-pub fn compile_to_react_js(source: &str, file_path: &str, generate_types: bool) -> Result<CompileResult, JsValue> {
+pub fn compile_to_react_js(
+    source: &str,
+    file_path: &str,
+    generate_types: bool,
+) -> Result<CompileResult, JsValue> {
     // Parse
     let doc = parse_with_path(source, file_path)
         .map_err(|e| JsValue::from_str(&format!("Parse error: {:?}", e)))?;
@@ -64,8 +68,7 @@ pub fn compile_to_css_js(source: &str, file_path: &str) -> Result<String, JsValu
         .map_err(|e| JsValue::from_str(&format!("Parse error: {:?}", e)))?;
 
     // Compile to CSS
-    compile_to_css(&doc)
-        .map_err(|e| JsValue::from_str(&format!("CSS compile error: {:?}", e)))
+    compile_to_css(&doc).map_err(|e| JsValue::from_str(&format!("CSS compile error: {:?}", e)))
 }
 
 /// Parse a .pc file and return the AST as JSON

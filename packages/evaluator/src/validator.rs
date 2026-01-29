@@ -1,6 +1,6 @@
 /// Development mode validators for detecting unstable patterns
 use crate::vdom::{VNode, VirtualDomDocument};
-use crate::semantic_identity::SemanticID;
+use paperclip_semantics::SemanticID;
 use std::collections::HashSet;
 
 /// Validation warning level
@@ -110,7 +110,7 @@ impl Validator {
 
     /// Validate a semantic ID for common issues
     fn validate_semantic_id(&mut self, semantic_id: &SemanticID) {
-        use crate::semantic_identity::SemanticSegment;
+        use paperclip_semantics::SemanticSegment;
 
         for segment in &semantic_id.segments {
             match segment {
@@ -118,13 +118,11 @@ impl Validator {
                     // Warn if repeat key looks auto-generated
                     if key.starts_with("item-") {
                         self.warnings.push(
-                            ValidationWarning::warning(
-                                format!(
-                                    "Repeat item has auto-generated key '{}'. \
+                            ValidationWarning::warning(format!(
+                                "Repeat item has auto-generated key '{}'. \
                                      Consider providing explicit keys for stable identity.",
-                                    key
-                                )
-                            )
+                                key
+                            ))
                             .with_semantic_id(semantic_id.clone()),
                         );
                     }
@@ -137,13 +135,11 @@ impl Validator {
                     // Warn if component key is missing for multiple instances
                     if key.is_none() {
                         self.warnings.push(
-                            ValidationWarning::warning(
-                                format!(
-                                    "Component '{}' instance has no explicit key. \
+                            ValidationWarning::warning(format!(
+                                "Component '{}' instance has no explicit key. \
                                      Auto-generated keys may not be stable.",
-                                    name
-                                )
-                            )
+                                name
+                            ))
                             .with_semantic_id(semantic_id.clone()),
                         );
                     }
@@ -219,9 +215,12 @@ impl Validator {
     fn collect_repeat_keys(
         &self,
         nodes: &[VNode],
-        repeat_keys: &mut std::collections::HashMap<String, std::collections::HashMap<String, Vec<SemanticID>>>,
+        repeat_keys: &mut std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, Vec<SemanticID>>,
+        >,
     ) {
-        use crate::semantic_identity::SemanticSegment;
+        use paperclip_semantics::SemanticSegment;
 
         for node in nodes {
             if let VNode::Element {
@@ -252,7 +251,7 @@ impl Validator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic_identity::{SemanticID, SemanticSegment};
+    use paperclip_semantics::{SemanticID, SemanticSegment};
     use std::collections::HashMap;
 
     #[test]
@@ -285,9 +284,7 @@ mod tests {
         let warnings = validator.validate(&vdom);
 
         assert_eq!(warnings.len(), 1);
-        assert!(warnings[0]
-            .message
-            .contains("auto-generated key 'item-0'"));
+        assert!(warnings[0].message.contains("auto-generated key 'item-0'"));
     }
 
     #[test]

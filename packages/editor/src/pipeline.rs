@@ -8,8 +8,8 @@
 //! - Incremental diffing
 //! - Caching for efficiency
 
-use crate::{Document, Mutation, EditorError};
-use paperclip_evaluator::{VirtualDomDocument, diff_vdocument};
+use crate::{Document, EditorError, Mutation};
+use paperclip_evaluator::{diff_vdocument, VirtualDomDocument};
 
 /// Manages the full edit → render pipeline
 pub struct Pipeline {
@@ -102,7 +102,7 @@ pub struct PipelineResult {
     pub vdom: VirtualDomDocument,
 
     /// Incremental patches (for efficiency)
-    pub patches: Vec<u8>,  // TODO: Use actual patch type
+    pub patches: Vec<u8>, // TODO: Use actual patch type
 }
 
 #[cfg(test)]
@@ -113,10 +113,7 @@ mod tests {
     #[test]
     fn test_pipeline_initial_evaluation() {
         let source = "component Test { render div {} }";
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         let mut pipeline = Pipeline::new(doc);
 
@@ -131,10 +128,7 @@ mod tests {
     #[test]
     fn test_pipeline_mutation_increments_version() {
         let source = "component Test { render div {} }";
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         let mut pipeline = Pipeline::new(doc);
 

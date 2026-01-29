@@ -40,9 +40,7 @@ mod server;
 mod types;
 
 pub use capture::VisionCapture;
-pub use types::{
-    CaptureArea, CaptureOptions, ImageFormat, Screenshot, ViewSpec, Viewport,
-};
+pub use types::{CaptureArea, CaptureOptions, ImageFormat, Screenshot, ViewSpec, Viewport};
 
 use thiserror::Error;
 

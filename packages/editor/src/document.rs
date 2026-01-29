@@ -16,10 +16,10 @@
 //! File   AST   Mutations  VDOM    File
 //! ```
 
+use crate::{EditorError, Mutation, MutationResult};
+use paperclip_evaluator::{Bundle, Evaluator, VirtualDomDocument};
+use paperclip_parser::{ast::Document as ASTDocument, parse};
 use std::path::PathBuf;
-use paperclip_parser::{parse, ast::Document as ASTDocument};
-use paperclip_evaluator::{Evaluator, Bundle, VirtualDomDocument};
-use crate::{Mutation, MutationResult, EditorError};
 
 #[cfg(feature = "collaboration")]
 use crate::crdt::CRDTDocument;
@@ -41,10 +41,7 @@ pub struct Document {
 #[derive(Debug)]
 pub enum DocumentStorage {
     /// In-memory only (for testing, temp docs)
-    Memory {
-        source: String,
-        ast: ASTDocument,
-    },
+    Memory { source: String, ast: ASTDocument },
 
     /// File-backed (single-user editing)
     File {
@@ -128,7 +125,7 @@ impl Document {
             DocumentStorage::File { ast, dirty, .. } => {
                 *dirty = true;
                 ast
-            },
+            }
 
             #[cfg(feature = "collaboration")]
             DocumentStorage::CRDT { ast_cache, .. } => {
@@ -157,8 +154,7 @@ impl Document {
         self.version += 1;
 
         match &mut self.storage {
-            DocumentStorage::Memory { source, ast } |
-            DocumentStorage::File { source, ast, .. } => {
+            DocumentStorage::Memory { source, ast } | DocumentStorage::File { source, ast, .. } => {
                 // Apply mutation to AST
                 mutation.apply(ast)?;
 
@@ -217,7 +213,7 @@ impl Document {
             DocumentStorage::Memory { source, .. } => Some(source),
             DocumentStorage::File { source, .. } => Some(source),
             #[cfg(feature = "collaboration")]
-            DocumentStorage::CRDT { .. } => None,  // Source derived from CRDT
+            DocumentStorage::CRDT { .. } => None, // Source derived from CRDT
         }
     }
 }
@@ -237,10 +233,7 @@ mod tests {
             }
         "#;
 
-        let doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        );
+        let doc = Document::from_source(PathBuf::from("test.pc"), source.to_string());
 
         assert!(doc.is_ok());
         let mut doc = doc.unwrap();
@@ -255,10 +248,7 @@ mod tests {
     #[test]
     fn test_document_version_increments() {
         let source = "component Test { render div {} }";
-        let mut doc = Document::from_source(
-            PathBuf::from("test.pc"),
-            source.to_string()
-        ).unwrap();
+        let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
         assert_eq!(doc.version, 0);
 

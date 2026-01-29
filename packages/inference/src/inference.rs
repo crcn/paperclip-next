@@ -174,11 +174,7 @@ impl InferenceEngine {
     }
 
     /// Infer type from an expression and update scope
-    fn infer_from_expression(
-        &self,
-        expr: &Expression,
-        scope: &mut Scope,
-    ) -> InferenceResult<Type> {
+    fn infer_from_expression(&self, expr: &Expression, scope: &mut Scope) -> InferenceResult<Type> {
         match expr {
             Expression::Literal { value, .. } => {
                 Ok(Type::Literal(LiteralType::String(value.clone())))
@@ -188,9 +184,7 @@ impl InferenceEngine {
                 Ok(Type::Literal(LiteralType::Number((*value).into())))
             }
 
-            Expression::Boolean { value, .. } => {
-                Ok(Type::Literal(LiteralType::Boolean(*value)))
-            }
+            Expression::Boolean { value, .. } => Ok(Type::Literal(LiteralType::Boolean(*value))),
 
             Expression::Variable { name, .. } => {
                 // Look up in scope
@@ -352,7 +346,11 @@ impl InferenceEngine {
                         intermediate.add_property(final_property.to_string(), Type::Any, false);
 
                         let intermediate_type = Type::Object(intermediate);
-                        obj.add_property(base_property.to_string(), intermediate_type.clone(), false);
+                        obj.add_property(
+                            base_property.to_string(),
+                            intermediate_type.clone(),
+                            false,
+                        );
                         scope.refine(name, Type::Object(obj));
 
                         return Ok(Type::Any);
@@ -398,11 +396,7 @@ impl InferenceEngine {
                         properties: BTreeMap::new(),
                         index_signature: Some(Box::new(Type::Any)),
                     };
-                    obj.add_property(
-                        base_property.to_string(),
-                        Type::Object(intermediate),
-                        false,
-                    );
+                    obj.add_property(base_property.to_string(), Type::Object(intermediate), false);
 
                     scope.refine(name, Type::Object(obj));
                     Ok(Type::Any)
@@ -497,7 +491,6 @@ impl InferenceEngine {
         Ok(())
     }
 
-
     /// Convert scope bindings to component props
     fn scope_to_props(&self, scope: &Scope) -> BTreeMap<String, PropertyType> {
         let bindings = scope.collect_root_props();
@@ -512,10 +505,7 @@ impl InferenceEngine {
             // - Slot wrapped in Optional is optional
             // - Optional types are optional
             // - Everything else is required
-            let optional = matches!(
-                finalized_type,
-                Type::Boolean | Type::Optional(_)
-            );
+            let optional = matches!(finalized_type, Type::Boolean | Type::Optional(_));
 
             // Unwrap Optional for Slot types
             let unwrapped_type = if let Type::Optional(inner) = finalized_type {

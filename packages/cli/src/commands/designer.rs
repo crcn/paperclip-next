@@ -14,7 +14,10 @@ pub struct DesignerArgs {
 }
 
 pub fn designer(args: DesignerArgs, _cwd: &str) -> Result<()> {
-    println!("{}", "🎨 Starting Paperclip Designer...".bright_blue().bold());
+    println!(
+        "{}",
+        "🎨 Starting Paperclip Designer...".bright_blue().bold()
+    );
     println!();
     println!(
         "{}",

@@ -1,5 +1,5 @@
-use crate::ast::*;
 use crate::ast::TriggerDecl;
+use crate::ast::*;
 use crate::error::{ParseError, ParseResult};
 use crate::id_generator::IDGenerator;
 use crate::tokenizer::{tokenize, Token};
@@ -337,6 +337,7 @@ impl<'src> Parser<'src> {
         let frame = None;
         let mut variants = Vec::new();
         let mut slots = Vec::new();
+        let mut overrides = Vec::new();
         let mut body = None;
 
         while !self.check(Token::RBrace) && !self.is_at_end() {
@@ -350,6 +351,9 @@ impl<'src> Parser<'src> {
                 Some((Token::Slot, _)) => {
                     slots.push(self.parse_slot()?);
                 }
+                Some((Token::Override, _)) => {
+                    overrides.push(self.parse_override()?);
+                }
                 Some((Token::Render, _)) => {
                     self.advance();
                     body = Some(self.parse_element()?);
@@ -357,7 +361,7 @@ impl<'src> Parser<'src> {
                 _ => {
                     return Err(ParseError::invalid_syntax_span(
                         self.peek_span(),
-                        "Expected 'script', 'variant', 'slot', or 'render'",
+                        "Expected 'script', 'variant', 'slot', 'override', or 'render'",
                     ));
                 }
             }
@@ -374,6 +378,7 @@ impl<'src> Parser<'src> {
             frame,
             variants,
             slots,
+            overrides,
             body,
             span: Span::new(start, end, self.id_generator.new_id()),
         })
@@ -485,6 +490,63 @@ impl<'src> Parser<'src> {
         Ok(Slot {
             name,
             default_content,
+            span: Span::new(start, end, self.id_generator.new_id()),
+        })
+    }
+
+    /// Parse an override: override Button.Icon { style { ... } }
+    fn parse_override(&mut self) -> ParseResult<Override> {
+        let start = self.current_pos();
+        self.expect(Token::Override)?;
+
+        // Parse dot-separated path: Button.Icon.Path or div.span
+        // Accept both identifiers and element keywords (div, span, button, img)
+        let mut path = Vec::new();
+        path.push(self.expect_ident_or_element_keyword()?);
+
+        while self.match_token(Token::Dot) {
+            path.push(self.expect_ident_or_element_keyword()?);
+        }
+
+        // Parse attributes in parentheses (new syntax): override div(id="custom")
+        let mut attributes = std::collections::HashMap::new();
+        if self.match_token(Token::LParen) {
+            while !self.check(Token::RParen) && !self.is_at_end() {
+                let attr_name = self.expect_ident()?;
+                self.expect(Token::Equals)?;
+                let attr_value = self.parse_expression()?;
+                attributes.insert(attr_name, attr_value);
+
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            self.expect(Token::RParen)?;
+        }
+
+        self.expect(Token::LBrace)?;
+
+        // Inside braces: only styles allowed now
+        let mut styles = Vec::new();
+        while !self.check(Token::RBrace) && !self.is_at_end() {
+            if self.check(Token::Style) {
+                styles.push(self.parse_style_block()?);
+            } else {
+                return Err(ParseError::invalid_syntax_span(
+                    self.peek_span(),
+                    "Expected 'style' block in override (attributes go in parentheses)",
+                ));
+            }
+        }
+
+        self.expect(Token::RBrace)?;
+
+        let end = self.current_pos();
+
+        Ok(Override {
+            path,
+            styles,
+            attributes,
             span: Span::new(start, end, self.id_generator.new_id()),
         })
     }
@@ -972,7 +1034,11 @@ impl<'src> Parser<'src> {
 
     /// Parse postfix operations (member access and method calls)
     /// Handles: obj.prop, obj.method(), obj.prop.method(), etc.
-    fn parse_postfix_operations(&mut self, mut expr: Expression, start: usize) -> ParseResult<Expression> {
+    fn parse_postfix_operations(
+        &mut self,
+        mut expr: Expression,
+        start: usize,
+    ) -> ParseResult<Expression> {
         loop {
             if self.match_token(Token::Dot) {
                 let property = self.expect_ident()?;
@@ -1206,6 +1272,39 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// Accept either an identifier or an element keyword (div, span, button, img)
+    /// Used for override paths where we need to target HTML elements
+    fn expect_ident_or_element_keyword(&mut self) -> ParseResult<String> {
+        match self.peek() {
+            Some((Token::Ident(s), _)) => {
+                let val = s.to_string();
+                self.advance();
+                Ok(val)
+            }
+            Some((Token::Div, _)) => {
+                self.advance();
+                Ok("div".to_string())
+            }
+            Some((Token::Span, _)) => {
+                self.advance();
+                Ok("span".to_string())
+            }
+            Some((Token::Button, _)) => {
+                self.advance();
+                Ok("button".to_string())
+            }
+            Some((Token::Img, _)) => {
+                self.advance();
+                Ok("img".to_string())
+            }
+            _ => Err(ParseError::unexpected_token_span(
+                self.peek_span(),
+                "identifier",
+                Self::format_token(self.peek()),
+            )),
+        }
+    }
+
     fn expect_string(&mut self) -> ParseResult<String> {
         match self.peek() {
             Some((Token::String(s), _)) => {
@@ -1380,5 +1479,77 @@ mod tests {
         assert_eq!(doc.tokens.len(), 1);
         assert_eq!(doc.tokens[0].name, "primaryColor");
         assert_eq!(doc.tokens[0].value, "#3366FF");
+    }
+
+    #[test]
+    fn test_parse_override_simple() {
+        let source = r#"
+            component Card {
+                render Button {}
+
+                override Button {
+                    style {
+                        color: red
+                    }
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.components.len(), 1);
+        assert_eq!(doc.components[0].overrides.len(), 1);
+
+        let override_def = &doc.components[0].overrides[0];
+        assert_eq!(override_def.path, vec!["Button"]);
+        assert_eq!(override_def.styles.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_override_deep_path() {
+        let source = r#"
+            component Page {
+                render Card {}
+
+                override Card.Button.Icon {
+                    style {
+                        fill: blue
+                    }
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        let override_def = &doc.components[0].overrides[0];
+        assert_eq!(override_def.path, vec!["Card", "Button", "Icon"]);
+    }
+
+    #[test]
+    fn test_parse_override_with_attributes() {
+        let source = r#"
+            component Card {
+                render Button {}
+
+                override Button(id="custom-btn", class="primary") {
+                    style {
+                        color: red
+                    }
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        let override_def = &doc.components[0].overrides[0];
+        assert_eq!(override_def.attributes.len(), 2);
+        assert!(override_def.attributes.contains_key("id"));
+        assert!(override_def.attributes.contains_key("class"));
     }
 }

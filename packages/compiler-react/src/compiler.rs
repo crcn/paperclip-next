@@ -1,9 +1,38 @@
 use crate::context::{CompileOptions, CompilerContext};
 use paperclip_parser::ast::*;
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur during React compilation
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("Invalid expression: {0}")]
+    InvalidExpression(String),
+
+    #[error("Unsupported feature: {0}")]
+    UnsupportedFeature(String),
+
+    #[error("Compilation error: {0}")]
+    Generic(String),
+}
+
+impl From<String> for CompileError {
+    fn from(s: String) -> Self {
+        CompileError::Generic(s)
+    }
+}
+
+impl From<&str> for CompileError {
+    fn from(s: &str) -> Self {
+        CompileError::Generic(s.to_string())
+    }
+}
 
 /// Compile a Paperclip document to React code
-pub fn compile_to_react(document: &Document, options: CompileOptions) -> Result<String, String> {
+pub fn compile_to_react(
+    document: &Document,
+    options: CompileOptions,
+) -> Result<String, CompileError> {
     let ctx = CompilerContext::new(options);
 
     // Generate imports
@@ -46,10 +75,7 @@ fn compile_imports(document: &Document, ctx: &CompilerContext) {
     // Import from other .pc files
     for import in &document.imports {
         if let Some(alias) = &import.alias {
-            ctx.add_line(&format!(
-                "import * as {} from \"{}\";",
-                alias, import.path
-            ));
+            ctx.add_line(&format!("import * as {} from \"{}\";", alias, import.path));
         } else {
             ctx.add_line(&format!("import \"{}\";", import.path));
         }
@@ -81,14 +107,11 @@ fn compile_style_export(style: &StyleDecl, ctx: &CompilerContext) {
     ));
 }
 
-fn compile_component(component: &Component, ctx: &CompilerContext) -> Result<(), String> {
+fn compile_component(component: &Component, ctx: &CompilerContext) -> Result<(), CompileError> {
     let component_name = &component.name;
 
     // Start component function
-    ctx.add_line(&format!(
-        "const _{} = (props, ref) => {{",
-        component_name
-    ));
+    ctx.add_line(&format!("const _{} = (props, ref) => {{", component_name));
     ctx.indent();
 
     // Extract variants from props if any
@@ -116,7 +139,10 @@ fn compile_component(component: &Component, ctx: &CompilerContext) -> Result<(),
     ctx.add_line("};");
 
     // Set display name
-    ctx.add_line(&format!("_{}.displayName = \"{}\";", component_name, component_name));
+    ctx.add_line(&format!(
+        "_{}.displayName = \"{}\";",
+        component_name, component_name
+    ));
 
     // Wrap with React.memo and forwardRef
     ctx.add_line(&format!(
@@ -146,7 +172,11 @@ fn compile_slot_extraction(component: &Component, ctx: &CompilerContext) {
     }
 }
 
-fn compile_element(element: &Element, ctx: &CompilerContext, is_root: bool) -> Result<(), String> {
+fn compile_element(
+    element: &Element,
+    ctx: &CompilerContext,
+    is_root: bool,
+) -> Result<(), CompileError> {
     match element {
         Element::Tag {
             tag_name,
@@ -188,7 +218,11 @@ fn compile_element(element: &Element, ctx: &CompilerContext, is_root: bool) -> R
             Ok(())
         }
 
-        Element::Insert { slot_name, content, span: _ } => {
+        Element::Insert {
+            slot_name,
+            content,
+            span: _,
+        } => {
             // Insert directive - compile content as fragment
             // This would typically be passed to the component instance
             ctx.add("<>");
@@ -208,7 +242,7 @@ fn compile_tag(
     children: &[Element],
     ctx: &CompilerContext,
     is_root: bool,
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     ctx.add(&format!("<{}", name));
 
     // Add ref for root element
@@ -251,7 +285,11 @@ fn compile_tag(
     Ok(())
 }
 
-fn compile_attribute(name: &str, expr: &Expression, ctx: &CompilerContext) -> Result<(), String> {
+fn compile_attribute(
+    name: &str,
+    expr: &Expression,
+    ctx: &CompilerContext,
+) -> Result<(), CompileError> {
     // Convert HTML attributes to React props
     let react_prop = match name {
         "class" => "className",
@@ -293,7 +331,7 @@ fn compile_instance(
     props: &HashMap<String, Expression>,
     children: &[Element],
     ctx: &CompilerContext,
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     ctx.add(&format!("<{}", name));
 
     // Compile props
@@ -320,7 +358,7 @@ fn compile_conditional(
     then_branch: &[Element],
     else_branch: &Option<Vec<Element>>,
     ctx: &CompilerContext,
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     ctx.add("{");
     compile_expression(condition, ctx)?;
     ctx.add(" ? (");
@@ -364,7 +402,7 @@ fn compile_repeat(
     collection: &Expression,
     body: &[Element],
     ctx: &CompilerContext,
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     ctx.add("{");
     compile_expression(collection, ctx)?;
     ctx.add(&format!("?.map(({}, index) => (", item_name));
@@ -393,7 +431,7 @@ fn compile_repeat(
     Ok(())
 }
 
-fn compile_expression(expr: &Expression, ctx: &CompilerContext) -> Result<(), String> {
+fn compile_expression(expr: &Expression, ctx: &CompilerContext) -> Result<(), CompileError> {
     match expr {
         Expression::Literal { value, .. } => {
             ctx.add(&format!("\"{}\"", value));
@@ -407,7 +445,9 @@ fn compile_expression(expr: &Expression, ctx: &CompilerContext) -> Result<(), St
         Expression::Variable { name, .. } => {
             ctx.add(&format!("props.{}", name));
         }
-        Expression::Member { object, property, .. } => {
+        Expression::Member {
+            object, property, ..
+        } => {
             compile_expression(object, ctx)?;
             ctx.add(&format!(".{}", property));
         }

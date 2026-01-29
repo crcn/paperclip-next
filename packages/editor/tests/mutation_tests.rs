@@ -13,10 +13,7 @@ fn test_update_text_mutation() {
         }
     "#;
 
-    let mut doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     // Get the text node ID by evaluating
     let ast = doc.ast();
@@ -58,10 +55,7 @@ fn test_remove_node_mutation() {
         }
     "#;
 
-    let mut doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     // Get a child div ID
     let ast = doc.ast();
@@ -83,9 +77,7 @@ fn test_remove_node_mutation() {
         panic!("Expected component");
     };
 
-    let mutation = Mutation::RemoveNode {
-        node_id: child_id,
-    };
+    let mutation = Mutation::RemoveNode { node_id: child_id };
 
     let result = doc.apply(mutation);
     assert!(result.is_ok(), "Remove should succeed");
@@ -101,17 +93,16 @@ fn test_cycle_detection() {
         }
     "#;
 
-    let mut doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     let ast = doc.ast();
     let (parent_id, child_id) = if let Some(comp) = ast.components.first() {
         if let Some(body) = &comp.body {
             if let paperclip_parser::ast::Element::Tag { span, children, .. } = body {
                 let parent = span.id.clone();
-                let child = if let Some(paperclip_parser::ast::Element::Tag { span, .. }) = children.first() {
+                let child = if let Some(paperclip_parser::ast::Element::Tag { span, .. }) =
+                    children.first()
+                {
                     span.id.clone()
                 } else {
                     panic!("Expected child");
@@ -198,10 +189,7 @@ fn test_set_inline_style() {
         panic!("Expected component");
     };
 
-    let mut doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     let mutation = Mutation::SetInlineStyle {
         node_id: div_id,
@@ -233,10 +221,7 @@ fn test_set_attribute() {
         panic!("Expected component");
     };
 
-    let mut doc = Document::from_source(
-        PathBuf::from("test.pc"),
-        source.to_string()
-    ).unwrap();
+    let mut doc = Document::from_source(PathBuf::from("test.pc"), source.to_string()).unwrap();
 
     let mutation = Mutation::SetAttribute {
         node_id: div_id,

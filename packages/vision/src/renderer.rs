@@ -8,10 +8,7 @@ use paperclip_evaluator::{Evaluator, VNode, VirtualDomDocument};
 use paperclip_parser::ast::Document;
 
 /// Render a single component to standalone HTML
-pub fn render_component_html(
-    doc: &Document,
-    component_name: &str,
-) -> Result<String> {
+pub fn render_component_html(doc: &Document, component_name: &str) -> Result<String> {
     // Find the component
     let _component = doc
         .components
@@ -26,8 +23,9 @@ pub fn render_component_html(
         .map_err(|e| VisionError::Render(format!("{:?}", e)))?;
 
     // Find component root in vdom
-    let component_root = find_component_root(&vdom)
-        .ok_or_else(|| VisionError::Render(format!("Component {} not found in vdom", component_name)))?;
+    let component_root = find_component_root(&vdom).ok_or_else(|| {
+        VisionError::Render(format!("Component {} not found in vdom", component_name))
+    })?;
 
     // Emit HTML
     let body_html = emit_vnode_html(component_root, true);
@@ -129,7 +127,10 @@ fn emit_vnode_html(node: &VNode, is_root: bool) -> String {
         }
         VNode::Error { message, .. } => {
             // Render errors as visible divs for debugging
-            format!(r#"<div style="color: red; border: 1px solid red; padding: 4px;">Error: {}</div>"#, escape_html(message))
+            format!(
+                r#"<div style="color: red; border: 1px solid red; padding: 4px;">Error: {}</div>"#,
+                escape_html(message)
+            )
         }
     }
 }

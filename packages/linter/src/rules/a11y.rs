@@ -78,10 +78,7 @@ impl A11yRule {
                 }
 
                 // Check form inputs for labels
-                if matches!(
-                    tag_lower.as_str(),
-                    "input" | "select" | "textarea"
-                ) {
+                if matches!(tag_lower.as_str(), "input" | "select" | "textarea") {
                     let input_type = get_attribute_value(attributes, "type")
                         .unwrap_or_else(|| "text".to_string());
 
@@ -196,7 +193,9 @@ fn get_attribute_value(attributes: &HashMap<String, Expression>, name: &str) -> 
 
 /// Check if children contain text content
 fn has_text_content(children: &[Element]) -> bool {
-    children.iter().any(|child| matches!(child, Element::Text { .. }))
+    children
+        .iter()
+        .any(|child| matches!(child, Element::Text { .. }))
 }
 
 /// Check if a role is a valid ARIA role

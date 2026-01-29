@@ -90,11 +90,7 @@ pub fn lint(args: LintArgs, _cwd: &str) -> Result<()> {
     Ok(())
 }
 
-fn lint_file(
-    file_path: &Path,
-    verbose: bool,
-    format: &str,
-) -> Result<(usize, usize, usize)> {
+fn lint_file(file_path: &Path, verbose: bool, format: &str) -> Result<(usize, usize, usize)> {
     let source = fs::read_to_string(file_path)?;
 
     // Parse the file
@@ -150,7 +146,10 @@ fn lint_file(
                 continue;
             }
 
-            println!("  {} [{}] {}", level_str, diagnostic.rule, diagnostic.message);
+            println!(
+                "  {} [{}] {}",
+                level_str, diagnostic.rule, diagnostic.message
+            );
 
             if let Some(suggestion) = &diagnostic.suggestion {
                 println!("    {} {}", "💡".dimmed(), suggestion.dimmed());

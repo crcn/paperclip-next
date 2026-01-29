@@ -1,8 +1,8 @@
 use paperclip_evaluator::{
-    diff_vdocument, AssetReference, AssetType, Bundle, CssEvaluator, Evaluator, VDocPatch,
-    VirtualCssDocument, VirtualDomDocument,
+    diff_vdocument, AssetReference, AssetType, Bundle, CssError, CssEvaluator, EvalError,
+    Evaluator, VDocPatch, VirtualCssDocument, VirtualDomDocument,
 };
-use paperclip_parser::{ast::Document, get_document_id, parse_with_path};
+use paperclip_parser::{ast::Document, get_document_id, parse_with_path, ParseError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, instrument, warn};
@@ -14,10 +14,13 @@ pub use paperclip_evaluator::vdom_differ::proto::vdom as proto_vdom;
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
     #[error("Parse error: {0}")]
-    ParseError(String),
+    ParseError(#[from] ParseError),
 
     #[error("Evaluation error: {0}")]
-    EvalError(String),
+    EvalError(#[from] EvalError),
+
+    #[error("CSS error: {0}")]
+    CssError(#[from] CssError),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
@@ -65,10 +68,7 @@ impl WorkspaceState {
 
         // Parse new source with file path for proper ID generation
         debug!("Parsing source");
-        let new_ast = parse_with_path(&new_source, &path_str).map_err(|e| {
-            error!(error = ?e, "Parse failed");
-            StateError::ParseError(format!("{:?}", e))
-        })?;
+        let new_ast = parse_with_path(&new_source, &path_str)?;
 
         // Get document ID
         let document_id = get_document_id(&path_str);
@@ -86,21 +86,11 @@ impl WorkspaceState {
         // Evaluate using bundle for cross-file imports
         debug!("Evaluating AST for DOM with bundle");
         let mut evaluator = Evaluator::with_document_id(&path_str);
-        let new_vdom = evaluator
-            .evaluate_bundle(&self.bundle, &path)
-            .map_err(|e| {
-                error!(error = ?e, "DOM bundle evaluation failed");
-                StateError::EvalError(format!("{:?}", e))
-            })?;
+        let new_vdom = evaluator.evaluate_bundle(&self.bundle, &path)?;
 
         debug!("Evaluating AST for CSS with bundle");
         let mut css_evaluator = CssEvaluator::with_document_id(&path_str);
-        let new_css = css_evaluator
-            .evaluate_bundle(&self.bundle, &path)
-            .map_err(|e| {
-                error!(error = ?e, "CSS bundle evaluation failed");
-                StateError::EvalError(format!("{:?}", e))
-            })?;
+        let new_css = css_evaluator.evaluate_bundle(&self.bundle, &path)?;
         info!(css_rules = new_css.rules.len(), "CSS evaluated");
 
         debug!(assets_count = "extracting", "Extracting assets");

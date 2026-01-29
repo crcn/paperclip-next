@@ -2,9 +2,7 @@
 
 use crate::renderer::render_component_html;
 use crate::server::start_disposable_server;
-use crate::types::{
-    CaptureArea, CaptureOptions, ComponentManifest, Screenshot, ViewSpec,
-};
+use crate::types::{CaptureArea, CaptureOptions, ComponentManifest, Screenshot, ViewSpec};
 use crate::{Result, VisionError};
 use headless_chrome::{Browser, LaunchOptions};
 use paperclip_parser::ast::Document;
@@ -20,8 +18,7 @@ impl VisionCapture {
     /// Create a new VisionCapture instance
     pub fn new(output_dir: PathBuf) -> Result<Self> {
         // Create output directory
-        std::fs::create_dir_all(&output_dir)
-            .map_err(|e| VisionError::Io(e))?;
+        std::fs::create_dir_all(&output_dir).map_err(|e| VisionError::Io(e))?;
 
         // Launch headless Chrome
         let browser = Browser::new(LaunchOptions {
@@ -38,11 +35,7 @@ impl VisionCapture {
     }
 
     /// Capture screenshots for all views in a file
-    pub fn capture_file(
-        &self,
-        path: &Path,
-        options: CaptureOptions,
-    ) -> Result<Vec<Screenshot>> {
+    pub fn capture_file(&self, path: &Path, options: CaptureOptions) -> Result<Vec<Screenshot>> {
         let (doc, views) = crate::parser::load_views_from_file(path)?;
 
         let mut screenshots = Vec::new();
@@ -82,7 +75,9 @@ impl VisionCapture {
         let (url, server_handle) = start_disposable_server(html)?;
 
         // Open in headless Chrome
-        let tab = self.browser.new_tab()
+        let tab = self
+            .browser
+            .new_tab()
             .map_err(|e| VisionError::Browser(e.to_string()))?;
 
         // Set viewport
@@ -119,8 +114,7 @@ impl VisionCapture {
         let output_path = self.output_dir.join(&filename);
 
         // Save image
-        std::fs::write(&output_path, &screenshot_data)
-            .map_err(|e| VisionError::Io(e))?;
+        std::fs::write(&output_path, &screenshot_data).map_err(|e| VisionError::Io(e))?;
 
         // Close tab
         tab.close(true)
@@ -141,10 +135,7 @@ impl VisionCapture {
     }
 
     /// Capture screenshot of component bounding box
-    fn capture_component_bounds(
-        &self,
-        tab: &headless_chrome::Tab,
-    ) -> Result<Vec<u8>> {
+    fn capture_component_bounds(&self, tab: &headless_chrome::Tab) -> Result<Vec<u8>> {
         // Find element with data-pc-root attribute
         let element = tab
             .wait_for_element("[data-pc-root]")
@@ -171,7 +162,9 @@ impl VisionCapture {
 
         // Parse JSON
         let bounds: serde_json::Value = serde_json::from_str(
-            bounds_json.as_str().ok_or_else(|| VisionError::Capture("Invalid bounds JSON".to_string()))?
+            bounds_json
+                .as_str()
+                .ok_or_else(|| VisionError::Capture("Invalid bounds JSON".to_string()))?,
         )
         .map_err(|e| VisionError::Capture(e.to_string()))?;
 
@@ -200,10 +193,7 @@ impl VisionCapture {
     }
 
     /// Capture full viewport screenshot
-    fn capture_full_viewport(
-        &self,
-        tab: &headless_chrome::Tab,
-    ) -> Result<Vec<u8>> {
+    fn capture_full_viewport(&self, tab: &headless_chrome::Tab) -> Result<Vec<u8>> {
         let screenshot_data = tab
             .capture_screenshot(
                 headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption::Png,
@@ -219,14 +209,14 @@ impl VisionCapture {
     /// Write manifest JSON
     fn write_manifest(&self, manifest: &ComponentManifest) -> Result<()> {
         let manifest_path = self.output_dir.join("manifest.json");
-        let json = serde_json::to_string_pretty(manifest)
-            .map_err(|e| VisionError::Io(std::io::Error::new(
+        let json = serde_json::to_string_pretty(manifest).map_err(|e| {
+            VisionError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 e.to_string(),
-            )))?;
+            ))
+        })?;
 
-        std::fs::write(manifest_path, json)
-            .map_err(|e| VisionError::Io(e))?;
+        std::fs::write(manifest_path, json).map_err(|e| VisionError::Io(e))?;
 
         Ok(())
     }

@@ -283,8 +283,10 @@ See the full implementation plan in `docs/plans/2026-01-27-feat-paperclip-next-f
 - ✅ Spike 0.2: Evaluator + Virtual DOM
 - ✅ Spike 0.3: gRPC Streaming Preview Loop
 - ✅ Spike 0.6: Semantic Identity Implementation
-- 🔲 Spike 0.4: Roundtrip Serialization
-- 🔲 Spike 0.5: Live Component Preview Loading
+- ✅ Spike 0.4: Roundtrip Serialization
+- ✅ Spike 0.5: Live Component Preview Loading
+- ✅ Spike 0.10: Override Path Resolution
+- ✅ Spike 0.12: Mutation System + Post-Effects
 - ... and more spikes to validate architecture
 
 **Recent Completions:**

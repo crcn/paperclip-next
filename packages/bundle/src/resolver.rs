@@ -1,8 +1,8 @@
+use paperclip_common::FileSystem;
 /// Import and name resolution
 ///
 /// Handles resolving import paths, alias mappings, and finding
 /// components, tokens, and styles across the bundle.
-
 use paperclip_parser::ast::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,28 +24,6 @@ pub enum ResolverError {
 
     #[error("Component '{name}' not found in bundle")]
     ComponentNotFound { name: String },
-}
-
-/// File system abstraction for path resolution
-pub trait FileSystem {
-    /// Check if a file exists
-    fn exists(&self, path: &Path) -> bool;
-
-    /// Canonicalize a path (resolve symlinks, make absolute)
-    fn canonicalize(&self, path: &Path) -> Result<PathBuf, std::io::Error>;
-}
-
-/// Real file system implementation
-pub struct RealFileSystem;
-
-impl FileSystem for RealFileSystem {
-    fn exists(&self, path: &Path) -> bool {
-        path.exists()
-    }
-
-    fn canonicalize(&self, path: &Path) -> Result<PathBuf, std::io::Error> {
-        path.canonicalize()
-    }
 }
 
 /// Handles import resolution and name lookups
@@ -105,12 +83,11 @@ impl Resolver {
         }
 
         // Canonicalize path (resolve symlinks, make absolute)
-        fs.canonicalize(&resolved).map_err(|_| {
-            ResolverError::ImportNotFound {
+        fs.canonicalize(&resolved)
+            .map_err(|_| ResolverError::ImportNotFound {
                 import_path: import_path.to_string(),
                 source_path: importing_file.to_string_lossy().to_string(),
-            }
-        })
+            })
     }
 
     /// Find a style by name, checking aliases
@@ -338,6 +315,7 @@ mod tests {
             variants: Vec::new(),
             body: None,
             slots: Vec::new(),
+            overrides: Vec::new(),
             span: Span::new(0, 0, "test".to_string()),
         });
         documents.insert(file.clone(), doc);

@@ -73,23 +73,27 @@
 //! ```
 
 mod document;
-mod mutations;
-mod session;
-mod pipeline;
 mod errors;
+mod mutations;
+mod pipeline;
+mod post_effects;
+mod session;
+mod undo_stack;
 
 #[cfg(feature = "collaboration")]
 mod crdt;
 
 pub use document::{Document, DocumentStorage};
-pub use mutations::{Mutation, MutationError, MutationResult};
-pub use session::{EditSession, PendingMutation};
-pub use pipeline::{Pipeline, PipelineResult};
 pub use errors::EditorError;
+pub use mutations::{Mutation, MutationError, MutationResult};
+pub use pipeline::{Pipeline, PipelineResult};
+pub use post_effects::{PostEffect, PostEffectEngine};
+pub use session::{EditSession, PendingMutation};
+pub use undo_stack::{MutationBatch, UndoStack};
 
 #[cfg(feature = "collaboration")]
 pub use crdt::CRDTDocument;
 
 // Re-export common types for convenience
-pub use paperclip_parser::ast::Document as ASTDocument;
 pub use paperclip_evaluator::VirtualDomDocument;
+pub use paperclip_parser::ast::Document as ASTDocument;

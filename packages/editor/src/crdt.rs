@@ -9,8 +9,8 @@
 //! 3. **Mutations map to CRDT ops**: High-level mutations → low-level CRDT operations
 //! 4. **Convergence guaranteed**: CRDT handles merging, we define semantics
 
-use paperclip_parser::ast::{Document as ASTDocument};
 use crate::{Mutation, MutationError};
+use paperclip_parser::ast::Document as ASTDocument;
 use yrs::{Doc as YDoc, ReadTxn, Transact};
 
 /// CRDT-backed document
@@ -28,9 +28,7 @@ pub struct CRDTDocument {
 impl CRDTDocument {
     /// Create new CRDT document
     pub fn new() -> Self {
-        Self {
-            doc: YDoc::new(),
-        }
+        Self { doc: YDoc::new() }
     }
 
     /// Create from existing AST

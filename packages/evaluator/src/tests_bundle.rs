@@ -418,7 +418,7 @@ mod bundle_tests {
         bundle.add_document(PathBuf::from("/main.pc"), doc);
 
         // Add asset reference
-        use crate::bundle::{AssetReference, AssetType};
+        use paperclip_bundle::{AssetReference, AssetType};
         bundle.add_asset(AssetReference {
             path: "/images/logo.png".to_string(),
             asset_type: AssetType::Image,

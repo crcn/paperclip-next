@@ -74,8 +74,6 @@ impl CompilerContext {
     }
 
     pub fn merge_buffer(&self, other: &CompilerContext) {
-        self.buffer
-            .borrow_mut()
-            .push_str(&other.buffer.borrow());
+        self.buffer.borrow_mut().push_str(&other.buffer.borrow());
     }
 }

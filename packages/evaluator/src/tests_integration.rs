@@ -18,7 +18,9 @@ public component Badge {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("count".to_string(), Value::Number(5.0));
+    evaluator
+        .context
+        .set_variable("count".to_string(), Value::Number(5.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
@@ -50,8 +52,12 @@ public component StatusBadge {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("isActive".to_string(), Value::Boolean(true));
-    evaluator.context.set_variable("isVisible".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isActive".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("isVisible".to_string(), Value::Boolean(true));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
@@ -76,19 +82,21 @@ public component UserGreeting {
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
 
-    evaluator.context.set_variable("firstName".to_string(), Value::String("Alice".to_string()));
-    evaluator.context.set_variable("lastName".to_string(), Value::String("Smith".to_string()));
+    evaluator
+        .context
+        .set_variable("firstName".to_string(), Value::String("Alice".to_string()));
+    evaluator
+        .context
+        .set_variable("lastName".to_string(), Value::String("Smith".to_string()));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
     // Check greeting rendered correctly
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "Welcome, Alice Smith!"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "Welcome, Alice Smith!"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -104,20 +112,20 @@ public component Calculator {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("progress".to_string(), Value::Number(0.75));
+    evaluator
+        .context
+        .set_variable("progress".to_string(), Value::Number(0.75));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
     // Should have calculated percentage
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => {
-                    assert_eq!(content, "Progress: 75%");
-                }
-                _ => panic!("Expected text node"),
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => {
+                assert_eq!(content, "Progress: 75%");
             }
-        }
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }
@@ -150,8 +158,12 @@ public component Button {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
 
     // Enable both variants
-    evaluator.context.set_variable("primary".to_string(), Value::Boolean(true));
-    evaluator.context.set_variable("hover".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("primary".to_string(), Value::Boolean(true));
+    evaluator
+        .context
+        .set_variable("hover".to_string(), Value::Boolean(true));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
@@ -216,8 +228,13 @@ public component FormattedDate {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("date".to_string(), Value::String("2024-01-01".to_string()));
-    evaluator.context.set_variable("format".to_string(), Value::String("YYYY-MM-DD".to_string()));
+    evaluator
+        .context
+        .set_variable("date".to_string(), Value::String("2024-01-01".to_string()));
+    evaluator.context.set_variable(
+        "format".to_string(),
+        Value::String("YYYY-MM-DD".to_string()),
+    );
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
@@ -251,8 +268,12 @@ public component PriceDisplay {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("price".to_string(), Value::Number(25.0));
-    evaluator.context.set_variable("quantity".to_string(), Value::Number(5.0));
+    evaluator
+        .context
+        .set_variable("price".to_string(), Value::Number(25.0));
+    evaluator
+        .context
+        .set_variable("quantity".to_string(), Value::Number(5.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
@@ -264,12 +285,13 @@ public component PriceDisplay {
 
             // Check total calculation exists
             match &children[0] {
-                VNode::Element { children: total_children, .. } => {
-                    match &total_children[0] {
-                        VNode::Text { content } => assert_eq!(content, "Total: 125"),
-                        _ => panic!("Expected text node"),
-                    }
-                }
+                VNode::Element {
+                    children: total_children,
+                    ..
+                } => match &total_children[0] {
+                    VNode::Text { content } => assert_eq!(content, "Total: 125"),
+                    _ => panic!("Expected text node"),
+                },
                 _ => panic!("Expected element"),
             }
         }
@@ -288,20 +310,24 @@ public component Calculator {
 "#;
     let doc = parse_with_path(source, "/test.pc").unwrap();
     let mut evaluator = Evaluator::with_document_id("/test.pc");
-    evaluator.context.set_variable("a".to_string(), Value::Number(2.0));
-    evaluator.context.set_variable("b".to_string(), Value::Number(3.0));
-    evaluator.context.set_variable("c".to_string(), Value::Number(4.0));
+    evaluator
+        .context
+        .set_variable("a".to_string(), Value::Number(2.0));
+    evaluator
+        .context
+        .set_variable("b".to_string(), Value::Number(3.0));
+    evaluator
+        .context
+        .set_variable("c".to_string(), Value::Number(4.0));
 
     let vdoc = evaluator.evaluate(&doc).unwrap();
 
     // Should evaluate as 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
     match &vdoc.nodes[0] {
-        VNode::Element { children, .. } => {
-            match &children[0] {
-                VNode::Text { content } => assert_eq!(content, "Result: 14"),
-                _ => panic!("Expected text node"),
-            }
-        }
+        VNode::Element { children, .. } => match &children[0] {
+            VNode::Text { content } => assert_eq!(content, "Result: 14"),
+            _ => panic!("Expected text node"),
+        },
         _ => panic!("Expected element node"),
     }
 }

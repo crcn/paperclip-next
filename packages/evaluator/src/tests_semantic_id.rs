@@ -1,8 +1,8 @@
 /// Tests for semantic ID generation during evaluation
 use crate::evaluator::Evaluator;
-use crate::semantic_identity::SemanticSegment;
 use crate::vdom::VNode;
 use paperclip_parser::parse_with_path;
+use paperclip_semantics::SemanticSegment;
 
 #[test]
 fn test_simple_element_semantic_id() {
@@ -21,7 +21,10 @@ fn test_simple_element_semantic_id() {
     assert_eq!(vdom.nodes.len(), 1);
 
     // Extract semantic ID from button element
-    if let VNode::Element { semantic_id, tag, .. } = &vdom.nodes[0] {
+    if let VNode::Element {
+        semantic_id, tag, ..
+    } = &vdom.nodes[0]
+    {
         assert_eq!(tag, "button");
 
         // Semantic ID should have segments: Component("Button") -> Element("button")

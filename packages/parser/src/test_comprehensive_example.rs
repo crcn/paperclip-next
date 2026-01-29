@@ -34,6 +34,9 @@ mod comprehensive_example_test {
             }
         }
 
-        assert!(result.is_ok(), "Comprehensive example should parse successfully");
+        assert!(
+            result.is_ok(),
+            "Comprehensive example should parse successfully"
+        );
     }
 }

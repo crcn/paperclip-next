@@ -49,13 +49,9 @@ pub mod scope;
 pub mod types;
 
 // Re-export main types for convenience
-pub use codegen::{
-    rust::RustGenerator, typescript::TypeScriptGenerator, CodeGenerator,
-};
+pub use codegen::{rust::RustGenerator, typescript::TypeScriptGenerator, CodeGenerator};
 pub use error::{InferenceError, InferenceResult};
 pub use inference::InferenceEngine;
 pub use options::InferenceOptions;
 pub use scope::Scope;
-pub use types::{
-    ElementType, FunctionType, LiteralType, ObjectType, PropertyType, Type,
-};
+pub use types::{ElementType, FunctionType, LiteralType, ObjectType, PropertyType, Type};

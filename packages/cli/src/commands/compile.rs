@@ -127,12 +127,7 @@ fn find_pc_files(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn compile_file(
-    file_path: &Path,
-    args: &CompileArgs,
-    src_dir: &Path,
-    cwd: &str,
-) -> Result<String> {
+fn compile_file(file_path: &Path, args: &CompileArgs, src_dir: &Path, cwd: &str) -> Result<String> {
     // Read source file
     let source = fs::read_to_string(file_path)?;
 
@@ -140,7 +135,8 @@ fn compile_file(
     let document = parse(&source).map_err(|e| {
         // Use pretty error formatting
         use paperclip_parser::error::pretty;
-        let file_name = file_path.file_name()
+        let file_name = file_path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
         anyhow!("\n{}", pretty::format_error(&e, file_name, &source))
@@ -155,9 +151,7 @@ fn compile_file(
             };
             compile_to_react(&document, options).map_err(|e| anyhow!(e))?
         }
-        "css" => {
-            compile_to_css(&document).map_err(|e| anyhow!(e.to_string()))?
-        }
+        "css" => compile_to_css(&document).map_err(|e| anyhow!(e.to_string()))?,
         "html" => {
             let options = HtmlOptions::default();
             compile_to_html(&document, options).map_err(|e| anyhow!(e))?

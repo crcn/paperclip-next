@@ -411,7 +411,12 @@ mod new_features_tests {
 
         // Should be parseable again
         let reparsed = parse(&serialized);
-        assert!(reparsed.is_ok(), "Reparse error: {:?}\n\nSerialized:\n{}", reparsed.err(), serialized);
+        assert!(
+            reparsed.is_ok(),
+            "Reparse error: {:?}\n\nSerialized:\n{}",
+            reparsed.err(),
+            serialized
+        );
 
         // Structure should match
         let reparsed_doc = reparsed.unwrap();
