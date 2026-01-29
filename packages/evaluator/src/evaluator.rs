@@ -1,5 +1,8 @@
+use crate::css_evaluator::CssEvaluator;
+use crate::css_optimizer::optimize_css_rules;
+use crate::css_minifier::minify_css_rules;
 use crate::utils::get_style_namespace;
-use crate::vdom::{VNode, VirtualDomDocument};
+use crate::vdom::{CssRule, VNode, VirtualDomDocument};
 use paperclip_bundle::Bundle;
 use paperclip_parser::ast::*;
 use paperclip_semantics::{SemanticID, SemanticSegment};
@@ -9,6 +12,35 @@ use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
 
 pub type EvalResult<T> = Result<T, EvalError>;
+
+/// Check if a name is a known HTML tag
+fn is_html_tag(name: &str) -> bool {
+    matches!(
+        name,
+        // Common HTML tags
+        "a" | "abbr" | "address" | "area" | "article" | "aside" | "audio" |
+        "b" | "base" | "bdi" | "bdo" | "blockquote" | "body" | "br" | "button" |
+        "canvas" | "caption" | "cite" | "code" | "col" | "colgroup" |
+        "data" | "datalist" | "dd" | "del" | "details" | "dfn" | "dialog" | "div" | "dl" | "dt" |
+        "em" | "embed" |
+        "fieldset" | "figcaption" | "figure" | "footer" | "form" |
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "header" | "hgroup" | "hr" | "html" |
+        "i" | "iframe" | "img" | "input" | "ins" |
+        "kbd" |
+        "label" | "legend" | "li" | "link" |
+        "main" | "map" | "mark" | "menu" | "meta" | "meter" |
+        "nav" | "noscript" |
+        "object" | "ol" | "optgroup" | "option" | "output" |
+        "p" | "picture" | "pre" | "progress" |
+        "q" |
+        "rp" | "rt" | "ruby" |
+        "s" | "samp" | "script" | "search" | "section" | "select" | "slot" | "small" | "source" | "span" | "strong" | "style" | "sub" | "summary" | "sup" | "svg" |
+        "table" | "tbody" | "td" | "template" | "textarea" | "tfoot" | "th" | "thead" | "time" | "title" | "tr" | "track" |
+        "u" | "ul" |
+        "var" | "video" |
+        "wbr"
+    )
+}
 
 #[derive(Error, Debug)]
 pub enum EvalError {
@@ -33,6 +65,13 @@ pub enum EvalError {
 
     #[error("Evaluation error at {span:?}: {message}")]
     EvaluationError { message: String, span: Span },
+
+    #[error("Recursive component detected: {component}\nCall stack: {}\n{}", call_stack.join(" → "), hint.as_ref().unwrap_or(&String::new()))]
+    RecursiveComponent {
+        component: String,
+        call_stack: Vec<String>,
+        hint: Option<String>,
+    },
 }
 
 /// Context for evaluation
@@ -49,6 +88,8 @@ pub struct EvalContext {
     component_key_counters: HashMap<String, usize>,
     /// Slot content - maps slot name to inserted content
     slot_content: HashMap<String, Vec<Element>>,
+    /// Component call stack for cycle detection (prevents infinite recursion)
+    component_stack: Vec<String>,
 }
 
 impl EvalContext {
@@ -62,6 +103,7 @@ impl EvalContext {
             semantic_path: Vec::new(),
             component_key_counters: HashMap::new(),
             slot_content: HashMap::new(),
+            component_stack: Vec::new(),
         }
     }
 
@@ -198,7 +240,47 @@ impl Evaluator {
             }
         }
 
-        info!(nodes = vdoc.nodes.len(), "Document evaluation complete");
+        // Evaluate CSS
+        debug!("Starting CSS evaluation");
+        let mut css_evaluator = CssEvaluator::with_document_id(&self.context.document_id);
+        match css_evaluator.evaluate(doc) {
+            Ok(css_doc) => {
+                let original_count = css_doc.rules.len();
+                debug!(rules = original_count, "CSS evaluation succeeded");
+
+                // Convert CSS evaluator rules to VDOM rules
+                let mut css_rules = Vec::new();
+                for css_rule in css_doc.rules {
+                    css_rules.push(CssRule {
+                        selector: css_rule.selector,
+                        properties: css_rule.properties,
+                        media_query: css_rule.media_query,
+                    });
+                }
+
+                // Optimize CSS rules (deduplicate, merge)
+                debug!(before = original_count, "Optimizing CSS rules");
+                css_rules = optimize_css_rules(css_rules);
+                let optimized_count = css_rules.len();
+                debug!(
+                    after = optimized_count,
+                    saved = original_count - optimized_count,
+                    "CSS optimization complete"
+                );
+
+                // Minify CSS (remove whitespace, shorten values)
+                minify_css_rules(&mut css_rules);
+                debug!("CSS minification complete");
+
+                vdoc.styles = css_rules;
+            }
+            Err(e) => {
+                warn!(error = %e, "CSS evaluation failed - continuing without styles");
+                // Don't fail the entire evaluation if CSS fails
+            }
+        }
+
+        info!(nodes = vdoc.nodes.len(), styles = vdoc.styles.len(), "Document evaluation complete");
         Ok(vdoc)
     }
 
@@ -309,7 +391,7 @@ impl Evaluator {
     /// NOTE: Caller is responsible for pushing/popping the component segment
     #[instrument(skip(self, props), fields(component_name = name, prop_count = props.len()))]
     fn evaluate_component_with_props(
-        &self,
+        &mut self,
         name: &str,
         props: &HashMap<String, Value>,
     ) -> EvalResult<VNode> {
@@ -320,12 +402,49 @@ impl Evaluator {
     /// NOTE: Caller is responsible for pushing/popping the component segment
     #[instrument(skip(self, props, children), fields(component_name = name, prop_count = props.len(), child_count = children.len()))]
     fn evaluate_component_with_props_and_children(
-        &self,
+        &mut self,
         name: &str,
         props: &HashMap<String, Value>,
         children: &[Element],
     ) -> EvalResult<VNode> {
-        debug!("Evaluating component with props and children");
+        debug!(
+            component = name,
+            stack = ?self.context.component_stack,
+            "Evaluating component with props and children"
+        );
+
+        // Check for circular component dependency
+        if self.context.component_stack.contains(&name.to_string()) {
+            // Build full call stack for error message
+            let mut call_stack = self.context.component_stack.clone();
+            call_stack.push(name.to_string());
+
+            // Generate helpful hint based on the cycle
+            let hint = if call_stack.len() == 2 && call_stack[0] == name {
+                // Direct recursion (A → A)
+                Some(format!(
+                    "Component '{}' renders itself unconditionally. Add a conditional (if), a repeat loop with different data, or ensure recursion is data-dependent.",
+                    name
+                ))
+            } else {
+                // Indirect recursion (A → B → A)
+                Some(format!(
+                    "Component cycle detected. Ensure components do not form circular dependencies."
+                ))
+            };
+
+            error!(
+                component = name,
+                stack = ?call_stack,
+                "Circular component dependency detected"
+            );
+
+            return Err(EvalError::RecursiveComponent {
+                component: name.to_string(),
+                call_stack,
+                hint,
+            });
+        }
 
         let component = self.context.components.get(name).ok_or_else(|| {
             error!(component_name = name, "Component not found");
@@ -334,6 +453,13 @@ impl Evaluator {
                 span: Span::new(0, 0, "error".to_string()), // TODO: Pass span from call site
             }
         })?;
+
+        // Clone component body to avoid borrow checker issues
+        let component_body = component.body.clone();
+
+        // Push component to call stack BEFORE cloning context
+        // This ensures the cloned context includes the updated stack
+        self.context.component_stack.push(name.to_string());
 
         // Create a new context scope with props as variables
         let mut scoped_evaluator = Evaluator {
@@ -361,13 +487,18 @@ impl Evaluator {
                 .insert("children".to_string(), children.to_vec());
         }
 
-        if let Some(body) = &component.body {
+        let result = if let Some(body) = &component_body {
             scoped_evaluator.evaluate_element(body)
         } else {
             // Empty component - return empty div with semantic ID
             let semantic_id = scoped_evaluator.context.get_semantic_id();
             Ok(VNode::element("div", semantic_id))
-        }
+        };
+
+        // Pop component from call stack in SELF context (not scoped)
+        self.context.component_stack.pop();
+
+        result
     }
 
     /// Evaluate an element
@@ -460,7 +591,12 @@ impl Evaluator {
                             vnode = vnode.with_child(child_vnode);
                         }
                         Err(err) => {
-                            // In dev mode, add error node for failed child
+                            // RecursiveComponent errors are fatal - propagate immediately
+                            if matches!(err, EvalError::RecursiveComponent { .. }) {
+                                return Err(err);
+                            }
+
+                            // Other errors: In dev mode, add error node for failed child
                             warn!(error = %err, "Child element evaluation failed");
                             let span = match child {
                                 Element::Tag { span, .. } => Some(span.clone()),
@@ -509,6 +645,67 @@ impl Evaluator {
                 children,
                 span: _span,
             } => {
+                // Check if this is an HTML tag (not a component)
+                if is_html_tag(name) {
+                    // Treat as HTML tag element
+                    self.context.push_segment(SemanticSegment::Element {
+                        tag: name.clone(),
+                        role: None,
+                        ast_id: format!("{}-html-tag", name),
+                    });
+
+                    let semantic_id = self.context.get_semantic_id();
+                    let mut vnode = VNode::element(name, semantic_id);
+
+                    // Evaluate props as attributes
+                    for (key, expr) in props {
+                        match self.evaluate_expression(expr) {
+                            Ok(value) => {
+                                vnode = vnode.with_attr(key, value.to_string());
+                            }
+                            Err(err) => {
+                                warn!(attr = key, error = %err, "Attribute evaluation failed");
+                            }
+                        }
+                    }
+
+                    // Evaluate children
+                    for child in children {
+                        match self.evaluate_element(child) {
+                            Ok(child_vnode) => {
+                                vnode = vnode.with_child(child_vnode);
+                            }
+                            Err(err) => {
+                                // RecursiveComponent errors are fatal - propagate immediately
+                                if matches!(err, EvalError::RecursiveComponent { .. }) {
+                                    return Err(err);
+                                }
+
+                                warn!(error = %err, "Child element evaluation failed");
+                                let child_span = match child {
+                                    Element::Tag { span, .. } => Some(span.clone()),
+                                    Element::Text { span, .. } => Some(span.clone()),
+                                    Element::Instance { span, .. } => Some(span.clone()),
+                                    Element::Conditional { span, .. } => Some(span.clone()),
+                                    Element::Repeat { span, .. } => Some(span.clone()),
+                                    Element::SlotInsert { span, .. } => Some(span.clone()),
+                                    Element::Insert { span, .. } => Some(span.clone()),
+                                };
+                                let error_id = self.context.get_semantic_id();
+                                vnode = vnode.with_child(VNode::error(
+                                    format!("Error: {}", err),
+                                    child_span,
+                                    error_id,
+                                ));
+                            }
+                        }
+                    }
+
+                    self.context.pop_segment();
+                    return Ok(vnode);
+                }
+
+                // Otherwise, treat as component instance
                 // Extract or generate component key
                 let key = props
                     .get("key")
@@ -671,7 +868,7 @@ impl Evaluator {
             }
 
             Element::Repeat {
-                item_name: _item_name,
+                item_name,
                 collection,
                 body,
                 span,
@@ -696,7 +893,7 @@ impl Evaluator {
                 let mut wrapper = VNode::element("div", semantic_id);
 
                 if let Value::Array(items) = collection_value {
-                    for (index, _item) in items.iter().enumerate() {
+                    for (index, item) in items.iter().enumerate() {
                         // Check if first child has explicit key attribute
                         let explicit_key =
                             if let Some(Element::Tag { attributes, .. }) = body.first() {
@@ -724,7 +921,11 @@ impl Evaluator {
                             key: item_key.clone(),
                         });
 
-                        // TODO: Set item variable in context
+                        // Set item variable in context for this iteration
+                        // Save old value if it exists (to restore later)
+                        let old_value = self.context.variables.get(item_name).cloned();
+                        self.context.set_variable(item_name.clone(), item.clone());
+
                         for (child_idx, child) in body.iter().enumerate() {
                             match self.evaluate_element(child) {
                                 Ok(mut child_vnode) => {
@@ -753,6 +954,13 @@ impl Evaluator {
                                     ));
                                 }
                             }
+                        }
+
+                        // Restore old value or remove variable
+                        if let Some(old) = old_value {
+                            self.context.set_variable(item_name.clone(), old);
+                        } else {
+                            self.context.variables.remove(item_name);
                         }
 
                         self.context.pop_segment();

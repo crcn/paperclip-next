@@ -1,0 +1,10 @@
+public component HelloWorld {
+    render div {
+        h1 {
+            text "Hello, Live Reload!"
+        }
+        p {
+            text "This is a live preview test."
+        }
+    }
+}

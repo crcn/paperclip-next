@@ -22,6 +22,7 @@ pub enum CssError {
 pub struct CssRule {
     pub selector: String,
     pub properties: HashMap<String, String>,
+    pub media_query: Option<String>,
 }
 
 /// CSS document - collection of CSS rules
@@ -71,6 +72,7 @@ impl Default for VirtualCssDocument {
 /// CSS Evaluator - extracts styles from PC components
 pub struct CssEvaluator {
     tokens: HashMap<String, String>,
+    triggers: HashMap<String, Vec<String>>,  // trigger name -> selectors
     document_id: String,
 }
 
@@ -83,6 +85,7 @@ impl CssEvaluator {
         let document_id = paperclip_parser::get_document_id(path);
         Self {
             tokens: HashMap::new(),
+            triggers: HashMap::new(),
             document_id,
         }
     }
@@ -105,6 +108,12 @@ impl CssEvaluator {
         for token in &doc.tokens {
             debug!(token_name = %token.name, token_value = %token.value, "Registering CSS token");
             self.tokens.insert(token.name.clone(), token.value.clone());
+        }
+
+        // Register triggers
+        for trigger in &doc.triggers {
+            debug!(trigger_name = %trigger.name, selectors = ?trigger.selectors, "Registering CSS trigger");
+            self.triggers.insert(trigger.name.clone(), trigger.selectors.clone());
         }
 
         let mut css_doc = VirtualCssDocument::new();
@@ -257,6 +266,7 @@ impl CssEvaluator {
         // Create :root rule with CSS variables if we have properties
         if !variables.is_empty() {
             rules.push(CssRule {
+                            media_query: None,
                 selector: ":root".to_string(),
                 properties: variables,
             });
@@ -298,6 +308,7 @@ impl CssEvaluator {
         }
 
         rules.push(CssRule {
+                            media_query: None,
             selector: format!(".{}", class_name),
             properties: class_properties,
         });
@@ -316,8 +327,8 @@ impl CssEvaluator {
 
         if let Some(body) = &component.body {
             // Extract styles from component body
-            // Pass component name for scoping and all styles for extends resolution
-            self.extract_element_styles(body, Some(component_name), &mut rules, all_styles)?;
+            // Pass component name for scoping, all styles for extends, and variants for trigger resolution
+            self.extract_element_styles(body, Some(component_name), &mut rules, all_styles, &component.variants)?;
         }
 
         Ok(rules)
@@ -330,6 +341,7 @@ impl CssEvaluator {
         component_name: Option<&str>,
         rules: &mut Vec<CssRule>,
         all_styles: &[StyleDecl],
+        component_variants: &[Variant],
     ) -> CssResult<()> {
         match element {
             Element::Tag {
@@ -345,9 +357,13 @@ impl CssEvaluator {
 
                 // Collect styles from style blocks
                 if !styles.is_empty() {
-                    let mut properties = HashMap::new();
+                    // Separate base styles from variant styles
+                    let mut base_properties = HashMap::new();
+                    let mut variant_styles: HashMap<Vec<String>, HashMap<String, String>> = HashMap::new();
 
                     for style_block in styles {
+                        let mut properties = HashMap::new();
+
                         // Handle extends - pull in CSS variables from extended styles
                         for extend_ref in &style_block.extends {
                             if let Some(extended_style) =
@@ -373,26 +389,138 @@ impl CssEvaluator {
                             let resolved_value = self.resolve_value(value)?;
                             properties.insert(key.clone(), resolved_value);
                         }
+
+                        // Categorize as base or variant styles
+                        if style_block.variants.is_empty() {
+                            // Base styles
+                            for (key, value) in properties {
+                                base_properties.insert(key, value);
+                            }
+                        } else {
+                            // Variant styles
+                            variant_styles.entry(style_block.variants.clone())
+                                .or_insert_with(HashMap::new)
+                                .extend(properties);
+                        }
                     }
 
-                    if !properties.is_empty() {
+                    // Generate base CSS rule
+                    if !base_properties.is_empty() {
                         rules.push(CssRule {
+                            media_query: None,
                             selector: format!(".{}", class_name),
-                            properties,
+                            properties: base_properties,
                         });
+                    }
+
+                    // Generate variant CSS rules
+                    for (variant_names, properties) in variant_styles {
+                        if properties.is_empty() {
+                            continue;
+                        }
+
+                        // Resolve trigger selectors for these variants
+                        let mut trigger_selectors = Vec::new();
+
+                        for variant_name in &variant_names {
+                            // Find the variant definition
+                            if let Some(variant_def) = component_variants.iter().find(|v| &v.name == variant_name) {
+                                // Resolve all trigger references in this variant
+                                for trigger_ref in &variant_def.triggers {
+                                    // Check if it's a trigger reference or inline selector
+                                    if let Some(trigger_defs) = self.triggers.get(trigger_ref) {
+                                        // It's a trigger reference - use its selectors
+                                        trigger_selectors.extend(trigger_defs.clone());
+                                    } else {
+                                        // It's an inline selector
+                                        trigger_selectors.push(trigger_ref.clone());
+                                    }
+                                }
+                            } else {
+                                // Variant not found, use name as class
+                                trigger_selectors.push(format!(".{}", variant_name));
+                            }
+                        }
+
+                        // Separate media queries from selectors
+                        let mut media_queries = Vec::new();
+                        let mut regular_selectors = Vec::new();
+
+                        for trigger_selector in &trigger_selectors {
+                            if trigger_selector.starts_with('@') {
+                                media_queries.push(trigger_selector.clone());
+                            } else {
+                                regular_selectors.push(trigger_selector.clone());
+                            }
+                        }
+
+                        // Generate rules for regular selectors
+                        if !regular_selectors.is_empty() {
+                            for selector in &regular_selectors {
+                                let final_selector = if selector.starts_with('.') || selector.starts_with(':') {
+                                    format!(".{}{}", class_name, selector)
+                                } else {
+                                    format!(".{} {}", class_name, selector)
+                                };
+
+                                rules.push(CssRule {
+                                    selector: final_selector,
+                                    properties: properties.clone(),
+                                    media_query: None,
+                                });
+                            }
+                        }
+
+                        // Generate rules wrapped in media queries
+                        for media_query in &media_queries {
+                            rules.push(CssRule {
+                                selector: format!(".{}", class_name),
+                                properties: properties.clone(),
+                                media_query: Some(media_query.clone()),
+                            });
+                        }
+
+                        // If both exist, generate combined rule (media query + selector)
+                        if !media_queries.is_empty() && !regular_selectors.is_empty() {
+                            for media_query in &media_queries {
+                                for selector in &regular_selectors {
+                                    let final_selector = if selector.starts_with('.') || selector.starts_with(':') {
+                                        format!(".{}{}", class_name, selector)
+                                    } else {
+                                        format!(".{} {}", class_name, selector)
+                                    };
+
+                                    rules.push(CssRule {
+                                        selector: final_selector,
+                                        properties: properties.clone(),
+                                        media_query: Some(media_query.clone()),
+                                    });
+                                }
+                            }
+                        }
+
+                        // If no trigger selectors resolved, fall back to variant name
+                        if trigger_selectors.is_empty() {
+                            let variant_classes = variant_names.join(".");
+                            rules.push(CssRule {
+                                selector: format!(".{}.{}", class_name, variant_classes),
+                                properties,
+                                media_query: None,
+                            });
+                        }
                     }
                 }
 
                 // Recurse into children
                 for child in children {
-                    self.extract_element_styles(child, component_name, rules, all_styles)?;
+                    self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                 }
             }
 
             Element::Instance { children, .. } => {
                 // Component instances - recurse into children
                 for child in children {
-                    self.extract_element_styles(child, component_name, rules, all_styles)?;
+                    self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                 }
             }
 
@@ -403,11 +531,11 @@ impl CssEvaluator {
             } => {
                 // Extract from both branches
                 for child in then_branch {
-                    self.extract_element_styles(child, component_name, rules, all_styles)?;
+                    self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                 }
                 if let Some(else_br) = else_branch {
                     for child in else_br {
-                        self.extract_element_styles(child, component_name, rules, all_styles)?;
+                        self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                     }
                 }
             }
@@ -415,7 +543,7 @@ impl CssEvaluator {
             Element::Repeat { body, .. } => {
                 // Extract from repeat body
                 for child in body {
-                    self.extract_element_styles(child, component_name, rules, all_styles)?;
+                    self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                 }
             }
 
@@ -426,7 +554,7 @@ impl CssEvaluator {
             Element::Insert { content, .. } => {
                 // Extract styles from insert content
                 for child in content {
-                    self.extract_element_styles(child, component_name, rules, all_styles)?;
+                    self.extract_element_styles(child, component_name, rules, all_styles, component_variants)?;
                 }
             }
         }
@@ -548,6 +676,7 @@ mod tests {
         properties.insert("font-size".to_string(), "16px".to_string());
 
         css_doc.add_rule(CssRule {
+                media_query: None,
             selector: ".button".to_string(),
             properties,
         });

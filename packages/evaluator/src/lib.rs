@@ -1,4 +1,8 @@
 pub mod css_evaluator;
+pub mod css_optimizer;
+pub mod css_minifier;
+pub mod css_splitter;
+pub mod css_differ;
 pub mod evaluator;
 pub mod override_resolution;
 pub mod utils;

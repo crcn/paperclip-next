@@ -150,6 +150,8 @@ pub struct VirtualDomDocument {
 pub struct CssRule {
     pub selector: String,
     pub properties: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_query: Option<String>,
 }
 
 impl VirtualDomDocument {
@@ -168,6 +170,7 @@ impl VirtualDomDocument {
         self.styles.push(CssRule {
             selector: selector.into(),
             properties,
+            media_query: None,
         });
     }
 }

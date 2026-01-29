@@ -453,7 +453,20 @@ impl<'src> Parser<'src> {
         if self.match_token(Token::Trigger) {
             self.expect(Token::LBrace)?;
             while !self.check(Token::RBrace) && !self.is_at_end() {
-                triggers.push(self.expect_string()?);
+                // Variant triggers can be either:
+                // - String literal (direct CSS selector): ":hover"
+                // - Identifier (trigger reference): mobile
+                let trigger = match self.peek() {
+                    Some((Token::String(_), _)) => self.expect_string()?,
+                    Some((Token::Ident(_), _)) => self.expect_ident()?,
+                    _ => {
+                        return Err(ParseError::invalid_syntax_span(
+                            self.peek_span(),
+                            "Expected trigger reference (identifier) or CSS selector (string)",
+                        ))
+                    }
+                };
+                triggers.push(trigger);
                 if !self.match_token(Token::Comma) {
                     break;
                 }
@@ -590,10 +603,19 @@ impl<'src> Parser<'src> {
             Some((Token::Insert, _)) => self.parse_insert(start),
             Some((Token::Ident(_), _)) => {
                 let name = self.expect_ident()?;
-                // Could be component instance or slot insert
-                // Component instance if followed by ( or {
+
+                // Distinguish between HTML tags (lowercase) and Components (capitalized)
+                let first_char = name.chars().next().unwrap_or('_');
+                let is_html_tag = first_char.is_lowercase();
+
                 if self.check(Token::LParen) || self.check(Token::LBrace) {
-                    self.parse_instance(name, start)
+                    if is_html_tag {
+                        // Lowercase identifier: parse as HTML tag element
+                        self.parse_tag_element(name, start)
+                    } else {
+                        // Capitalized identifier: parse as component instance
+                        self.parse_instance(name, start)
+                    }
                 } else {
                     // Treat as slot insert (bare identifier)
                     let end = self.current_pos();

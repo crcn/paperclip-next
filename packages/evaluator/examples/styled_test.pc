@@ -1,0 +1,43 @@
+public style card {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+public component StyledCard {
+    variant hover trigger {
+        ":hover"
+    }
+
+    render div {
+        style extends card {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        style variant hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        h1 {
+            style {
+                color: #333;
+                margin: 0;
+                font-size: 24px;
+            }
+            text "Styled Component"
+        }
+
+        p {
+            style {
+                color: #666;
+                line-height: 1.6;
+                margin: 0;
+            }
+            text "This component has CSS styles applied!"
+        }
+    }
+}
