@@ -342,7 +342,7 @@ impl WorkspaceService for WorkspaceServer {
 }
 
 /// Convert byte offset span to line/column span
-fn span_to_source_span(span: &paperclip_parser::Span, source: &str) -> proto::SourceSpan {
+fn span_to_source_span(span: &paperclip_parser::ast::Span, source: &str) -> proto::SourceSpan {
     let (start_line, start_col) = byte_offset_to_line_col(source, span.start);
     let (end_line, end_col) = byte_offset_to_line_col(source, span.end);
 
@@ -380,13 +380,13 @@ fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
 
 /// Extract outline nodes from an element tree
 fn extract_element_nodes(
-    element: &paperclip_parser::Element,
+    element: &paperclip_parser::ast::Element,
     parent_id: Option<&str>,
     nodes: &mut Vec<proto::OutlineNode>,
     parent_child_ids: &mut Vec<String>,
     source: &str,
 ) {
-    use paperclip_parser::Element;
+    use paperclip_parser::ast::Element;
 
     match element {
         Element::Tag {

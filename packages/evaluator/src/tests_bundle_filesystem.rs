@@ -1,5 +1,6 @@
 /// Tests for Bundle with MockFileSystem
 use crate::*;
+use paperclip_bundle::{AssetReference, AssetType, Bundle, BundleError};
 use paperclip_parser::parse_with_path;
 use std::path::PathBuf;
 

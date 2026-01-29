@@ -11,6 +11,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 paperclip-parser = { path = "../parser" }
+paperclip-bundle = { path = "../bundle" }
 paperclip-editor = { path = "../editor" }
 paperclip-evaluator = { path = "../evaluator" }
 

@@ -9,5 +9,5 @@ pub use server::{proto, WorkspaceServer};
 pub use state::{FileState, StateError, WorkspaceState};
 pub use watcher::{FileWatcher, WatcherError, WatcherResult};
 
-// Re-export asset types from evaluator
-pub use paperclip_evaluator::{AssetReference, AssetType};
+// Re-export asset types from bundle
+pub use paperclip_bundle::{AssetReference, AssetType};

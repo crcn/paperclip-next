@@ -51,12 +51,3 @@ pub use validator::{ValidationLevel, ValidationWarning, Validator};
 pub use vdom::CssRule as VDomCssRule;
 pub use vdom::{VNode, VirtualDomDocument};
 pub use vdom_differ::{diff_vdocument, VDocPatch};
-
-// Re-export bundle types for backward compatibility
-pub use paperclip_bundle::{
-    AssetReference, AssetType, Bundle, BundleError, FileSystem, GraphError, GraphManager,
-    MockFileSystem, RealFileSystem, Resolver, ResolverError,
-};
-
-// Re-export semantic identity types for backward compatibility
-pub use paperclip_semantics::{Branch, SemanticID, SemanticSegment, SlotVariant};

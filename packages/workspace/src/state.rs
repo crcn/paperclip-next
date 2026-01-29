@@ -1,5 +1,6 @@
+use paperclip_bundle::{AssetReference, AssetType, Bundle};
 use paperclip_evaluator::{
-    diff_vdocument, AssetReference, AssetType, Bundle, CssError, CssEvaluator, EvalError,
+    diff_vdocument, CssError, CssEvaluator, EvalError,
     Evaluator, VDocPatch, VirtualCssDocument, VirtualDomDocument,
 };
 use paperclip_parser::{ast::Document, get_document_id, parse_with_path, ParseError};

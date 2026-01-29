@@ -1,5 +1,6 @@
 /// Bundle evaluation tests - cross-file imports and CSS variables
 use crate::*;
+use paperclip_bundle::Bundle;
 use paperclip_parser::parse_with_path;
 use std::path::PathBuf;
 

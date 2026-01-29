@@ -2173,6 +2173,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "notify",
+ "paperclip-bundle",
  "paperclip-evaluator",
  "paperclip-parser",
  "serde",
@@ -2298,6 +2299,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "notify",
+ "paperclip-bundle",
  "paperclip-editor",
  "paperclip-evaluator",
  "paperclip-parser",

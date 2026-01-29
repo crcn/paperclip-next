@@ -17,7 +17,8 @@
 //! ```
 
 use crate::{EditorError, Mutation, MutationResult};
-use paperclip_evaluator::{Bundle, Evaluator, VirtualDomDocument};
+use paperclip_bundle::Bundle;
+use paperclip_evaluator::{Evaluator, VirtualDomDocument};
 use paperclip_parser::{ast::Document as ASTDocument, parse};
 use std::path::PathBuf;
 

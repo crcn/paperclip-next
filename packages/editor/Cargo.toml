@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 paperclip-parser = { path = "../parser" }
+paperclip-bundle = { path = "../bundle" }
 paperclip-evaluator = { path = "../evaluator" }
 
 # CRDT backend (Yjs for Rust)
