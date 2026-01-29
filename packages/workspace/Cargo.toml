@@ -30,6 +30,9 @@ tokio-stream.workspace = true
 # File watching
 notify.workspace = true
 
+# Unicode normalization for path security
+unicode-normalization = "0.1"
+
 [build-dependencies]
 tonic-build.workspace = true
 

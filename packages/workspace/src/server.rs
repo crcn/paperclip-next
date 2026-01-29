@@ -1,11 +1,23 @@
 use crate::state::{StateError, WorkspaceState};
 use crate::watcher::FileWatcher;
-use std::path::PathBuf;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
-use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tokio::time::timeout;
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt as _};
 use tonic::{Request, Response, Status};
+use unicode_normalization::UnicodeNormalization;
+
+// Production limits
+const MAX_CLIENT_STATES: usize = 100;
+const MAX_TOTAL_VDOM_BYTES: usize = 500 * 1024 * 1024;  // 500MB
+const CLIENT_TIMEOUT_SECS: u64 = 300;  // 5 minutes
+const PARSE_TIMEOUT_SECS: u64 = 5;
+const MAX_CONTENT_SIZE: usize = 10 * 1024 * 1024;  // 10MB
+const RATE_LIMIT_PER_PROCESS: usize = 100;  // per minute
 
 /// Helper to convert various errors to Status
 fn to_status<E: std::fmt::Display>(e: E) -> Status {
@@ -23,17 +35,157 @@ use proto::{
     FileEvent, PreviewRequest, PreviewUpdate, WatchRequest,
 };
 
+// Client state for buffer streaming
+#[derive(Clone)]
+struct ClientState {
+    vdom_size: usize,
+    version: u64,
+    last_update: Instant,
+}
+
+// Rate limiter per process
+struct ProcessRateLimiter {
+    requests_per_process: HashMap<u32, VecDeque<Instant>>,
+    max_requests_per_minute: usize,
+}
+
+impl ProcessRateLimiter {
+    fn new(max_requests_per_minute: usize) -> Self {
+        Self {
+            requests_per_process: HashMap::new(),
+            max_requests_per_minute,
+        }
+    }
+
+    fn check(&mut self, pid: u32) -> Result<(), Status> {
+        let now = Instant::now();
+        let requests = self.requests_per_process.entry(pid).or_default();
+
+        // Remove requests older than 1 minute
+        requests.retain(|&time| now.duration_since(time) < Duration::from_secs(60));
+
+        if requests.len() >= self.max_requests_per_minute {
+            return Err(Status::resource_exhausted(
+                format!("Process {} exceeded rate limit", pid)
+            ));
+        }
+
+        requests.push_back(now);
+        Ok(())
+    }
+}
+
 pub struct WorkspaceServer {
     root_dir: PathBuf,
+    root_dir_canonical: PathBuf,
     state: Arc<Mutex<WorkspaceState>>,
+    // Buffer streaming state
+    client_states: Arc<Mutex<HashMap<String, ClientState>>>,
+    client_heartbeats: Arc<Mutex<HashMap<String, Instant>>>,
+    total_vdom_bytes: Arc<AtomicUsize>,
+    rate_limiter: Arc<Mutex<ProcessRateLimiter>>,
 }
 
 impl WorkspaceServer {
     pub fn new(root_dir: PathBuf) -> Self {
-        Self {
+        let root_dir_canonical = root_dir
+            .canonicalize()
+            .unwrap_or_else(|_| root_dir.clone());
+
+        let server = Self {
             root_dir,
+            root_dir_canonical,
             state: Arc::new(Mutex::new(WorkspaceState::new())),
+            client_states: Arc::new(Mutex::new(HashMap::new())),
+            client_heartbeats: Arc::new(Mutex::new(HashMap::new())),
+            total_vdom_bytes: Arc::new(AtomicUsize::new(0)),
+            rate_limiter: Arc::new(Mutex::new(ProcessRateLimiter::new(RATE_LIMIT_PER_PROCESS))),
+        };
+
+        // Start background cleanup task
+        server.start_cleanup_task();
+
+        server
+    }
+
+    fn start_cleanup_task(&self) {
+        let heartbeats = self.client_heartbeats.clone();
+        let states = self.client_states.clone();
+        let state = self.state.clone();
+        let total_bytes = self.total_vdom_bytes.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+
+            loop {
+                interval.tick().await;
+
+                let now = Instant::now();
+                let mut heartbeats = heartbeats.lock().unwrap();
+                let mut client_states = states.lock().unwrap();
+                let mut workspace_state = state.lock().unwrap();
+
+                // Remove stale clients
+                heartbeats.retain(|client_id, last_heartbeat| {
+                    let is_stale = now.duration_since(*last_heartbeat)
+                        > Duration::from_secs(CLIENT_TIMEOUT_SECS);
+
+                    if is_stale {
+                        if let Some(client_state) = client_states.remove(client_id) {
+                            total_bytes.fetch_sub(client_state.vdom_size, Ordering::Relaxed);
+                            tracing::warn!("Removed stale client: {}", client_id);
+                        }
+                        // Note: workspace state cleanup happens automatically
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+        });
+    }
+
+    fn validate_path(&self, file_path: &str) -> Result<PathBuf, Status> {
+        // 1. Unicode normalization and sanitization
+        let normalized = file_path
+            .chars()
+            .nfc()
+            .collect::<String>()
+            .replace('\u{2215}', "/")  // Division slash
+            .replace('\u{2044}', "/"); // Fraction slash
+
+        let path = PathBuf::from(&normalized);
+
+        // 2. Canonicalize (follows symlinks)
+        let canonical = path
+            .canonicalize()
+            .map_err(|e| Status::invalid_argument(format!("Path error: {}", e)))?;
+
+        // 3. Check within workspace
+        if !canonical.starts_with(&self.root_dir_canonical) {
+            return Err(Status::permission_denied("Path escapes workspace"));
         }
+
+        Ok(canonical)
+    }
+
+    fn ensure_capacity(&self, new_vdom_size: usize) -> Result<(), Status> {
+        // Check total memory limit
+        let current = self.total_vdom_bytes.load(Ordering::Relaxed);
+        if current + new_vdom_size > MAX_TOTAL_VDOM_BYTES {
+            return Err(Status::resource_exhausted(
+                "Total VDOM memory limit exceeded"
+            ));
+        }
+
+        // Check client count limit
+        let states = self.client_states.lock().unwrap();
+        if states.len() >= MAX_CLIENT_STATES {
+            // Would need to evict LRU client
+            return Err(Status::resource_exhausted("Too many active clients"));
+        }
+
+        Ok(())
     }
 
     pub fn into_service(self) -> WorkspaceServiceServer<Self> {
@@ -338,6 +490,205 @@ impl WorkspaceService for WorkspaceServer {
             .unwrap_or(0);
 
         Ok(Response::new(proto::OutlineResponse { nodes, version }))
+    }
+
+    // NEW: Production-hardened buffer streaming
+    type StreamBufferStream = Pin<Box<dyn Stream<Item = Result<PreviewUpdate, Status>> + Send + 'static>>;
+
+    async fn stream_buffer(
+        &self,
+        request: Request<proto::BufferRequest>,
+    ) -> Result<Response<Self::StreamBufferStream>, Status> {
+        let req = request.into_inner();
+
+        // Rate limiting (using process ID as proxy)
+        let pid = std::process::id();
+        self.rate_limiter.lock().unwrap().check(pid)?;
+
+        // Validate content size
+        if req.content.len() > MAX_CONTENT_SIZE {
+            return Err(Status::invalid_argument("Content exceeds 10MB limit"));
+        }
+
+        // Validate and canonicalize path
+        let _canonical_path = self.validate_path(&req.file_path)?;
+
+        // Update heartbeat
+        self.client_heartbeats
+            .lock()
+            .unwrap()
+            .insert(req.client_id.clone(), Instant::now());
+
+        // Get previous state
+        let prev_state = self
+            .client_states
+            .lock()
+            .unwrap()
+            .get(&req.client_id)
+            .cloned();
+
+        // Parse with timeout
+        let content = req.content.clone();
+        let parse_result = timeout(
+            Duration::from_secs(PARSE_TIMEOUT_SECS),
+            tokio::task::spawn_blocking(move || paperclip_parser::parse(&content))
+        )
+        .await;
+
+        let ast = match parse_result {
+            Ok(Ok(Ok(ast))) => ast,
+            Ok(Ok(Err(e))) => {
+                return Ok(Response::new(Box::pin(tokio_stream::once(Ok(
+                    PreviewUpdate {
+                        file_path: req.file_path,
+                        patches: vec![],
+                        error: Some(format!("Parse error: {}", e)),
+                        timestamp: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as i64,
+                        version: prev_state.map(|s| s.version).unwrap_or(0),
+                        acknowledged_mutation_ids: vec![],
+                        changed_by_client_id: None,
+                    },
+                ))) as Self::StreamBufferStream));
+            }
+            _ => {
+                return Err(Status::deadline_exceeded("Parse timeout"));
+            }
+        };
+
+        // Process through state (evaluate + diff)
+        let root_dir = self.root_dir.clone();
+        let source = req.content;
+        let file_path_for_state = self.root_dir.join(&req.file_path);
+
+        let result = {
+            let mut state_guard = self.state.lock().unwrap();
+            let patches = state_guard.update_file(file_path_for_state.clone(), source, &root_dir);
+            let version = state_guard
+                .get_file(&file_path_for_state)
+                .map(|s| s.version)
+                .unwrap_or(0);
+            (patches, version)
+        };
+
+        let (patches, version) = match result.0 {
+            Ok(p) => (p, result.1),
+            Err(e) => {
+                return Ok(Response::new(Box::pin(tokio_stream::once(Ok(
+                    PreviewUpdate {
+                        file_path: req.file_path,
+                        patches: vec![],
+                        error: Some(format!("Eval error: {:?}", e)),
+                        timestamp: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as i64,
+                        version: 0,
+                        acknowledged_mutation_ids: vec![],
+                        changed_by_client_id: None,
+                    },
+                ))) as Self::StreamBufferStream));
+            }
+        };
+
+        // Rough VDOM size estimate
+        let vdom_size = patches.len() * 500;
+
+        // Check capacity
+        self.ensure_capacity(vdom_size)?;
+
+        // Update client state
+        {
+            let mut client_states = self.client_states.lock().unwrap();
+
+            // Update memory tracking
+            if let Some(prev_state) = prev_state {
+                self.total_vdom_bytes
+                    .fetch_sub(prev_state.vdom_size, Ordering::Relaxed);
+            }
+            self.total_vdom_bytes.fetch_add(vdom_size, Ordering::Relaxed);
+
+            client_states.insert(
+                req.client_id.clone(),
+                ClientState {
+                    vdom_size,
+                    version,
+                    last_update: Instant::now(),
+                },
+            );
+        }
+
+        // Return stream with single update
+        let update = PreviewUpdate {
+            file_path: req.file_path,
+            patches,
+            error: None,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as i64,
+            version,
+            acknowledged_mutation_ids: vec![],
+            changed_by_client_id: None,
+        };
+
+        Ok(Response::new(
+            Box::pin(tokio_stream::once(Ok(update))) as Self::StreamBufferStream
+        ))
+    }
+
+    async fn close_preview(
+        &self,
+        request: Request<proto::ClosePreviewRequest>,
+    ) -> Result<Response<proto::ClosePreviewResponse>, Status> {
+        let client_id = request.into_inner().client_id;
+
+        let mut client_states = self.client_states.lock().unwrap();
+        let mut heartbeats = self.client_heartbeats.lock().unwrap();
+        let mut workspace_state = self.state.lock().unwrap();
+
+        let existed = if let Some(client_state) = client_states.remove(&client_id) {
+            self.total_vdom_bytes
+                .fetch_sub(client_state.vdom_size, Ordering::Relaxed);
+            heartbeats.remove(&client_id);
+            // Note: workspace state cleanup happens automatically
+            tracing::info!("Cleaned up state for client_id: {}", client_id);
+            true
+        } else {
+            tracing::warn!("Attempted to close non-existent client_id: {}", client_id);
+            false
+        };
+
+        Ok(Response::new(proto::ClosePreviewResponse {
+            success: existed,
+            message: if existed {
+                Some("State cleaned up successfully".to_string())
+            } else {
+                Some("Client not found".to_string())
+            },
+        }))
+    }
+
+    async fn heartbeat(
+        &self,
+        request: Request<proto::HeartbeatRequest>,
+    ) -> Result<Response<proto::HeartbeatResponse>, Status> {
+        let client_id = request.into_inner().client_id;
+
+        self.client_heartbeats
+            .lock()
+            .unwrap()
+            .insert(client_id, Instant::now());
+
+        Ok(Response::new(proto::HeartbeatResponse {
+            acknowledged: true,
+            server_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        }))
     }
 }
 

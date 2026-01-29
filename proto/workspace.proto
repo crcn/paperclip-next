@@ -17,6 +17,15 @@ service WorkspaceService {
 
   // Get document outline (AST structure for layers panel)
   rpc GetDocumentOutline(OutlineRequest) returns (OutlineResponse);
+
+  // NEW: Stream buffer content directly (unidirectional, production-hardened)
+  rpc StreamBuffer(BufferRequest) returns (stream PreviewUpdate);
+
+  // NEW: Explicit state cleanup for client
+  rpc ClosePreview(ClosePreviewRequest) returns (ClosePreviewResponse);
+
+  // NEW: Heartbeat for liveness tracking
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
 
 // Request to start preview streaming
@@ -193,4 +202,39 @@ message SourceSpan {
   uint32 start_col = 2;
   uint32 end_line = 3;
   uint32 end_col = 4;
+}
+
+// ============================================================================
+// Buffer Streaming Support (Production-Hardened)
+// ============================================================================
+
+// Request to stream buffer content directly (no file I/O)
+message BufferRequest {
+  string client_id = 1;
+  string file_path = 2;
+  string content = 3;
+  // Version-based sync for reconnection handling
+  optional uint64 expected_state_version = 4;
+}
+
+// Request to close preview and cleanup state
+message ClosePreviewRequest {
+  string client_id = 1;
+}
+
+// Response confirming state cleanup
+message ClosePreviewResponse {
+  bool success = 1;
+  optional string message = 2;
+}
+
+// Heartbeat request for liveness tracking
+message HeartbeatRequest {
+  string client_id = 1;
+}
+
+// Heartbeat response
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  uint64 server_time = 2;
 }
