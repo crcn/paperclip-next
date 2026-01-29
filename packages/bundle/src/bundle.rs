@@ -1,3 +1,74 @@
+//! # Bundle - Document Collection with Dependency Graph
+//!
+//! Manages parsed Paperclip documents with dependency tracking and name resolution.
+//!
+//! ## Purpose
+//!
+//! Bundle is the **single source of truth** for document lifetimes in the Paperclip system.
+//! It maintains parsed documents, tracks dependencies between them, resolves imports, and
+//! manages shared assets.
+//!
+//! ## Document Lifetime Ownership
+//!
+//! **CRITICAL RULE: Bundle owns all Document lifetimes.**
+//!
+//! Clients should **avoid holding long-lived `&Document` references**. Instead:
+//!
+//! ### ❌ Avoid - Ties client lifetime to Bundle
+//! ```rust
+//! let doc: &Document = bundle.get_document(path)?;
+//! cache.store(doc);  // Dangerous if bundle rebuilds
+//! ```
+//!
+//! ### ✅ Prefer - Client gets IDs or copies, not refs
+//! ```rust
+//! let doc_id: &str = bundle.get_document_id(path)?;
+//! let component: Component = bundle.find_component("Button", path)?.clone();
+//! ```
+//!
+//! **Why this matters:**
+//! - Enables incremental rebuilds without invalidating client state
+//! - Prevents clients from observing intermediate states during updates
+//! - Allows Bundle to optimize internal representation
+//! - Makes Bundle's invariants easier to maintain
+//!
+//! ## Architecture
+//!
+//! Bundle delegates to specialized modules:
+//! - **GraphManager**: Dependency graph (cycles, topological sort)
+//! - **Resolver**: Name resolution (components, styles, tokens)
+//!
+//! ## Encapsulation
+//!
+//! All fields are private. Access only through public methods:
+//! - `get_document()` - Access parsed documents
+//! - `get_dependencies()` - Query dependency graph
+//! - `find_component()` - Resolve component names
+//! - `find_style()` - Resolve style mixins
+//! - `find_token()` - Resolve design tokens
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use paperclip_bundle::Bundle;
+//! use paperclip_parser::parse;
+//! use std::path::PathBuf;
+//!
+//! let mut bundle = Bundle::new();
+//!
+//! // Add documents
+//! let doc = parse("component Button { ... }")?;
+//! bundle.add_document(PathBuf::from("button.pc"), doc);
+//!
+//! // Build dependency graph
+//! bundle.build_dependencies(&project_root)?;
+//!
+//! // Query
+//! if let Some(doc) = bundle.get_document(&path) {
+//!     // Use document (short-lived reference only!)
+//! }
+//! ```
+
 use crate::graph::{GraphError, GraphManager};
 use crate::resolver::{Resolver, ResolverError};
 use paperclip_parser::ast::*;
