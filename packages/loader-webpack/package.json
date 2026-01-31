@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "packageManager": "yarn@4.1.0",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --listEmittedFiles",
     "watch": "tsc --watch",
     "prepublishOnly": "yarn build"
   },

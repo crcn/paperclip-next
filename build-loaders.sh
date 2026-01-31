@@ -15,8 +15,10 @@ fi
 # Build WASM core
 echo "📦 Building WASM core..."
 cd packages/wasm
-wasm-pack build --target bundler --out-dir pkg
-wasm-pack build --target nodejs --out-dir pkg-node
+echo "   Building bundler target..."
+wasm-pack build --target bundler --out-dir pkg 2>&1 | while read line; do echo "   $line"; done
+echo "   Building nodejs target..."
+wasm-pack build --target nodejs --out-dir pkg-node 2>&1 | while read line; do echo "   $line"; done
 echo "✅ WASM core built"
 echo
 
@@ -26,8 +28,10 @@ cd ../..
 if [ -d "packages/loader-webpack" ]; then
     echo "📦 Building webpack loader..."
     cd packages/loader-webpack
-    yarn install 2>/dev/null || true
-    yarn build
+    echo "   Installing dependencies..."
+    yarn install 2>/dev/null || npm install 2>/dev/null || true
+    echo "   Compiling TypeScript..."
+    yarn build 2>&1 | while read line; do echo "   $line"; done
     echo "✅ Webpack loader built"
     echo
     cd ../..
@@ -37,8 +41,10 @@ fi
 if [ -d "packages/plugin-vite" ]; then
     echo "📦 Building vite plugin..."
     cd packages/plugin-vite
-    yarn install 2>/dev/null || true
-    yarn build
+    echo "   Installing dependencies..."
+    yarn install 2>/dev/null || npm install 2>/dev/null || true
+    echo "   Compiling TypeScript..."
+    yarn build 2>&1 | while read line; do echo "   $line"; done
     echo "✅ Vite plugin built"
     echo
     cd ../..
@@ -48,8 +54,10 @@ fi
 if [ -d "packages/plugin-rollup" ]; then
     echo "📦 Building rollup plugin..."
     cd packages/plugin-rollup
-    yarn install 2>/dev/null || true
-    yarn build
+    echo "   Installing dependencies..."
+    yarn install 2>/dev/null || npm install 2>/dev/null || true
+    echo "   Compiling TypeScript..."
+    yarn build 2>&1 | while read line; do echo "   $line"; done
     echo "✅ Rollup plugin built"
     echo
     cd ../..

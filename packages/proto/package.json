@@ -1,0 +1,31 @@
+{
+  "name": "@paperclip/proto",
+  "version": "0.1.0",
+  "description": "Protobuf definitions for Paperclip - shared between Rust and TypeScript",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib",
+    "src/*.proto"
+  ],
+  "scripts": {
+    "build": "yarn build:proto && yarn build:tsc",
+    "build:proto": "mkdir -p src/generated && protoc --proto_path=src --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=esModuleInterop=true,useOptionals=messages,outputClientImpl=false,outputServices=false --ts_proto_out=./src/generated src/workspace.proto src/patches.proto src/vdom.proto",
+    "build:tsc": "tsc",
+    "clean": "rm -rf lib src/generated"
+  },
+  "devDependencies": {
+    "ts-proto": "^1.165.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0"
+  }
+}

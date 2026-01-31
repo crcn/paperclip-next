@@ -8,9 +8,11 @@ import * as grpc from '@grpc/grpc-js';
 // @ts-ignore - Using Yarn PnP
 import * as protoLoader from '@grpc/proto-loader';
 // @ts-ignore - Using Yarn PnP
-import { join, dirname } from 'path';
+import { dirname } from 'path';
 // @ts-ignore - Using Yarn PnP
 import { fileURLToPath } from 'url';
+// @ts-ignore - Using Yarn PnP
+import { createRequire } from 'module';
 import type { Transport } from './interface.js';
 import { ConnectionError, RpcError } from './interface.js';
 import type {
@@ -26,6 +28,27 @@ import type {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+
+/**
+ * Resolve proto files from @paperclip/proto package
+ */
+function resolveProtoPath(): { protoPath: string; includePath: string } {
+  try {
+    // Resolve the @paperclip/proto package location
+    const protoPackagePath = dirname(require.resolve('@paperclip/proto/package.json'));
+    return {
+      protoPath: `${protoPackagePath}/src/workspace.proto`,
+      includePath: `${protoPackagePath}/src`,
+    };
+  } catch {
+    // Fallback to relative path for development
+    return {
+      protoPath: `${__dirname}/../../../../proto/src/workspace.proto`,
+      includePath: `${__dirname}/../../../../proto/src`,
+    };
+  }
+}
 
 /**
  * Configuration for GrpcTransport
@@ -33,13 +56,13 @@ const __dirname = dirname(__filename);
 export interface GrpcTransportConfig {
   /**
    * Path to workspace.proto file
-   * Defaults to ../../proto/workspace.proto relative to this file
+   * Auto-resolved from @paperclip/proto package if not specified
    */
   protoPath?: string;
 
   /**
    * Directory containing proto files
-   * Defaults to ../../proto relative to this file
+   * Auto-resolved from @paperclip/proto package if not specified
    */
   protoIncludePath?: string;
 
@@ -63,11 +86,10 @@ export class GrpcTransport implements Transport {
   private config: Required<GrpcTransportConfig>;
 
   constructor(config: GrpcTransportConfig = {}) {
+    const defaultPaths = resolveProtoPath();
     this.config = {
-      protoPath:
-        config.protoPath || join(__dirname, '../../../../proto/workspace.proto'),
-      protoIncludePath:
-        config.protoIncludePath || join(__dirname, '../../../../proto'),
+      protoPath: config.protoPath || defaultPaths.protoPath,
+      protoIncludePath: config.protoIncludePath || defaultPaths.includePath,
       credentials: config.credentials || grpc.credentials.createInsecure(),
       channelOptions: config.channelOptions || {},
     };

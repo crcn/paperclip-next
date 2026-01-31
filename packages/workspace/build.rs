@@ -11,6 +11,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ".paperclip.vdom",
             "::paperclip_evaluator::vdom_differ::proto::vdom",
         )
-        .compile(&["../../proto/workspace.proto"], &["../../proto"])?;
+        .compile(&["../proto/src/workspace.proto"], &["../proto/src"])?;
     Ok(())
 }

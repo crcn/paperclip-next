@@ -6,6 +6,24 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
+import { createRequire } from 'module';
+
+/**
+ * Resolve proto files from @paperclip/proto package
+ */
+function resolveProtoPath(): { protoPath: string; includePath: string } {
+  try {
+    // For CommonJS (VS Code extensions)
+    const protoPackagePath = path.dirname(require.resolve('@paperclip/proto/package.json'));
+    return {
+      protoPath: path.join(protoPackagePath, 'src', 'workspace.proto'),
+      includePath: path.join(protoPackagePath, 'src'),
+    };
+  } catch {
+    // Fallback - shouldn't happen if @paperclip/proto is installed
+    throw new Error('@paperclip/proto package not found. Make sure it is installed.');
+  }
+}
 
 // Production constants
 const INITIAL_BACKOFF_MS = 1000;
@@ -41,12 +59,14 @@ export class WorkspaceClient {
   private heartbeatTimer?: NodeJS.Timeout;
   private connectionStateCallbacks: Set<ConnectionStateCallback> = new Set();
   private isShuttingDown = false;
+  private protoPath: string;
+  private protoIncludePath: string;
 
-  constructor(
-    private serverAddress: string,
-    private protoPath: string
-  ) {
+  constructor(private serverAddress: string) {
     this.clientId = `vscode-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const paths = resolveProtoPath();
+    this.protoPath = paths.protoPath;
+    this.protoIncludePath = paths.includePath;
   }
 
   async connect(): Promise<void> {
@@ -60,7 +80,8 @@ export class WorkspaceClient {
         longs: String,
         enums: String,
         defaults: true,
-        oneofs: true
+        oneofs: true,
+        includeDirs: [this.protoIncludePath]
       });
 
       const proto: any = grpc.loadPackageDefinition(packageDefinition);
