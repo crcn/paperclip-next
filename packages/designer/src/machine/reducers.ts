@@ -7,9 +7,58 @@ import {
   centerTransformOnBounds,
   centerTransformZoom,
   getFramesBounds,
+  screenToCanvas,
   ZOOM_SENSITIVITY,
 } from "./geometry";
-import { DesignerEvent, DesignerState } from "./state";
+import {
+  DesignerEvent,
+  DesignerState,
+  FrameBounds,
+  Point,
+  ResizeHandle,
+} from "./state";
+
+const MIN_FRAME_SIZE = 50;
+
+/**
+ * Calculate new frame bounds based on resize handle drag
+ */
+function calculateResizedBounds(
+  startBounds: FrameBounds,
+  handle: ResizeHandle,
+  delta: Point
+): FrameBounds {
+  let { x, y, width, height } = startBounds;
+
+  // Handle horizontal resize
+  if (handle.includes("w")) {
+    const newWidth = Math.max(MIN_FRAME_SIZE, width - delta.x);
+    if (newWidth !== width) {
+      x = x + (width - newWidth);
+      width = newWidth;
+    }
+  } else if (handle.includes("e")) {
+    width = Math.max(MIN_FRAME_SIZE, width + delta.x);
+  }
+
+  // Handle vertical resize
+  if (handle.includes("n")) {
+    const newHeight = Math.max(MIN_FRAME_SIZE, height - delta.y);
+    if (newHeight !== height) {
+      y = y + (height - newHeight);
+      height = newHeight;
+    }
+  } else if (handle.includes("s")) {
+    height = Math.max(MIN_FRAME_SIZE, height + delta.y);
+  }
+
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
 
 export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => {
   switch (event.type) {
@@ -184,6 +233,79 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
       }
 
       return newState;
+    }
+
+    case "tool/resizeStart": {
+      const { handle, mouse } = event.payload;
+      const frameIndex = state.selectedFrameIndex;
+
+      if (frameIndex === undefined || !state.frames[frameIndex]) {
+        return state;
+      }
+
+      const startBounds = state.frames[frameIndex].bounds;
+
+      return {
+        ...state,
+        tool: {
+          ...state.tool,
+          drag: {
+            handle,
+            frameIndex,
+            startBounds,
+            startMouse: mouse,
+            currentMouse: mouse,
+          },
+        },
+      };
+    }
+
+    case "tool/resizeMove": {
+      const drag = state.tool.drag;
+      if (!drag) return state;
+
+      return {
+        ...state,
+        tool: {
+          ...state.tool,
+          drag: {
+            ...drag,
+            currentMouse: event.payload,
+          },
+        },
+      };
+    }
+
+    case "tool/resizeEnd": {
+      const drag = state.tool.drag;
+      if (!drag) return state;
+
+      // Calculate the delta in canvas space
+      const { transform } = state.canvas;
+      const startCanvas = screenToCanvas(drag.startMouse, transform);
+      const endCanvas = screenToCanvas(drag.currentMouse, transform);
+      const delta = {
+        x: endCanvas.x - startCanvas.x,
+        y: endCanvas.y - startCanvas.y,
+      };
+
+      // Calculate final bounds
+      const newBounds = calculateResizedBounds(drag.startBounds, drag.handle, delta);
+
+      // Update the frame
+      const frames = [...state.frames];
+      if (frames[drag.frameIndex]) {
+        frames[drag.frameIndex] = { ...frames[drag.frameIndex], bounds: newBounds };
+      }
+
+      return {
+        ...state,
+        frames,
+        tool: {
+          ...state.tool,
+          drag: undefined,
+        },
+      };
     }
 
     default:

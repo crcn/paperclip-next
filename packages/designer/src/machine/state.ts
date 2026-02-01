@@ -67,6 +67,26 @@ export const DEFAULT_FRAME_BOUNDS: FrameBounds = {
 };
 
 // ============================================================================
+// Tool Types
+// ============================================================================
+
+export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+export interface DragState {
+  handle: ResizeHandle;
+  frameIndex: number;
+  startBounds: FrameBounds;
+  startMouse: Point;
+  currentMouse: Point;
+}
+
+export interface ToolState {
+  drag?: DragState;
+}
+
+export const DEFAULT_TOOL_STATE: ToolState = {};
+
+// ============================================================================
 // Canvas State
 // ============================================================================
 
@@ -94,6 +114,7 @@ export interface DesignerState {
   selectedFrameIndex?: number;
   rects: Record<string, Box>;
   centeredInitial: boolean;
+  tool: ToolState;
 }
 
 export const DEFAULT_DESIGNER_STATE: DesignerState = {
@@ -101,6 +122,7 @@ export const DEFAULT_DESIGNER_STATE: DesignerState = {
   frames: [],
   rects: {},
   centeredInitial: false,
+  tool: DEFAULT_TOOL_STATE,
 };
 
 // ============================================================================
@@ -116,4 +138,7 @@ export type DesignerEvent =
   | BaseEvent<"frame/selected", { index: number }>
   | BaseEvent<"frame/resized", { index: number; bounds: FrameBounds }>
   | BaseEvent<"frame/moved", { index: number; position: Point }>
-  | BaseEvent<"document/loaded", { document: VDocument; frames: Frame[] }>;
+  | BaseEvent<"document/loaded", { document: VDocument; frames: Frame[] }>
+  | BaseEvent<"tool/resizeStart", { handle: ResizeHandle; mouse: Point }>
+  | BaseEvent<"tool/resizeMove", Point>
+  | BaseEvent<"tool/resizeEnd">;

@@ -1,9 +1,8 @@
 "use client";
 
-import React, { memo, useCallback, useEffect, useRef } from "react";
-import { useDispatch } from "@paperclip/common";
+import React, { memo, useEffect, useRef } from "react";
 import { VNode } from "@paperclip/proto";
-import { DesignerEvent, Frame as FrameType } from "../machine";
+import { Frame as FrameType } from "../machine";
 
 // ============================================================================
 // Component
@@ -22,12 +21,11 @@ export const Frame = memo(function Frame({
   node,
   isSelected,
 }: FrameProps) {
-  const { iframeRef, onClick } = useFrame({ index, node });
+  const { iframeRef } = useFrame({ index, node });
   const { bounds } = frame;
 
   return (
     <div
-      onClick={onClick}
       style={{
         position: "absolute",
         left: bounds.x,
@@ -40,7 +38,7 @@ export const Frame = memo(function Frame({
           : "0 2px 8px rgba(0,0,0,0.1)",
         borderRadius: 4,
         overflow: "hidden",
-        cursor: "pointer",
+        pointerEvents: "none",
       }}
     >
       <div
@@ -82,11 +80,9 @@ interface UseFrameOptions {
 
 interface UseFrameResult {
   iframeRef: React.RefObject<HTMLIFrameElement>;
-  onClick: () => void;
 }
 
 function useFrame({ index, node }: UseFrameOptions): UseFrameResult {
-  const dispatch = useDispatch<DesignerEvent>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   console.log("[Frame] useFrame hook - index:", index, "node:", node);
@@ -133,11 +129,7 @@ function useFrame({ index, node }: UseFrameOptions): UseFrameResult {
     }
   }, [node, index]);
 
-  const onClick = useCallback(() => {
-    dispatch({ type: "frame/selected", payload: { index } });
-  }, [dispatch, index]);
-
-  return { iframeRef, onClick };
+  return { iframeRef };
 }
 
 // ============================================================================

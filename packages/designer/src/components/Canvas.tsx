@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { useDispatch } from "@paperclip/common";
 import { DesignerMachine, DesignerEvent, Transform } from "../machine";
 import { Frames } from "./Frames";
+import { ToolOverlay } from "./ToolOverlay";
 
 // ============================================================================
 // Component
@@ -44,16 +45,7 @@ export function Canvas({ className, style }: CanvasProps) {
         <Frames />
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          pointerEvents: "none",
-        }}
-      />
+      <ToolOverlay />
     </div>
   );
 }
