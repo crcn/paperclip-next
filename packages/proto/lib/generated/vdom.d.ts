@@ -6,6 +6,12 @@ export interface VNode {
     text?: TextNode | undefined;
     comment?: CommentNode | undefined;
     component?: ComponentNode | undefined;
+    /** Inline error display */
+    error?: ErrorNode | undefined;
+}
+export interface ErrorNode {
+    message: string;
+    semanticId: string;
 }
 export interface ElementNode {
     tag: string;
@@ -15,8 +21,11 @@ export interface ElementNode {
     styles: {
         [key: string]: string;
     };
-    /** Field 5 (id) removed - use semantic_id instead */
     children: VNode[];
+    /** Stable identity for diffing */
+    semanticId: string;
+    /** Explicit key for repeat items */
+    key?: string | undefined;
 }
 export interface ElementNode_AttributesEntry {
     key: string;
@@ -37,8 +46,9 @@ export interface ComponentNode {
     props: {
         [key: string]: string;
     };
-    /** Field 4 (id) removed - use semantic_id instead */
     children: VNode[];
+    /** Stable identity for diffing */
+    semanticId: string;
 }
 export interface ComponentNode_PropsEntry {
     key: string;
@@ -65,6 +75,14 @@ export declare const VNode: {
     toJSON(message: VNode): unknown;
     create<I extends Exact<DeepPartial<VNode>, I>>(base?: I): VNode;
     fromPartial<I extends Exact<DeepPartial<VNode>, I>>(object: I): VNode;
+};
+export declare const ErrorNode: {
+    encode(message: ErrorNode, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ErrorNode;
+    fromJSON(object: any): ErrorNode;
+    toJSON(message: ErrorNode): unknown;
+    create<I extends Exact<DeepPartial<ErrorNode>, I>>(base?: I): ErrorNode;
+    fromPartial<I extends Exact<DeepPartial<ErrorNode>, I>>(object: I): ErrorNode;
 };
 export declare const ElementNode: {
     encode(message: ElementNode, writer?: _m0.Writer): _m0.Writer;

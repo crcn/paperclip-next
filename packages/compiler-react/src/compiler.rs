@@ -187,7 +187,7 @@ fn compile_element(
             span: _,
         } => compile_tag(tag_name, attributes, styles, children, ctx, is_root),
 
-        Element::Text { content, span: _ } => {
+        Element::Text { content, .. } => {
             compile_text_content(content, ctx);
             Ok(())
         }

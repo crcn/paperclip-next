@@ -431,3 +431,54 @@ mod bundle_tests {
         assert_eq!(bundle.assets()[0].path, "/images/logo.png");
     }
 }
+
+#[test]
+fn test_evaluate_bundle_renders_non_public_components() {
+    // Non-public components should be rendered for preview
+    let mut bundle = Bundle::new();
+
+    let source = r#"
+        component Card {
+            render div {
+                text "Card content"
+            }
+        }
+    "#;
+    let doc = parse_with_path(source, "/card.pc").unwrap();
+    bundle.add_document(PathBuf::from("/card.pc"), doc);
+
+    let mut evaluator = Evaluator::with_document_id("/card.pc");
+    let vdoc = evaluator.evaluate_bundle(&bundle, &PathBuf::from("/card.pc"));
+
+    assert!(vdoc.is_ok(), "evaluate_bundle should succeed");
+    let vdoc = vdoc.unwrap();
+    assert_eq!(vdoc.nodes.len(), 1, "Non-public component should be rendered");
+}
+
+#[test]
+fn test_evaluate_bundle_renders_multiple_non_public_components() {
+    let mut bundle = Bundle::new();
+
+    let source = r#"
+        component Header {
+            render div {
+                text "Header"
+            }
+        }
+
+        component Footer {
+            render div {
+                text "Footer"
+            }
+        }
+    "#;
+    let doc = parse_with_path(source, "/page.pc").unwrap();
+    bundle.add_document(PathBuf::from("/page.pc"), doc);
+
+    let mut evaluator = Evaluator::with_document_id("/page.pc");
+    let vdoc = evaluator.evaluate_bundle(&bundle, &PathBuf::from("/page.pc"));
+
+    assert!(vdoc.is_ok());
+    let vdoc = vdoc.unwrap();
+    assert_eq!(vdoc.nodes.len(), 2, "Both non-public components should be rendered");
+}

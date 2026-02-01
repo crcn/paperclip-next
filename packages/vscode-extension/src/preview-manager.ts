@@ -10,11 +10,14 @@ import { PreviewPanel } from './preview-panel';
 export class PreviewManager {
   private previews: Map<string, PreviewPanel> = new Map();
   private maxPreviews: number;
+  private httpPort: number;
 
   constructor(
     private context: vscode.ExtensionContext,
-    private client: WorkspaceClient
+    private client: WorkspaceClient,
+    httpPort: number = 3030
   ) {
+    this.httpPort = httpPort;
     this.maxPreviews = vscode.workspace
       .getConfiguration('paperclip')
       .get<number>('maxPreviewPanels', 10);
@@ -52,7 +55,8 @@ export class PreviewManager {
     const panel = new PreviewPanel(
       this.context,
       this.client,
-      document
+      document,
+      this.httpPort
     );
 
     // Track preview

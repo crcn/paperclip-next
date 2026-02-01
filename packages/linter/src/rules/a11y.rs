@@ -363,6 +363,7 @@ mod tests {
                     value: "Click me".to_string(),
                     span: Span::new(0, 10, "test".to_string()),
                 },
+                styles: vec![],
                 span: Span::new(0, 10, "test".to_string()),
             }],
             span: Span::new(0, 10, "test".to_string()),

@@ -12,17 +12,42 @@ import { createRequire } from 'module';
  * Resolve proto files from @paperclip/proto package
  */
 function resolveProtoPath(): { protoPath: string; includePath: string } {
+  const fs = require('fs');
+
+  // Strategy 1: Try require.resolve (works when deps are in node_modules)
   try {
-    // For CommonJS (VS Code extensions)
     const protoPackagePath = path.dirname(require.resolve('@paperclip/proto/package.json'));
     return {
       protoPath: path.join(protoPackagePath, 'src', 'workspace.proto'),
       includePath: path.join(protoPackagePath, 'src'),
     };
   } catch {
-    // Fallback - shouldn't happen if @paperclip/proto is installed
-    throw new Error('@paperclip/proto package not found. Make sure it is installed.');
+    // Continue to fallback
   }
+
+  // Resolve symlinks to get the real path (important when extension is symlinked for dev)
+  const realDirname = fs.realpathSync(__dirname);
+
+  // Strategy 2: Resolve relative to this file (for symlinked extension in monorepo)
+  // Extension is at packages/vscode-extension, proto is at packages/proto
+  const protoPath = path.join(realDirname, '..', '..', 'proto', 'src', 'workspace.proto');
+  if (fs.existsSync(protoPath)) {
+    return {
+      protoPath,
+      includePath: path.join(realDirname, '..', '..', 'proto', 'src'),
+    };
+  }
+
+  // Strategy 3: Check root node_modules (yarn workspaces hoisting)
+  const rootProtoPath = path.join(realDirname, '..', '..', '..', 'node_modules', '@paperclip', 'proto', 'src', 'workspace.proto');
+  if (fs.existsSync(rootProtoPath)) {
+    return {
+      protoPath: rootProtoPath,
+      includePath: path.join(realDirname, '..', '..', '..', 'node_modules', '@paperclip', 'proto', 'src'),
+    };
+  }
+
+  throw new Error('@paperclip/proto package not found. Make sure it is installed.');
 }
 
 // Production constants
@@ -76,7 +101,7 @@ export class WorkspaceClient {
 
     try {
       const packageDefinition = await protoLoader.load(this.protoPath, {
-        keepCase: true,
+        keepCase: false,  // Convert snake_case to camelCase for JS
         longs: String,
         enums: String,
         defaults: true,
@@ -175,30 +200,46 @@ export class WorkspaceClient {
     onUpdate: PreviewUpdateCallback
   ): grpc.ClientReadableStream<any> {
     if (!this.client) {
+      console.error('[WorkspaceClient] streamBuffer called but client not connected');
       throw new Error('Client not connected');
     }
 
+    console.log(`[WorkspaceClient] streamBuffer: clientId=${request.clientId}, filePath=${request.filePath}, contentLen=${request.content.length}`);
     const stream = this.client.StreamBuffer(request);
 
     stream.on('data', (update: any) => {
+      console.log(`[WorkspaceClient] stream.on('data'):`, JSON.stringify(update, null, 2));
       onUpdate({
-        filePath: update.file_path,
+        filePath: update.filePath,
         patches: update.patches || [],
         error: update.error,
         timestamp: Number(update.timestamp),
         version: Number(update.version),
-        acknowledgedMutationIds: update.acknowledged_mutation_ids || [],
-        changedByClientId: update.changed_by_client_id
+        acknowledgedMutationIds: update.acknowledgedMutationIds || [],
+        changedByClientId: update.changedByClientId
       });
     });
 
-    stream.on('error', (error: Error) => {
-      console.error('[WorkspaceClient] Stream error:', error);
-      this.scheduleReconnect();
+    stream.on('error', (error: any) => {
+      // Don't reconnect for cancelled streams (happens when user types more)
+      // or for normal stream completion
+      const code = error?.code;
+      const isCancelled = code === 1; // grpc.status.CANCELLED
+      const isOk = code === 0; // grpc.status.OK
+
+      console.log(`[WorkspaceClient] stream.on('error'): code=${code}, message=${error?.message}`);
+
+      if (!isCancelled && !isOk) {
+        console.error('[WorkspaceClient] Stream error:', error);
+        // Only reconnect for actual connection errors
+        if (code === 14) { // grpc.status.UNAVAILABLE
+          this.scheduleReconnect();
+        }
+      }
     });
 
     stream.on('end', () => {
-      console.log('[WorkspaceClient] Stream ended');
+      // Stream ended normally - this is expected for single-response streams
     });
 
     return stream;

@@ -104,9 +104,8 @@ cmd_setup() {
     curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
   fi
 
-  # Install npm deps
-  [ -d "packages/vscode-extension" ] && (cd packages/vscode-extension && npm install)
-  [ -d "packages/client" ] && (cd packages/client && npm install)
+  # Install JS deps (yarn workspaces)
+  yarn install
 
   echo ""
   echo "✓ Setup complete"
@@ -138,40 +137,35 @@ cmd_init() {
   fi
   echo ""
 
-  # 2. Install npm dependencies (only JS packages)
-  echo "② Installing npm dependencies..."
-  for dir in packages/proto packages/workspace-client packages/vscode-extension packages/client packages/loader-webpack packages/plugin-vite; do
-    if [ -f "$dir/package.json" ]; then
-      name=$(basename "$dir")
-      echo "   → $name"
-      (cd "$dir" && npm install --loglevel=error) || true
-    fi
-  done
-  echo ""
-
-  # 3. Build proto package first (others depend on it)
-  if [ -d "packages/proto" ]; then
-    echo "③ Building proto package..."
-    (cd packages/proto && npm run build 2>&1 | sed 's/^/   /')
-    echo ""
-  fi
-
-  # 4. Build Rust
-  echo "④ Building Rust workspace..."
+  # 2. Build Rust (needed for WASM)
+  echo "② Building Rust workspace..."
   cargo build --workspace --release 2>&1 | sed 's/^/   /'
   echo ""
 
-  # 5. Build WASM (optional)
-  if need_cmd wasm-pack && [ -f "build-loaders.sh" ]; then
-    echo "⑤ Building WASM & loaders..."
-    ./build-loaders.sh 2>&1 | sed 's/^/   /'
+  # 3. Build WASM (needed before yarn install for loader/plugin deps)
+  if need_cmd wasm-pack && [ -d "packages/wasm" ]; then
+    echo "③ Building WASM..."
+    (cd packages/wasm && wasm-pack build --target bundler --out-dir pkg 2>&1 | sed 's/^/   /')
+    (cd packages/wasm && wasm-pack build --target nodejs --out-dir pkg-node 2>&1 | sed 's/^/   /')
+    echo ""
+  fi
+
+  # 4. Install all JS dependencies (yarn workspaces)
+  echo "④ Installing JS dependencies..."
+  yarn install 2>&1 | sed 's/^/   /'
+  echo ""
+
+  # 5. Build proto package (others depend on it)
+  if [ -d "packages/proto" ]; then
+    echo "⑤ Building proto package..."
+    (cd packages/proto && npm run build) 2>&1 | sed 's/^/   /'
     echo ""
   fi
 
   # 6. Build VS Code extension
   if [ -d "packages/vscode-extension" ]; then
     echo "⑥ Building VS Code extension..."
-    (cd packages/vscode-extension && npm run compile 2>&1 | sed 's/^/   /')
+    (cd packages/vscode-extension && npm run compile) 2>&1 | sed 's/^/   /'
     echo ""
   fi
 
@@ -195,7 +189,7 @@ cmd_build() {
 
   if [ -d "packages/vscode-extension" ]; then
     echo "→ Building extension..."
-    (cd packages/vscode-extension && npm install && npm run compile)
+    (cd packages/vscode-extension && npm run compile)
   fi
 
   echo "✓ Build complete"
@@ -207,14 +201,18 @@ cmd_server() {
 }
 
 cmd_demo() {
-  cd packages/client
-  [ -d "node_modules" ] || npm install
   echo "→ Starting client at http://localhost:3000"
-  npm run dev
+  (cd packages/client && npm run dev)
 }
 
 cmd_test() {
+  echo "→ Running Rust tests..."
   cargo test --workspace
+  echo ""
+  echo "→ Running VS Code extension tests..."
+  (cd packages/vscode-extension && npx vitest run)
+  echo ""
+  echo "✓ All tests passed"
 }
 
 cmd_check() {
@@ -315,7 +313,7 @@ cmd_install_ext() {
   # Build if needed
   if [ ! -f "packages/vscode-extension/out/extension.js" ]; then
     echo "→ Building extension..."
-    (cd packages/vscode-extension && npm install && npm run compile)
+    (cd packages/vscode-extension && npm run compile)
   fi
 
   # Symlink extension

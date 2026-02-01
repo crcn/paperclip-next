@@ -165,8 +165,14 @@ public component App {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
+    // All components render for preview (Inner, Outer, App)
+    // The important thing is that nested prop passing works correctly
     let text_content = find_text_in_vdom(&vdom.nodes);
-    assert_eq!(text_content, vec!["Nested!"]);
+    assert!(
+        text_content.contains(&"Nested!".to_string()),
+        "Nested prop passing should work - expected 'Nested!' in {:?}",
+        text_content
+    );
 
     println!("✓ Nested component props work");
 }
@@ -237,11 +243,17 @@ public component App {
 
     let vdom = evaluator.evaluate(&doc).unwrap();
 
+    // All components render for preview:
+    // - Display standalone uses global variable "Global Value"
+    // - App renders Display with prop "Prop Value"
+    // The important thing is that when a prop is passed, it overrides the global
     let text_content = find_text_in_vdom(&vdom.nodes);
-    // Prop should override global variable
-    assert_eq!(text_content, vec!["Prop Value"]);
+    assert!(text_content.contains(&"Prop Value".to_string()), "App's Display instance should use prop value");
 
-    println!("✓ Props override local variables");
+    // Verify the standalone Display (without prop) uses global value
+    assert!(text_content.contains(&"Global Value".to_string()), "Standalone Display should use global value");
+
+    println!("✓ Props override local variables in component instances");
 }
 
 #[test]

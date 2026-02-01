@@ -16,8 +16,8 @@
     "src/*.proto"
   ],
   "scripts": {
-    "build": "yarn build:proto && yarn build:tsc",
-    "build:proto": "mkdir -p src/generated && protoc --proto_path=src --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=esModuleInterop=true,useOptionals=messages,outputClientImpl=false,outputServices=false --ts_proto_out=./src/generated src/workspace.proto src/patches.proto src/vdom.proto",
+    "build": "npm run build:proto && npm run build:tsc",
+    "build:proto": "mkdir -p src/generated && protoc --proto_path=src --plugin=protoc-gen-ts_proto=../../node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=esModuleInterop=true,useOptionals=messages,outputClientImpl=false,outputServices=false --ts_proto_out=./src/generated src/workspace.proto src/patches.proto src/vdom.proto",
     "build:tsc": "tsc",
     "clean": "rm -rf lib src/generated"
   },

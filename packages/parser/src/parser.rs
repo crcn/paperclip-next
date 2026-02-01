@@ -71,6 +71,19 @@ impl<'src> Parser<'src> {
                 Some((Token::Component, _)) => {
                     doc.components.push(self.parse_component(false)?);
                 }
+                // Top-level render elements
+                Some((Token::Text, _))
+                | Some((Token::Div, _))
+                | Some((Token::Span, _))
+                | Some((Token::Button, _))
+                | Some((Token::Img, _))
+                | Some((Token::Input, _)) => {
+                    doc.renders.push(self.parse_element()?);
+                }
+                // Handle lowercase identifiers as potential HTML tags at top level
+                Some((Token::Ident(name), _)) if name.chars().next().map_or(false, |c| c.is_lowercase()) => {
+                    doc.renders.push(self.parse_element()?);
+                }
                 _ => {
                     return Err(ParseError::invalid_syntax_span(
                         self.peek_span(),
@@ -572,9 +585,28 @@ impl<'src> Parser<'src> {
             Some((Token::Text, _)) => {
                 self.advance();
                 let content = self.parse_expression()?;
+
+                // Parse optional styles block
+                let mut styles = Vec::new();
+                if self.check(Token::LBrace) {
+                    self.expect(Token::LBrace)?;
+                    while !self.check(Token::RBrace) && !self.is_at_end() {
+                        if self.check(Token::Style) {
+                            styles.push(self.parse_style_block()?);
+                        } else {
+                            return Err(ParseError::invalid_syntax_span(
+                                self.peek_span(),
+                                "Expected 'style' in text block",
+                            ));
+                        }
+                    }
+                    self.expect(Token::RBrace)?;
+                }
+
                 let end = self.current_pos();
                 Ok(Element::Text {
                     content,
+                    styles,
                     span: Span::new(start, end, self.id_generator.new_id()),
                 })
             }

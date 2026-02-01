@@ -1,8 +1,18 @@
 component Card {
     render div {
         style {
-            padding: 16px
+            padding: 32px
+            color: orange
+            font-size: 32px
+            font-weight: bold
+            text-decoration: underline
         }
-        text "Hello"
+        text "somdddddefdd" {
+          style {
+            color: orange
+          }
+        }
     }
 }
+
+

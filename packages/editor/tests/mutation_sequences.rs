@@ -193,6 +193,7 @@ fn test_insert_and_remove_sequence() {
             value: "Inserted".to_string(),
             span: Span::new(0, 0, "inserted-text".to_string()),
         },
+        styles: Vec::new(),
         span: Span::new(0, 0, "inserted-text".to_string()),
     };
 

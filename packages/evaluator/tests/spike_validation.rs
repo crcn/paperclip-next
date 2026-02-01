@@ -299,8 +299,11 @@ fn test_slot_inserted_content() {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
-    // Should render inserted content (not default)
-    if let VNode::Element { children, .. } = &vdom.nodes[0] {
+    // Both Card and App render for preview
+    assert_eq!(vdom.nodes.len(), 2);
+
+    // App component (index 1) should render inserted content (not default)
+    if let VNode::Element { children, .. } = &vdom.nodes[1] {
         if let VNode::Text { content } = &children[0] {
             assert_eq!(content, "Custom content");
         }

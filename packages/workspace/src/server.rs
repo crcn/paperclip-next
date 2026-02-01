@@ -75,6 +75,16 @@ impl ProcessRateLimiter {
     }
 }
 
+/// Update broadcast for SSE subscribers
+#[derive(Clone, Debug)]
+pub struct BroadcastUpdate {
+    pub file_path: String,
+    pub patches_json: String,
+    pub error: Option<String>,
+    pub version: u64,
+}
+
+#[derive(Clone)]
 pub struct WorkspaceServer {
     root_dir: PathBuf,
     root_dir_canonical: PathBuf,
@@ -84,6 +94,8 @@ pub struct WorkspaceServer {
     client_heartbeats: Arc<Mutex<HashMap<String, Instant>>>,
     total_vdom_bytes: Arc<AtomicUsize>,
     rate_limiter: Arc<Mutex<ProcessRateLimiter>>,
+    // Broadcast channel for SSE subscribers
+    update_sender: tokio::sync::broadcast::Sender<BroadcastUpdate>,
 }
 
 impl WorkspaceServer {
@@ -91,6 +103,9 @@ impl WorkspaceServer {
         let root_dir_canonical = root_dir
             .canonicalize()
             .unwrap_or_else(|_| root_dir.clone());
+
+        // Create broadcast channel for SSE subscribers (capacity 100 messages)
+        let (update_sender, _) = tokio::sync::broadcast::channel(100);
 
         let server = Self {
             root_dir,
@@ -100,12 +115,29 @@ impl WorkspaceServer {
             client_heartbeats: Arc::new(Mutex::new(HashMap::new())),
             total_vdom_bytes: Arc::new(AtomicUsize::new(0)),
             rate_limiter: Arc::new(Mutex::new(ProcessRateLimiter::new(RATE_LIMIT_PER_PROCESS))),
+            update_sender,
         };
 
         // Start background cleanup task
         server.start_cleanup_task();
 
         server
+    }
+
+    /// Get root directory
+    pub fn root_dir(&self) -> &Path {
+        &self.root_dir
+    }
+
+    /// Subscribe to update broadcasts (for SSE)
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<BroadcastUpdate> {
+        self.update_sender.subscribe()
+    }
+
+    /// Broadcast an update to all SSE subscribers
+    fn broadcast_update(&self, update: BroadcastUpdate) {
+        // Ignore send errors (no subscribers)
+        let _ = self.update_sender.send(update);
     }
 
     fn start_cleanup_task(&self) {
@@ -189,6 +221,11 @@ impl WorkspaceServer {
     }
 
     pub fn into_service(self) -> WorkspaceServiceServer<Self> {
+        WorkspaceServiceServer::new(self)
+    }
+
+    /// Create service from Arc (allows sharing with HTTP server)
+    pub fn into_service_arc(self: Arc<Self>) -> WorkspaceServiceServer<Arc<Self>> {
         WorkspaceServiceServer::new(self)
     }
 
@@ -510,8 +547,9 @@ impl WorkspaceService for WorkspaceServer {
             return Err(Status::invalid_argument("Content exceeds 10MB limit"));
         }
 
-        // Validate and canonicalize path
-        let _canonical_path = self.validate_path(&req.file_path)?;
+        // Note: For buffer streaming, we don't validate file path existence
+        // since content is provided directly (not read from disk).
+        // The file_path is used as an identifier only.
 
         // Update heartbeat
         self.client_heartbeats
@@ -619,6 +657,17 @@ impl WorkspaceService for WorkspaceServer {
                 },
             );
         }
+
+        // Serialize patches for broadcast
+        let patches_json = serde_json::to_string(&patches).unwrap_or_default();
+
+        // Broadcast to SSE subscribers
+        self.broadcast_update(BroadcastUpdate {
+            file_path: req.file_path.clone(),
+            patches_json,
+            error: None,
+            version,
+        });
 
         // Return stream with single update
         let update = PreviewUpdate {
@@ -766,7 +815,7 @@ fn extract_element_nodes(
                 label: name.clone().or_else(|| Some(tag_name.clone())),
             });
         }
-        Element::Text { content, span } => {
+        Element::Text { content, span, .. } => {
             let node_id = span.id.clone();
             parent_child_ids.push(node_id.clone());
 

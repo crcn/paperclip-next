@@ -61,11 +61,11 @@ fn test_slot_with_inserted_content() {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
-    // App renders Card with inserted content
-    assert_eq!(vdom.nodes.len(), 1);
+    // Both Card and App render for preview
+    assert_eq!(vdom.nodes.len(), 2);
 
-    // Navigate to Card's div
-    if let VNode::Element { children, .. } = &vdom.nodes[0] {
+    // Navigate to App's Card div (index 1 = App component)
+    if let VNode::Element { children, .. } = &vdom.nodes[1] {
         assert_eq!(children.len(), 1);
 
         // Should be text with INSERTED content (not default)
@@ -149,8 +149,11 @@ fn test_slot_semantic_id_inserted() {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
-    // Navigate to Card's content
-    if let VNode::Element { children, .. } = &vdom.nodes[0] {
+    // Both Card and App render for preview
+    assert_eq!(vdom.nodes.len(), 2);
+
+    // Navigate to App's Card content (index 1 = App component)
+    if let VNode::Element { children, .. } = &vdom.nodes[1] {
         if let VNode::Element { semantic_id, .. } = &children[0] {
             println!("Semantic ID: {}", semantic_id.to_selector());
 
@@ -289,10 +292,11 @@ fn test_component_instance_syntax_variants() {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
-    // App renders a div with two Card instances
-    assert_eq!(vdom.nodes.len(), 1);
+    // Both Card and App render for preview
+    assert_eq!(vdom.nodes.len(), 2);
 
-    if let VNode::Element { children, .. } = &vdom.nodes[0] {
+    // App renders a div with two Card instances (index 1 = App component)
+    if let VNode::Element { children, .. } = &vdom.nodes[1] {
         assert_eq!(children.len(), 2);
 
         // First Card (without parens)

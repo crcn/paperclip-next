@@ -203,8 +203,8 @@ mod edge_case_tests {
         let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
-        // Should handle empty props correctly
-        assert_eq!(vdoc.nodes.len(), 1);
+        // All components render for preview (Child + Parent)
+        assert_eq!(vdoc.nodes.len(), 2);
     }
 
     #[test]

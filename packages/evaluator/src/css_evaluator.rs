@@ -139,6 +139,15 @@ impl CssEvaluator {
             }
         }
 
+        // Extract top-level render styles
+        for render in &doc.renders {
+            let mut rules = Vec::new();
+            self.extract_element_styles(render, None, &mut rules, &doc.styles, &[])?;
+            for rule in rules {
+                css_doc.add_rule(rule);
+            }
+        }
+
         info!(rules = css_doc.rules.len(), "CSS evaluation complete");
         Ok(css_doc)
     }
@@ -547,8 +556,32 @@ impl CssEvaluator {
                 }
             }
 
-            Element::Text { .. } | Element::SlotInsert { .. } => {
-                // No styles in text or slot inserts
+            Element::Text { styles, span, .. } => {
+                // Handle text with styles (wrapped in span at evaluation time)
+                if !styles.is_empty() {
+                    let class_name =
+                        get_style_namespace(Some("span"), &span.id, component_name);
+
+                    let mut base_properties = HashMap::new();
+                    for style_block in styles {
+                        for (key, value) in &style_block.properties {
+                            let resolved_value = self.resolve_value(value)?;
+                            base_properties.insert(key.clone(), resolved_value);
+                        }
+                    }
+
+                    if !base_properties.is_empty() {
+                        rules.push(CssRule {
+                            media_query: None,
+                            selector: format!(".{}", class_name),
+                            properties: base_properties,
+                        });
+                    }
+                }
+            }
+
+            Element::SlotInsert { .. } => {
+                // No styles in slot inserts
             }
 
             Element::Insert { content, .. } => {

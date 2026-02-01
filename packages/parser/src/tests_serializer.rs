@@ -302,3 +302,85 @@ public component Button {
     );
     assert!(reparsed.components[0].script.is_some());
 }
+
+#[test]
+fn test_roundtrip_top_level_text() {
+    let source = r#"text "Hello, world!""#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect("Failed to reparse");
+
+    assert_eq!(doc.renders.len(), reparsed.renders.len());
+    assert_eq!(doc.renders.len(), 1);
+}
+
+#[test]
+fn test_roundtrip_top_level_text_with_styles() {
+    let source = r#"
+text "Styled text" {
+    style {
+        color: red
+        font-size: 16px
+    }
+}
+"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    assert_eq!(doc.renders.len(), reparsed.renders.len());
+
+    if let (Element::Text { styles: styles1, .. }, Element::Text { styles: styles2, .. }) =
+        (&doc.renders[0], &reparsed.renders[0])
+    {
+        assert_eq!(styles1.len(), styles2.len());
+        assert_eq!(styles1[0].properties.len(), styles2[0].properties.len());
+    } else {
+        panic!("Expected Text elements");
+    }
+}
+
+#[test]
+fn test_roundtrip_top_level_div() {
+    let source = r#"
+div {
+    style {
+        padding: 16px
+    }
+    text "Inside div"
+}
+"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    assert_eq!(doc.renders.len(), reparsed.renders.len());
+}
+
+#[test]
+fn test_roundtrip_mixed_components_and_renders() {
+    let source = r#"
+component Card {
+    render div {
+        text "Card"
+    }
+}
+
+text "Standalone"
+
+div {
+    text "Div content"
+}
+"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    assert_eq!(doc.components.len(), reparsed.components.len());
+    assert_eq!(doc.renders.len(), reparsed.renders.len());
+    assert_eq!(doc.renders.len(), 2);
+}

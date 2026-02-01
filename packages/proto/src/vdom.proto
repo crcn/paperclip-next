@@ -8,7 +8,13 @@ message VNode {
     TextNode text = 2;
     CommentNode comment = 3;
     ComponentNode component = 4;
+    ErrorNode error = 5;  // Inline error display
   }
+}
+
+message ErrorNode {
+  string message = 1;
+  string semantic_id = 2;
 }
 
 message ElementNode {
@@ -16,7 +22,8 @@ message ElementNode {
   map<string, string> attributes = 2;
   map<string, string> styles = 3;
   repeated VNode children = 4;
-  // Field 5 (id) removed - use semantic_id instead
+  string semantic_id = 5;  // Stable identity for diffing
+  optional string key = 6;  // Explicit key for repeat items
 }
 
 message TextNode {
@@ -31,7 +38,7 @@ message ComponentNode {
   string component_id = 1;
   map<string, string> props = 2;
   repeated VNode children = 3;
-  // Field 4 (id) removed - use semantic_id instead
+  string semantic_id = 4;  // Stable identity for diffing
 }
 
 message VDocument {

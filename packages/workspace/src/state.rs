@@ -1,7 +1,7 @@
 use paperclip_bundle::{AssetReference, AssetType, Bundle};
 use paperclip_evaluator::{
     diff_vdocument, CssError, CssEvaluator, EvalError,
-    Evaluator, VDocPatch, VirtualCssDocument, VirtualDomDocument,
+    Evaluator, VDocPatch, VDomCssRule, VNode, VirtualCssDocument, VirtualDomDocument,
 };
 use paperclip_parser::{ast::Document, get_document_id, parse_with_path, ParseError};
 use std::collections::HashMap;
@@ -358,13 +358,64 @@ fn resolve_asset_path(relative_path: &str, project_root: &Path) -> PathBuf {
     }
 }
 
-// Convert VirtualDomDocument to protobuf format (stub for now)
-fn convert_vdom_to_proto(_vdom: &VirtualDomDocument) -> proto_vdom::VDocument {
-    // TODO: Implement full conversion
-    // For now, return empty document
+// Convert VirtualDomDocument to protobuf format (public for server.rs SSE)
+pub fn convert_vdom_to_proto(vdom: &VirtualDomDocument) -> proto_vdom::VDocument {
     proto_vdom::VDocument {
-        nodes: vec![],
-        styles: vec![],
+        nodes: vdom.nodes.iter().map(convert_vnode_to_proto).collect(),
+        styles: vdom.styles.iter().map(convert_css_rule_to_proto).collect(),
+    }
+}
+
+// Convert VNode to proto VNode
+fn convert_vnode_to_proto(node: &VNode) -> proto_vdom::VNode {
+    match node {
+        VNode::Element {
+            tag,
+            attributes,
+            styles,
+            children,
+            semantic_id,
+            key,
+        } => proto_vdom::VNode {
+            node_type: Some(proto_vdom::v_node::NodeType::Element(
+                proto_vdom::ElementNode {
+                    tag: tag.clone(),
+                    attributes: attributes.clone(),
+                    styles: styles.clone(),
+                    children: children.iter().map(convert_vnode_to_proto).collect(),
+                    semantic_id: semantic_id.to_selector(),
+                    key: key.clone(),
+                },
+            )),
+        },
+        VNode::Text { content } => proto_vdom::VNode {
+            node_type: Some(proto_vdom::v_node::NodeType::Text(proto_vdom::TextNode {
+                content: content.clone(),
+            })),
+        },
+        VNode::Comment { content } => proto_vdom::VNode {
+            node_type: Some(proto_vdom::v_node::NodeType::Comment(
+                proto_vdom::CommentNode {
+                    content: content.clone(),
+                },
+            )),
+        },
+        VNode::Error { message, semantic_id, .. } => proto_vdom::VNode {
+            node_type: Some(proto_vdom::v_node::NodeType::Error(
+                proto_vdom::ErrorNode {
+                    message: message.clone(),
+                    semantic_id: semantic_id.to_selector(),
+                },
+            )),
+        },
+    }
+}
+
+// Convert CssRule to proto CssRule
+fn convert_css_rule_to_proto(rule: &VDomCssRule) -> proto_vdom::CssRule {
+    proto_vdom::CssRule {
+        selector: rule.selector.clone(),
+        properties: rule.properties.clone(),
     }
 }
 
@@ -436,5 +487,79 @@ mod tests {
         let file_assets = state.get_file_assets(&path);
         // Assets list exists (may be empty if no assets in this simple component)
         assert!(file_assets.len() >= 0);
+    }
+
+    #[test]
+    fn test_non_public_component_rendered() {
+        let mut state = WorkspaceState::new();
+        let path = PathBuf::from("./test.pc");
+        let project_root = PathBuf::from(".");
+
+        let source = r#"component Card {
+    render div {
+        text "Hello"
+    }
+}"#.to_string();
+
+        let result = state.update_file(path.clone(), source, &project_root);
+        assert!(result.is_ok(), "update_file should succeed: {:?}", result.err());
+
+        let patches = result.unwrap();
+        assert_eq!(patches.len(), 1, "Should have 1 initialize patch");
+
+        // Check the patch contains a vdom with nodes
+        if let Some(patch_type) = &patches[0].patch_type {
+            use paperclip_evaluator::vdom_differ::proto::patches::v_doc_patch::PatchType;
+            match patch_type {
+                PatchType::Initialize(init) => {
+                    let vdom = init.vdom.as_ref().expect("Should have vdom");
+                    println!("vdom.nodes.len() = {}", vdom.nodes.len());
+                    for (i, node) in vdom.nodes.iter().enumerate() {
+                        println!("node[{}] = {:?}", i, node);
+                    }
+                    assert!(!vdom.nodes.is_empty(), "vdom.nodes should not be empty");
+                }
+                _ => panic!("Expected Initialize patch"),
+            }
+        } else {
+            panic!("patch_type should be Some");
+        }
+    }
+
+    #[test]
+    fn test_path_join_format() {
+        // Test the same path format the server uses
+        let root_dir = std::path::PathBuf::from(".");
+        let file_path = "test.pc";
+        let path = root_dir.join(file_path);
+        
+        println!("path = {:?}", path);
+        println!("path.display() = {}", path.display());
+        
+        let mut state = WorkspaceState::new();
+        let project_root = std::path::PathBuf::from(".");
+
+        let source = r#"component Card {
+    render div {
+        text "Hello"
+    }
+}"#.to_string();
+
+        let result = state.update_file(path.clone(), source, &project_root);
+        assert!(result.is_ok(), "update_file should succeed: {:?}", result.err());
+
+        let patches = result.unwrap();
+        
+        if let Some(patch_type) = &patches[0].patch_type {
+            use paperclip_evaluator::vdom_differ::proto::patches::v_doc_patch::PatchType;
+            match patch_type {
+                PatchType::Initialize(init) => {
+                    let vdom = init.vdom.as_ref().expect("Should have vdom");
+                    println!("nodes.len() = {}", vdom.nodes.len());
+                    assert!(!vdom.nodes.is_empty(), "vdom.nodes should not be empty");
+                }
+                _ => panic!("Expected Initialize patch"),
+            }
+        }
     }
 }

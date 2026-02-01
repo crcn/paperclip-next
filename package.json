@@ -1,0 +1,17 @@
+{
+  "name": "paperclip-next",
+  "private": true,
+  "workspaces": [
+    "packages/proto",
+    "packages/common-js",
+    "packages/workspace-client",
+    "packages/workspace-machine",
+    "packages/vscode-extension",
+    "packages/client",
+    "packages/loader-webpack",
+    "packages/plugin-vite",
+    "packages/plugin-rollup",
+    "packages/designer"
+  ],
+  "packageManager": "yarn@4.1.0"
+}

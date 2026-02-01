@@ -23,6 +23,8 @@ pub struct Document {
     pub triggers: Vec<TriggerDecl>,
     pub styles: Vec<StyleDecl>,
     pub components: Vec<Component>,
+    /// Top-level render elements (text, div, etc.)
+    pub renders: Vec<Element>,
 }
 
 /// Import statement
@@ -141,7 +143,11 @@ pub enum Element {
     },
 
     /// Text node
-    Text { content: Expression, span: Span },
+    Text {
+        content: Expression,
+        styles: Vec<StyleBlock>,
+        span: Span,
+    },
 
     /// Component instance
     Instance {
@@ -264,11 +270,13 @@ impl Document {
             triggers: Vec::new(),
             styles: Vec::new(),
             components: Vec::new(),
+            renders: Vec::new(),
         }
     }
 
     /// Find an element by its span ID
     pub fn find_element(&self, id: &str) -> Option<&Element> {
+        // Search in components
         for component in &self.components {
             if let Some(body) = &component.body {
                 if let Some(elem) = Self::find_element_recursive(body, id) {
@@ -276,16 +284,29 @@ impl Document {
                 }
             }
         }
+        // Search in top-level renders
+        for render in &self.renders {
+            if let Some(elem) = Self::find_element_recursive(render, id) {
+                return Some(elem);
+            }
+        }
         None
     }
 
     /// Find an element by ID (mutable)
     pub fn find_element_mut(&mut self, id: &str) -> Option<&mut Element> {
+        // Search in components
         for component in &mut self.components {
             if let Some(body) = &mut component.body {
                 if let Some(elem) = Self::find_element_recursive_mut(body, id) {
                     return Some(elem);
                 }
+            }
+        }
+        // Search in top-level renders
+        for render in &mut self.renders {
+            if let Some(elem) = Self::find_element_recursive_mut(render, id) {
+                return Some(elem);
             }
         }
         None

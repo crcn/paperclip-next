@@ -21,7 +21,7 @@
     "webpack": "^5.0.0"
   },
   "dependencies": {
-    "@paperclip-lang/wasm": "^0.1.0",
+    "@paperclip-lang/wasm": "file:../wasm/pkg-node",
     "loader-utils": "^3.2.1",
     "schema-utils": "^4.0.0"
   },

@@ -83,6 +83,16 @@ impl Serializer {
             self.serialize_component(component, &mut output);
         }
 
+        // Serialize top-level renders
+        if !doc.renders.is_empty() {
+            if !doc.components.is_empty() {
+                output.push('\n');
+            }
+            for render in &doc.renders {
+                self.serialize_element(render, &mut output);
+            }
+        }
+
         output
     }
 
@@ -359,11 +369,25 @@ impl Serializer {
                 }
             }
 
-            Element::Text { content, .. } => {
+            Element::Text {
+                content, styles, ..
+            } => {
                 self.write_indent(output);
                 output.push_str("text ");
                 self.serialize_expression(content, output);
-                output.push('\n');
+
+                if !styles.is_empty() {
+                    output.push_str(" {\n");
+                    self.indent_level += 1;
+                    for style in styles {
+                        self.serialize_style_block(style, output);
+                    }
+                    self.indent_level -= 1;
+                    self.write_indent(output);
+                    output.push_str("}\n");
+                } else {
+                    output.push('\n');
+                }
             }
 
             Element::Instance {

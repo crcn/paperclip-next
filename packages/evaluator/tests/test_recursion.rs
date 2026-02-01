@@ -63,7 +63,9 @@ fn test_indirect_recursion() {
         Ok(_) => panic!("Expected RecursiveComponent error but got Ok result"),
         Err(EvalError::RecursiveComponent { component, call_stack, hint }) => {
             assert_eq!(component, "A");
-            assert_eq!(call_stack, vec!["App", "A", "B", "A"]);
+            // All components render for preview, so A renders standalone first
+            // and triggers the cycle A → B → A before we get to App
+            assert_eq!(call_stack, vec!["A", "B", "A"]);
             assert!(hint.is_some());
             assert!(hint.unwrap().contains("cycle detected"));
             println!("✓ Indirect recursion (A → B → A) detected correctly");
@@ -170,7 +172,9 @@ fn test_three_component_cycle() {
         Ok(_) => panic!("Expected RecursiveComponent error but got Ok result"),
         Err(EvalError::RecursiveComponent { component, call_stack, .. }) => {
             assert_eq!(component, "A");
-            assert_eq!(call_stack, vec!["App", "A", "B", "C", "A"]);
+            // All components render for preview, so A renders standalone first
+            // and triggers the cycle A → B → C → A before we get to App
+            assert_eq!(call_stack, vec!["A", "B", "C", "A"]);
             println!("✓ Three-component cycle (A → B → C → A) detected correctly");
         }
         Err(e) => panic!("Expected RecursiveComponent error but got: {:?}", e),

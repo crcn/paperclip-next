@@ -9,6 +9,7 @@ export {
   TextNode,
   CommentNode,
   ComponentNode,
+  ErrorNode,
   VDocument,
   CssRule,
 } from './generated/vdom.js';

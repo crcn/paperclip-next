@@ -70,8 +70,11 @@ export class BufferStreamer {
 
   private startStream(content: string, generation: number): void {
     if (this.disposed) {
+      console.log('[BufferStreamer] Skipping stream - disposed');
       return;
     }
+
+    console.log(`[BufferStreamer] Starting stream for ${this.filePath}, content length: ${content.length}, generation: ${generation}`);
 
     try {
       const stream = this.client.streamBuffer(
@@ -81,6 +84,7 @@ export class BufferStreamer {
           content
         },
         (update: PreviewUpdate) => {
+          console.log(`[BufferStreamer] Received update: patches=${update.patches?.length}, error=${update.error}`);
           // Ignore updates from stale generations
           if (generation === this.currentGeneration) {
             this.onUpdate(update);

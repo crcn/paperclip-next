@@ -119,8 +119,11 @@ fn test_component_key_auto_generation() {
     let mut evaluator = Evaluator::with_document_id("/test.pc");
     let vdom = evaluator.evaluate(&doc).unwrap();
 
-    // Extract div
-    if let VNode::Element { children, .. } = &vdom.nodes[0] {
+    // All components render: Button (standalone), then App
+    assert_eq!(vdom.nodes.len(), 2);
+
+    // App is the second node (index 1), extract its div
+    if let VNode::Element { children, .. } = &vdom.nodes[1] {
         // Should have 3 Button instances
         assert_eq!(children.len(), 3);
 

@@ -668,4 +668,54 @@ mod evaluator_comprehensive_tests {
             serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.nodes.len(), 1);
     }
+
+    /// All components should render for preview, not just public ones.
+    /// The `public` keyword is only for cross-file imports, not for preview rendering.
+    #[test]
+    fn test_all_components_render_for_preview() {
+        let source = r#"
+            component PrivateCard {
+                render div {
+                    text "Private"
+                }
+            }
+
+            public component PublicCard {
+                render div {
+                    text "Public"
+                }
+            }
+
+            component AnotherPrivate {
+                render span {
+                    text "Also Private"
+                }
+            }
+        "#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        // ALL 3 components should render, not just the public one
+        assert_eq!(
+            vdoc.nodes.len(),
+            3,
+            "All components should render for preview, got {} instead of 3",
+            vdoc.nodes.len()
+        );
+
+        // Verify each component rendered
+        let tags: Vec<&str> = vdoc
+            .nodes
+            .iter()
+            .filter_map(|n| match n {
+                VNode::Element { tag, .. } => Some(tag.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(tags.contains(&"div"), "PrivateCard (div) should render");
+        assert!(tags.contains(&"span"), "AnotherPrivate (span) should render");
+    }
 }

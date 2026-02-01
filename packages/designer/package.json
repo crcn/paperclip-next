@@ -1,0 +1,32 @@
+{
+  "name": "@paperclip/designer",
+  "version": "0.1.0",
+  "description": "Paperclip visual designer with zoomable canvas",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:web": "vite build --config vite.config.app.ts",
+    "dev": "tsc --watch",
+    "dev:web": "vite --config vite.config.app.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@paperclip/common": "^0.1.0",
+    "@paperclip/proto": "^0.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

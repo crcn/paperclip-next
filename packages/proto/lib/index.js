@@ -2,7 +2,7 @@
  * Paperclip Proto - Generated TypeScript types from protobuf definitions
  */
 // VDOM types
-export { VNode, ElementNode, TextNode, CommentNode, ComponentNode, VDocument, CssRule, } from './generated/vdom.js';
+export { VNode, ElementNode, TextNode, CommentNode, ComponentNode, ErrorNode, VDocument, CssRule, } from './generated/vdom.js';
 // Patch types
 export { VDocPatch, PatchPath, PositionalPath, InitializePatch, CreateNodePatch, RemoveNodePatch, ReplaceNodePatch, UpdateAttributesPatch, UpdateStylesPatch, UpdateTextPatch, AddStyleRulePatch, RemoveStyleRulePatch, MoveChildPatch, } from './generated/patches.js';
 // Workspace service types

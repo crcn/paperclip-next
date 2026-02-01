@@ -360,3 +360,85 @@ public component ShortCircuit {
         _ => panic!("Expected element node"),
     }
 }
+
+#[test]
+fn test_non_public_components_are_rendered_for_preview() {
+    // Non-public components should be rendered for preview/design purposes
+    // The `public` keyword only affects exports, not preview rendering
+    let source = r#"
+component Card {
+    render div {
+        text "Hello from Card"
+    }
+}
+"#;
+    let doc = parse_with_path(source, "/test.pc").unwrap();
+    let mut evaluator = Evaluator::with_document_id("/test.pc");
+
+    let vdoc = evaluator.evaluate(&doc).unwrap();
+
+    // Non-public component should still be rendered
+    assert_eq!(vdoc.nodes.len(), 1, "Expected 1 node for non-public component");
+    
+    match &vdoc.nodes[0] {
+        VNode::Element { tag, children, .. } => {
+            assert_eq!(tag, "div");
+            assert_eq!(children.len(), 1);
+            match &children[0] {
+                VNode::Text { content } => {
+                    assert_eq!(content, "Hello from Card");
+                }
+                _ => panic!("Expected text node"),
+            }
+        }
+        _ => panic!("Expected element node"),
+    }
+}
+
+#[test]
+fn test_multiple_non_public_components_all_rendered() {
+    let source = r#"
+component Header {
+    render div {
+        text "Header"
+    }
+}
+
+component Footer {
+    render div {
+        text "Footer"
+    }
+}
+"#;
+    let doc = parse_with_path(source, "/test.pc").unwrap();
+    let mut evaluator = Evaluator::with_document_id("/test.pc");
+
+    let vdoc = evaluator.evaluate(&doc).unwrap();
+
+    // Both non-public components should be rendered
+    assert_eq!(vdoc.nodes.len(), 2, "Expected 2 nodes for 2 non-public components");
+}
+
+#[test]
+fn test_mixed_public_and_non_public_components_all_rendered() {
+    let source = r#"
+public component Button {
+    render button {
+        text "Click me"
+    }
+}
+
+component Card {
+    render div {
+        text "Card content"
+    }
+}
+"#;
+    let doc = parse_with_path(source, "/test.pc").unwrap();
+    let mut evaluator = Evaluator::with_document_id("/test.pc");
+
+    let vdoc = evaluator.evaluate(&doc).unwrap();
+
+    // Both public and non-public components should be rendered
+    assert_eq!(vdoc.nodes.len(), 2, "Expected 2 nodes for mixed public/non-public components");
+}

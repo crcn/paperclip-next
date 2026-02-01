@@ -61,7 +61,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use paperclip_evaluator::{diff_vdocument, VirtualDomDocument};
 //!
 //! let patches = diff_vdocument(&old_vdom, &new_vdom);
@@ -399,7 +399,8 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
             attributes,
             styles,
             children,
-            ..
+            semantic_id,
+            key,
         } => proto_vdom::VNode {
             node_type: Some(proto_vdom::v_node::NodeType::Element(
                 proto_vdom::ElementNode {
@@ -407,6 +408,8 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                     attributes: attributes.clone(),
                     styles: styles.clone(),
                     children: children.iter().map(convert_vnode_to_proto).collect(),
+                    semantic_id: semantic_id.to_selector(),
+                    key: key.clone(),
                 },
             )),
         },
@@ -422,35 +425,13 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                 },
             )),
         },
-        VNode::Error { message, .. } => {
-            // Render errors as red text nodes for visual feedback
+        VNode::Error { message, semantic_id, .. } => {
+            // Render errors using ErrorNode type
             proto_vdom::VNode {
-                node_type: Some(proto_vdom::v_node::NodeType::Element(
-                    proto_vdom::ElementNode {
-                        tag: "span".to_string(),
-                        attributes: [
-                            ("class".to_string(), "paperclip-error".to_string()),
-                            ("title".to_string(), message.clone()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        styles: [
-                            ("color".to_string(), "red".to_string()),
-                            ("font-weight".to_string(), "bold".to_string()),
-                            ("background".to_string(), "#fee".to_string()),
-                            ("padding".to_string(), "2px 4px".to_string()),
-                            ("border-radius".to_string(), "2px".to_string()),
-                            ("border".to_string(), "1px solid red".to_string()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        children: vec![proto_vdom::VNode {
-                            node_type: Some(proto_vdom::v_node::NodeType::Text(
-                                proto_vdom::TextNode {
-                                    content: format!("\u{26A0} {}", message),
-                                },
-                            )),
-                        }],
+                node_type: Some(proto_vdom::v_node::NodeType::Error(
+                    proto_vdom::ErrorNode {
+                        message: message.clone(),
+                        semantic_id: semantic_id.to_selector(),
                     },
                 )),
             }

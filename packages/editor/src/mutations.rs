@@ -187,6 +187,7 @@ impl Mutation {
             Element::Text {
                 content: ref mut expr,
                 span,
+                ..
             } => {
                 *expr = Expression::Literal {
                     value: content.to_string(),

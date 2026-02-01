@@ -18,7 +18,8 @@ fn test_simple_component() {
     let vdom = evaluator.evaluate(&doc).expect("Eval failed");
 
     println!("VDOM nodes: {:#?}", vdom.nodes);
-    assert_eq!(vdom.nodes.len(), 0, "Non-public component should produce 0 nodes");
+    // All components render for preview (public keyword only affects exports)
+    assert_eq!(vdom.nodes.len(), 1, "Non-public component should render for preview");
 }
 
 #[test]

@@ -8,9 +8,9 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     }
   },
   "scripts": {
@@ -29,7 +29,7 @@
     "rollup": "^2.0.0 || ^3.0.0 || ^4.0.0"
   },
   "dependencies": {
-    "@paperclip-lang/wasm": "^0.1.0"
+    "@paperclip-lang/wasm": "file:../wasm/pkg"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.0.0",

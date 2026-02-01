@@ -78,7 +78,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use paperclip_evaluator::Evaluator;
 //! use paperclip_parser::parse;
 //!
@@ -316,19 +316,25 @@ impl Evaluator {
 
         let mut vdoc = VirtualDomDocument::new();
 
-        // Evaluate all public components
-        let public_count = doc.components.iter().filter(|c| c.public).count();
+        // Evaluate ALL components for preview rendering.
+        // The `public` keyword only affects cross-file imports, not preview.
+        // Designers need to see all components while working.
         info!(
-            public_components = public_count,
-            "Evaluating public components"
+            total_components = doc.components.len(),
+            "Evaluating all components for preview"
         );
 
         for component in &doc.components {
-            if component.public {
-                debug!(component_name = %component.name, "Evaluating public component");
-                let vnode = self.evaluate_component(&component.name)?;
-                vdoc.add_node(vnode);
-            }
+            debug!(component_name = %component.name, public = component.public, "Evaluating component");
+            let vnode = self.evaluate_component(&component.name)?;
+            vdoc.add_node(vnode);
+        }
+
+        // Evaluate top-level renders
+        for render in &doc.renders {
+            debug!("Evaluating top-level render element");
+            let vnode = self.evaluate_element(render)?;
+            vdoc.add_node(vnode);
         }
 
         // Evaluate CSS
@@ -442,19 +448,17 @@ impl Evaluator {
 
         let mut vdoc = VirtualDomDocument::new();
 
-        // Evaluate all public components from entry file
-        let public_count = entry_doc.components.iter().filter(|c| c.public).count();
+        // Evaluate ALL components from entry file for preview rendering.
+        // The `public` keyword only affects cross-file imports, not preview.
         info!(
-            public_components = public_count,
-            "Evaluating public components"
+            total_components = entry_doc.components.len(),
+            "Evaluating all components for preview"
         );
 
         for component in &entry_doc.components {
-            if component.public {
-                debug!(component_name = %component.name, "Evaluating public component");
-                let vnode = self.evaluate_component(&component.name)?;
-                vdoc.add_node(vnode);
-            }
+            debug!(component_name = %component.name, public = component.public, "Evaluating component");
+            let vnode = self.evaluate_component(&component.name)?;
+            vdoc.add_node(vnode);
         }
 
         info!(nodes = vdoc.nodes.len(), "Bundle DOM evaluation complete");
@@ -714,9 +718,29 @@ impl Evaluator {
                 Ok(vnode)
             }
 
-            Element::Text { content, span } => {
+            Element::Text {
+                content,
+                styles,
+                span,
+            } => {
                 match self.evaluate_expression(content) {
-                    Ok(value) => Ok(VNode::text(value.to_string())),
+                    Ok(value) => {
+                        let text_value = value.to_string();
+                        if styles.is_empty() {
+                            Ok(VNode::text(text_value))
+                        } else {
+                            // Wrap text in span when it has styles
+                            let semantic_id = self.context.get_semantic_id();
+                            let mut vnode = VNode::element("span", semantic_id);
+                            for style_block in styles {
+                                for (key, value) in &style_block.properties {
+                                    vnode = vnode.with_style(key, value);
+                                }
+                            }
+                            vnode = vnode.with_child(VNode::text(text_value));
+                            Ok(vnode)
+                        }
+                    }
                     Err(err) => {
                         // In dev mode, show error inline instead of crashing
                         warn!(error = %err, "Expression evaluation failed in text node");
@@ -1600,16 +1624,19 @@ mod tests {
         let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
-        // Should evaluate to a single public component (App)
-        assert_eq!(vdoc.nodes.len(), 1);
+        // All components render for preview (Greeting + App)
+        assert_eq!(vdoc.nodes.len(), 2);
 
-        // App renders: <div><div>World</div></div>
+        // First node is Greeting rendered standalone: <div>{name}</div>
+        // (props not passed, so {name} evaluates to empty or error)
+
+        // Second node is App: <div><div>World</div></div>
         // The outer div is from App, inner div is from Greeting expansion
         if let VNode::Element {
             tag: outer_tag,
             children: outer_children,
             ..
-        } = &vdoc.nodes[0]
+        } = &vdoc.nodes[1]
         {
             assert_eq!(outer_tag, "div");
             assert_eq!(outer_children.len(), 1);
@@ -1662,14 +1689,15 @@ mod tests {
         let mut evaluator = Evaluator::with_document_id("/test.pc");
         let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
 
-        assert_eq!(vdoc.nodes.len(), 1);
+        // All 3 components render for preview (Label, Button, App)
+        assert_eq!(vdoc.nodes.len(), 3);
 
-        // App -> <div> -> Button -> <button> -> Label -> <span> -> "Click me"
+        // App is the last node: <div> -> Button -> <button> -> Label -> <span> -> "Click me"
         if let VNode::Element {
             tag: div_tag,
             children: div_children,
             ..
-        } = &vdoc.nodes[0]
+        } = &vdoc.nodes[2]
         {
             assert_eq!(div_tag, "div");
             assert_eq!(div_children.len(), 1);

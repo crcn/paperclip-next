@@ -6,7 +6,9 @@
 import * as vscode from 'vscode';
 import { WorkspaceClient } from './workspace-client';
 import { PreviewManager } from './preview-manager';
+import { ServerManager } from './server-manager';
 
+let serverManager: ServerManager | null = null;
 let client: WorkspaceClient | null = null;
 let previewManager: PreviewManager | null = null;
 
@@ -46,17 +48,22 @@ export async function activate(context: vscode.ExtensionContext) {
     // Get configuration
     const config = vscode.workspace.getConfiguration('paperclip');
     const serverPort = config.get<number>('serverPort', 50051);
-    const serverAddress = `localhost:${serverPort}`;
+    const httpPort = config.get<number>('httpPort', 3030);
 
-    // Initialize workspace client (proto path resolved from @paperclip/proto)
+    // Start the server (or connect if already running)
+    serverManager = new ServerManager(serverPort, httpPort);
+    await serverManager.start();
+
+    // Initialize workspace client
+    const serverAddress = `localhost:${serverPort}`;
     client = new WorkspaceClient(serverAddress);
     await client.connect();
 
-    // Initialize preview manager
-    previewManager = new PreviewManager(context, client);
+    // Initialize preview manager with HTTP port for designer iframe
+    previewManager = new PreviewManager(context, client, serverManager.getHttpPort());
 
     // Show connection status
-    vscode.window.showInformationMessage('Paperclip: Connected to server');
+    vscode.window.showInformationMessage('Paperclip: Ready');
 
     // Monitor connection state
     client.onConnectionStateChange(connected => {
@@ -87,5 +94,11 @@ export async function deactivate() {
   if (client) {
     await client.dispose();
     client = null;
+  }
+
+  // Stop server
+  if (serverManager) {
+    await serverManager.stop();
+    serverManager = null;
   }
 }

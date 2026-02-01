@@ -7,7 +7,7 @@
 import _m0 from "protobufjs/minimal";
 export const protobufPackage = "paperclip.vdom";
 function createBaseVNode() {
-    return { element: undefined, text: undefined, comment: undefined, component: undefined };
+    return { element: undefined, text: undefined, comment: undefined, component: undefined, error: undefined };
 }
 export const VNode = {
     encode(message, writer = _m0.Writer.create()) {
@@ -22,6 +22,9 @@ export const VNode = {
         }
         if (message.component !== undefined) {
             ComponentNode.encode(message.component, writer.uint32(34).fork()).ldelim();
+        }
+        if (message.error !== undefined) {
+            ErrorNode.encode(message.error, writer.uint32(42).fork()).ldelim();
         }
         return writer;
     },
@@ -56,6 +59,12 @@ export const VNode = {
                     }
                     message.component = ComponentNode.decode(reader, reader.uint32());
                     continue;
+                case 5:
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.error = ErrorNode.decode(reader, reader.uint32());
+                    continue;
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -70,6 +79,7 @@ export const VNode = {
             text: isSet(object.text) ? TextNode.fromJSON(object.text) : undefined,
             comment: isSet(object.comment) ? CommentNode.fromJSON(object.comment) : undefined,
             component: isSet(object.component) ? ComponentNode.fromJSON(object.component) : undefined,
+            error: isSet(object.error) ? ErrorNode.fromJSON(object.error) : undefined,
         };
     },
     toJSON(message) {
@@ -85,6 +95,9 @@ export const VNode = {
         }
         if (message.component !== undefined) {
             obj.component = ComponentNode.toJSON(message.component);
+        }
+        if (message.error !== undefined) {
+            obj.error = ErrorNode.toJSON(message.error);
         }
         return obj;
     },
@@ -103,11 +116,80 @@ export const VNode = {
         message.component = (object.component !== undefined && object.component !== null)
             ? ComponentNode.fromPartial(object.component)
             : undefined;
+        message.error = (object.error !== undefined && object.error !== null)
+            ? ErrorNode.fromPartial(object.error)
+            : undefined;
+        return message;
+    },
+};
+function createBaseErrorNode() {
+    return { message: "", semanticId: "" };
+}
+export const ErrorNode = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.message !== "") {
+            writer.uint32(10).string(message.message);
+        }
+        if (message.semanticId !== "") {
+            writer.uint32(18).string(message.semanticId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseErrorNode();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.message = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.semanticId = reader.string();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            message: isSet(object.message) ? globalThis.String(object.message) : "",
+            semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.message !== "") {
+            obj.message = message.message;
+        }
+        if (message.semanticId !== "") {
+            obj.semanticId = message.semanticId;
+        }
+        return obj;
+    },
+    create(base) {
+        return ErrorNode.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseErrorNode();
+        message.message = object.message ?? "";
+        message.semanticId = object.semanticId ?? "";
         return message;
     },
 };
 function createBaseElementNode() {
-    return { tag: "", attributes: {}, styles: {}, children: [] };
+    return { tag: "", attributes: {}, styles: {}, children: [], semanticId: "", key: undefined };
 }
 export const ElementNode = {
     encode(message, writer = _m0.Writer.create()) {
@@ -122,6 +204,12 @@ export const ElementNode = {
         });
         for (const v of message.children) {
             VNode.encode(v, writer.uint32(34).fork()).ldelim();
+        }
+        if (message.semanticId !== "") {
+            writer.uint32(42).string(message.semanticId);
+        }
+        if (message.key !== undefined) {
+            writer.uint32(50).string(message.key);
         }
         return writer;
     },
@@ -162,6 +250,18 @@ export const ElementNode = {
                     }
                     message.children.push(VNode.decode(reader, reader.uint32()));
                     continue;
+                case 5:
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.semanticId = reader.string();
+                    continue;
+                case 6:
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -186,6 +286,8 @@ export const ElementNode = {
                 }, {})
                 : {},
             children: globalThis.Array.isArray(object?.children) ? object.children.map((e) => VNode.fromJSON(e)) : [],
+            semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
+            key: isSet(object.key) ? globalThis.String(object.key) : undefined,
         };
     },
     toJSON(message) {
@@ -214,6 +316,12 @@ export const ElementNode = {
         if (message.children?.length) {
             obj.children = message.children.map((e) => VNode.toJSON(e));
         }
+        if (message.semanticId !== "") {
+            obj.semanticId = message.semanticId;
+        }
+        if (message.key !== undefined) {
+            obj.key = message.key;
+        }
         return obj;
     },
     create(base) {
@@ -235,6 +343,8 @@ export const ElementNode = {
             return acc;
         }, {});
         message.children = object.children?.map((e) => VNode.fromPartial(e)) || [];
+        message.semanticId = object.semanticId ?? "";
+        message.key = object.key ?? undefined;
         return message;
     },
 };
@@ -471,7 +581,7 @@ export const CommentNode = {
     },
 };
 function createBaseComponentNode() {
-    return { componentId: "", props: {}, children: [] };
+    return { componentId: "", props: {}, children: [], semanticId: "" };
 }
 export const ComponentNode = {
     encode(message, writer = _m0.Writer.create()) {
@@ -483,6 +593,9 @@ export const ComponentNode = {
         });
         for (const v of message.children) {
             VNode.encode(v, writer.uint32(26).fork()).ldelim();
+        }
+        if (message.semanticId !== "") {
+            writer.uint32(34).string(message.semanticId);
         }
         return writer;
     },
@@ -514,6 +627,12 @@ export const ComponentNode = {
                     }
                     message.children.push(VNode.decode(reader, reader.uint32()));
                     continue;
+                case 4:
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.semanticId = reader.string();
+                    continue;
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -532,6 +651,7 @@ export const ComponentNode = {
                 }, {})
                 : {},
             children: globalThis.Array.isArray(object?.children) ? object.children.map((e) => VNode.fromJSON(e)) : [],
+            semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
         };
     },
     toJSON(message) {
@@ -551,6 +671,9 @@ export const ComponentNode = {
         if (message.children?.length) {
             obj.children = message.children.map((e) => VNode.toJSON(e));
         }
+        if (message.semanticId !== "") {
+            obj.semanticId = message.semanticId;
+        }
         return obj;
     },
     create(base) {
@@ -566,6 +689,7 @@ export const ComponentNode = {
             return acc;
         }, {});
         message.children = object.children?.map((e) => VNode.fromPartial(e)) || [];
+        message.semanticId = object.semanticId ?? "";
         return message;
     },
 };

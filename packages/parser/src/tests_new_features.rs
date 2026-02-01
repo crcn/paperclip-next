@@ -491,4 +491,282 @@ mod new_features_tests {
         let doc = result.unwrap();
         assert_eq!(doc.components.len(), 1);
     }
+
+    // ==========================================================
+    // Top-level render tests
+    // ==========================================================
+
+    #[test]
+    fn test_top_level_text() {
+        let source = r#"text "Hello, world!""#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.components.len(), 0);
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { content, styles, .. } = &doc.renders[0] {
+            assert!(styles.is_empty());
+            if let crate::ast::Expression::Literal { value, .. } = content {
+                assert_eq!(value, "Hello, world!");
+            } else {
+                panic!("Expected Literal expression");
+            }
+        } else {
+            panic!("Expected Text element");
+        }
+    }
+
+    #[test]
+    fn test_top_level_text_with_styles() {
+        let source = r#"
+            text "Styled text" {
+                style {
+                    color: red
+                    font-size: 16px
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { content, styles, .. } = &doc.renders[0] {
+            assert_eq!(styles.len(), 1);
+            assert_eq!(styles[0].properties.get("color"), Some(&"red".to_string()));
+            assert_eq!(styles[0].properties.get("font-size"), Some(&"16px".to_string()));
+
+            if let crate::ast::Expression::Literal { value, .. } = content {
+                assert_eq!(value, "Styled text");
+            } else {
+                panic!("Expected Literal expression");
+            }
+        } else {
+            panic!("Expected Text element");
+        }
+    }
+
+    #[test]
+    fn test_top_level_text_with_multiple_style_blocks() {
+        let source = r#"
+            text "Multi-style" {
+                style {
+                    color: blue
+                }
+                style {
+                    font-weight: bold
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { styles, .. } = &doc.renders[0] {
+            assert_eq!(styles.len(), 2);
+            assert_eq!(styles[0].properties.get("color"), Some(&"blue".to_string()));
+            assert_eq!(styles[1].properties.get("font-weight"), Some(&"bold".to_string()));
+        } else {
+            panic!("Expected Text element");
+        }
+    }
+
+    #[test]
+    fn test_top_level_div() {
+        let source = r#"
+            div {
+                text "Inside div"
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Tag { tag_name, children, .. } = &doc.renders[0] {
+            assert_eq!(tag_name, "div");
+            assert_eq!(children.len(), 1);
+        } else {
+            panic!("Expected Tag element");
+        }
+    }
+
+    #[test]
+    fn test_top_level_div_with_styles() {
+        let source = r#"
+            div {
+                style {
+                    padding: 16px
+                    background: white
+                }
+                text "Styled div"
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Tag { tag_name, styles, children, .. } = &doc.renders[0] {
+            assert_eq!(tag_name, "div");
+            assert_eq!(styles.len(), 1);
+            assert_eq!(styles[0].properties.get("padding"), Some(&"16px".to_string()));
+            assert_eq!(styles[0].properties.get("background"), Some(&"white".to_string()));
+            assert_eq!(children.len(), 1);
+        } else {
+            panic!("Expected Tag element");
+        }
+    }
+
+    #[test]
+    fn test_multiple_top_level_renders() {
+        let source = r#"
+            text "First"
+            div {
+                text "Second"
+            }
+            text "Third"
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 3);
+    }
+
+    #[test]
+    fn test_mixed_components_and_renders() {
+        let source = r#"
+            component Card {
+                render div {
+                    text "Card content"
+                }
+            }
+
+            text "Standalone text"
+
+            div {
+                text "Standalone div"
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.components.len(), 1);
+        assert_eq!(doc.renders.len(), 2);
+    }
+
+    #[test]
+    fn test_top_level_other_tags() {
+        let source = r#"
+            span {
+                text "Span text"
+            }
+            button {
+                text "Click me"
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 2);
+
+        if let crate::ast::Element::Tag { tag_name, .. } = &doc.renders[0] {
+            assert_eq!(tag_name, "span");
+        }
+        if let crate::ast::Element::Tag { tag_name, .. } = &doc.renders[1] {
+            assert_eq!(tag_name, "button");
+        }
+    }
+
+    #[test]
+    fn test_text_with_expression() {
+        let source = r#"text someVariable"#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { content, .. } = &doc.renders[0] {
+            if let crate::ast::Expression::Variable { name, .. } = content {
+                assert_eq!(name, "someVariable");
+            } else {
+                panic!("Expected Reference expression");
+            }
+        } else {
+            panic!("Expected Text element");
+        }
+    }
+
+    #[test]
+    fn test_text_with_styled_expression() {
+        let source = r#"
+            text count {
+                style {
+                    color: green
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { content, styles, .. } = &doc.renders[0] {
+            assert_eq!(styles.len(), 1);
+            if let crate::ast::Expression::Variable { name, .. } = content {
+                assert_eq!(name, "count");
+            } else {
+                panic!("Expected Reference expression");
+            }
+        } else {
+            panic!("Expected Text element");
+        }
+    }
+
+    #[test]
+    fn test_text_with_complex_expression_and_styles() {
+        let source = r#"
+            text (price * quantity) {
+                style {
+                    font-weight: bold
+                    color: "{primary}"
+                }
+            }
+        "#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Parse error: {:?}", result.err());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.renders.len(), 1);
+
+        if let crate::ast::Element::Text { styles, .. } = &doc.renders[0] {
+            assert_eq!(styles.len(), 1);
+            assert_eq!(styles[0].properties.get("font-weight"), Some(&"bold".to_string()));
+        } else {
+            panic!("Expected Text element");
+        }
+    }
 }
