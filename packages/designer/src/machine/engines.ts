@@ -29,11 +29,208 @@ export interface SSEEngineProps {
 // SSE response format (from Rust server)
 interface PreviewUpdate {
   file_path: string;
-  patches: VDocPatch[];
+  patches: RawPatch[];
   error?: string;
   timestamp: number;
   version: number;
 }
+
+// Raw patch from server (prost serde format)
+interface RawPatch {
+  patch_type?: Record<string, unknown>;
+  patchType?: string;
+}
+
+// Raw node from server (prost serde format)
+interface RawNode {
+  node_type?: Record<string, unknown>;
+}
+
+// Raw document from server
+interface RawDocument {
+  nodes?: RawNode[];
+  styles?: Array<{ selector: string; properties: Record<string, string> }>;
+}
+
+// ============================================================================
+// Transform Functions: Prost Serde Format -> Proto Canonical JSON
+// ============================================================================
+
+/**
+ * Convert snake_case keys to camelCase
+ */
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Convert all keys in an object from snake_case to camelCase (recursive for nested objects)
+ */
+function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = snakeToCamel(key);
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[camelKey] = convertKeysToCamelCase(value as Record<string, unknown>);
+    } else {
+      result[camelKey] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Transform a raw node from prost serde format to proto format.
+ *
+ * Two formats are possible:
+ * 1. Direct format (already correct): { element: { tag: "div", ... } }
+ * 2. Prost serde format: { node_type: { Element: { tag: "div", ... } } }
+ *
+ * Also converts snake_case field names to camelCase (semantic_id -> semanticId)
+ */
+function transformNode(raw: RawNode & Record<string, unknown>): VNode {
+  console.log("[transformNode] Input keys:", Object.keys(raw));
+
+  // Format 1: Already in proto format (direct field names)
+  if ("element" in raw && raw.element) {
+    console.log("[transformNode] Direct 'element' field found");
+    const elemData = convertKeysToCamelCase(raw.element as Record<string, unknown>);
+    if (elemData.children && Array.isArray(elemData.children)) {
+      elemData.children = (elemData.children as unknown[]).map((c) => transformNode(c as RawNode));
+    }
+    return { element: elemData } as VNode;
+  }
+  if ("text" in raw && raw.text) {
+    return { text: convertKeysToCamelCase(raw.text as Record<string, unknown>) } as VNode;
+  }
+  if ("comment" in raw && raw.comment) {
+    return { comment: convertKeysToCamelCase(raw.comment as Record<string, unknown>) } as VNode;
+  }
+  if ("error" in raw && raw.error) {
+    return { error: convertKeysToCamelCase(raw.error as Record<string, unknown>) } as VNode;
+  }
+  if ("component" in raw && raw.component) {
+    const compData = convertKeysToCamelCase(raw.component as Record<string, unknown>);
+    if (compData.children && Array.isArray(compData.children)) {
+      compData.children = (compData.children as unknown[]).map((c) => transformNode(c as RawNode));
+    }
+    return { component: compData } as VNode;
+  }
+
+  // Format 2: Prost serde format with node_type wrapper
+  if (raw.node_type) {
+    const keys = Object.keys(raw.node_type);
+    if (keys.length === 0) {
+      console.warn("[transformNode] Empty node_type:", raw);
+      return {};
+    }
+
+    const variantName = keys[0];
+    const variantData = convertKeysToCamelCase(raw.node_type[variantName] as Record<string, unknown>);
+
+    console.log("[transformNode] node_type variant:", variantName);
+
+    // Convert variant name to lowercase field name (Element -> element)
+    const fieldName = variantName.charAt(0).toLowerCase() + variantName.slice(1);
+
+    // Recursively transform children if present
+    if (variantData.children && Array.isArray(variantData.children)) {
+      variantData.children = (variantData.children as unknown[]).map((c) => transformNode(c as RawNode));
+    }
+
+    // Build the proto-format node
+    const result: Record<string, unknown> = {};
+    result[fieldName] = variantData;
+
+    console.log("[transformNode] Output field:", fieldName);
+
+    return result as VNode;
+  }
+
+  console.warn("[transformNode] Unknown format, keys:", Object.keys(raw));
+  return {};
+}
+
+/**
+ * Transform a raw document from prost serde format to proto format.
+ */
+function transformDocument(raw: RawDocument): VDocument {
+  return {
+    nodes: (raw.nodes || []).map(transformNode),
+    styles: (raw.styles || []).map(s => ({
+      selector: s.selector,
+      properties: s.properties || {},
+    })),
+  };
+}
+
+/**
+ * Transform a raw patch from server format to proto format.
+ *
+ * Two formats are possible:
+ * 1. Initial load (manual JSON): { initialize: { vdom: {...} } }
+ * 2. Incremental (prost serde): { patch_type: { UpdateText: {...} } }
+ */
+function transformPatch(raw: RawPatch & Record<string, unknown>): VDocPatch {
+  console.log("[transformPatch] Raw keys:", Object.keys(raw));
+
+  // Format 1: Direct field names (from process_file_to_json)
+  // Check for direct patch fields first
+  if ("initialize" in raw && raw.initialize) {
+    console.log("[transformPatch] Found direct 'initialize' field");
+    const initData = raw.initialize as Record<string, unknown>;
+    if (initData.vdom) {
+      initData.vdom = transformDocument(initData.vdom as RawDocument);
+    }
+    return { initialize: initData } as VDocPatch;
+  }
+
+  // Format 2: patch_type wrapper (from prost serde)
+  if (raw.patch_type) {
+    const keys = Object.keys(raw.patch_type);
+    if (keys.length === 0) {
+      console.warn("[transformPatch] Empty patch_type:", raw);
+      return {};
+    }
+
+    const variantName = keys[0];
+    const variantData = raw.patch_type[variantName] as Record<string, unknown>;
+
+    console.log("[transformPatch] patch_type variant:", variantName);
+
+    // Convert variant name to camelCase field name (UpdateText -> updateText)
+    const fieldName = variantName.charAt(0).toLowerCase() + variantName.slice(1);
+
+    // Transform nested vdom if this is an Initialize patch
+    if (fieldName === "initialize" && variantData && "vdom" in variantData) {
+      variantData.vdom = transformDocument(variantData.vdom as RawDocument);
+    }
+
+    // Transform nested node if present (ReplaceNode, CreateNode)
+    if (variantData && "newNode" in variantData) {
+      variantData.newNode = transformNode(variantData.newNode as RawNode);
+    }
+    if (variantData && "new_node" in variantData) {
+      variantData.newNode = transformNode(variantData.new_node as RawNode);
+      delete variantData.new_node;
+    }
+    if (variantData && "node" in variantData) {
+      variantData.node = transformNode(variantData.node as RawNode);
+    }
+
+    const result: Record<string, unknown> = {};
+    result[fieldName] = variantData;
+
+    return result as VDocPatch;
+  }
+
+  console.warn("[transformPatch] Unknown format:", raw);
+  return {};
+}
+
+// ============================================================================
+// Patch Application
+// ============================================================================
 
 // Get node at path in proto VDocument
 function getNodeAtPath(doc: VDocument, path: number[]): VNode | null {
@@ -142,6 +339,10 @@ function extractFramesFromDocument(doc: VDocument): Frame[] {
   });
 }
 
+// ============================================================================
+// SSE Engine
+// ============================================================================
+
 export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEngineProps> = (
   propsRef: PropsRef<SSEEngineProps>,
   machine: MachineHandle<DesignerEvent, DesignerState>
@@ -171,14 +372,19 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
         }
 
         let changed = false;
-        for (const patch of update.patches) {
-          console.log("[SSE] Processing patch:", Object.keys(patch).filter(k => (patch as any)[k] !== undefined));
+        for (const rawPatch of update.patches) {
+          // Transform from prost serde format to proto format
+          const patch = transformPatch(rawPatch);
+          console.log("[SSE] Transformed patch:", Object.keys(patch).filter(k => (patch as any)[k] !== undefined));
 
           // Simple oneof checking - check which field is set
           if (patch.initialize?.vdom) {
-            // Initialize patch - use vdom directly (no transformation!)
+            // Initialize patch - use vdom directly (already transformed!)
             vdom = patch.initialize.vdom;
             console.log("[SSE] Initialized VDOM, nodes:", vdom.nodes.length);
+            if (vdom.nodes[0]) {
+              console.log("[SSE] First node keys:", Object.keys(vdom.nodes[0]));
+            }
             changed = true;
           } else if (vdom) {
             // Apply incremental patch

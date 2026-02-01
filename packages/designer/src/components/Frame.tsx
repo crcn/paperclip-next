@@ -149,22 +149,35 @@ function useFrame({ index, node }: UseFrameOptions): UseFrameResult {
  * Uses simple oneof checking - just check which field is truthy.
  */
 function renderNode(node: VNode, doc: Document): Node | null {
+  console.log("[renderNode] Node:", JSON.stringify(node).substring(0, 300));
+  console.log("[renderNode] Has element?", !!node.element, "Has text?", !!node.text);
+
   // Proto oneof: check each field for truthiness
   if (node.element) {
-    const el = doc.createElement(node.element.tag);
+    console.log("[renderNode] Creating element:", node.element.tag);
+    const el = doc.createElement(node.element.tag || "div");
 
-    for (const [key, value] of Object.entries(node.element.attributes)) {
-      el.setAttribute(key, value);
+    // Defensive: attributes might be undefined
+    if (node.element.attributes) {
+      for (const [key, value] of Object.entries(node.element.attributes)) {
+        el.setAttribute(key, value);
+      }
     }
 
-    for (const [key, value] of Object.entries(node.element.styles)) {
-      (el.style as any)[key] = value;
+    // Defensive: styles might be undefined
+    if (node.element.styles) {
+      for (const [key, value] of Object.entries(node.element.styles)) {
+        (el.style as any)[key] = value;
+      }
     }
 
-    for (const child of node.element.children) {
-      const childEl = renderNode(child, doc);
-      if (childEl) {
-        el.appendChild(childEl);
+    // Defensive: children might be undefined
+    if (node.element.children) {
+      for (const child of node.element.children) {
+        const childEl = renderNode(child, doc);
+        if (childEl) {
+          el.appendChild(childEl);
+        }
       }
     }
 
@@ -195,11 +208,15 @@ function renderNode(node: VNode, doc: Document): Node | null {
   if (node.component) {
     // For now, render component as a placeholder div
     const el = doc.createElement("div");
-    el.setAttribute("data-component-id", node.component.componentId);
-    for (const child of node.component.children) {
-      const childEl = renderNode(child, doc);
-      if (childEl) {
-        el.appendChild(childEl);
+    if (node.component.componentId) {
+      el.setAttribute("data-component-id", node.component.componentId);
+    }
+    if (node.component.children) {
+      for (const child of node.component.children) {
+        const childEl = renderNode(child, doc);
+        if (childEl) {
+          el.appendChild(childEl);
+        }
       }
     }
     return el;
