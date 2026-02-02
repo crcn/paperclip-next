@@ -21,8 +21,12 @@ export const ToolOverlay = memo(function ToolOverlay() {
   // Handle click to select frames
   const onClick = useCallback(
     (event: React.MouseEvent) => {
+      console.log("[ToolOverlay] click event at", event.clientX, event.clientY);
       const rect = ref.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect) {
+        console.log("[ToolOverlay] no rect");
+        return;
+      }
 
       // Get mouse position in screen space (relative to canvas container)
       const screenPos = {
@@ -71,7 +75,7 @@ export const ToolOverlay = memo(function ToolOverlay() {
     >
       {/* Debug: show frame count */}
       <div style={{
-        position: "fixed",
+        position: "absolute",
         top: 10,
         right: 10,
         background: frames.length > 0 ? "#00ff00" : "#ff0000",
@@ -80,6 +84,7 @@ export const ToolOverlay = memo(function ToolOverlay() {
         fontFamily: "monospace",
         fontSize: 12,
         zIndex: 99999,
+        pointerEvents: "none",
       }}>
         Frames: {frames.length} | Selected: {selectedFrameIndex ?? "none"}
       </div>

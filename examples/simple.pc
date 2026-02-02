@@ -7,9 +7,9 @@ component Card {
             font-weight: bold
             text-decoration: underline
         }
-        text "somdddddefdd" {
+        text "hello world " {
           style {
-            color: orange
+            color: red
           }
         }
     }

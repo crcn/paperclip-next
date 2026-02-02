@@ -150,6 +150,7 @@ export const ResizeHandles = memo(function ResizeHandles({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, handle: ResizeHandle) => {
+      console.log("[ResizeHandles] mousedown on handle:", handle, "at", e.clientX, e.clientY);
       e.stopPropagation();
       dispatch({
         type: "tool/resizeStart",

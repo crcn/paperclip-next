@@ -41,8 +41,8 @@ export class PreviewPanel {
       }
     );
 
-    // Set HTML with iframe pointing to designer
-    this.panel.webview.html = this.getWebviewContent();
+    // Set HTML with iframe pointing to designer (async)
+    this.setWebviewContent();
 
     // Track visibility changes
     this.disposables.push(
@@ -118,14 +118,26 @@ export class PreviewPanel {
     }
   }
 
-  private getWebviewContent(): string {
-    const filePath = this.document.uri.fsPath;
-    const designerUrl = `http://localhost:${this.httpPort}?file=${encodeURIComponent(filePath)}`;
+  private async setWebviewContent(): Promise<void> {
+    this.panel.webview.html = await this.getWebviewContent();
+  }
 
-    // Create iframe via JavaScript to avoid CSP issues
+  private async getWebviewContent(): Promise<string> {
+    const filePath = this.document.uri.fsPath;
+
+    // Use asExternalUri for proper VSCode/Codespaces authorization
+    const designerHost = await vscode.env.asExternalUri(
+      vscode.Uri.parse(`http://localhost:${this.httpPort}`)
+    );
+    const designerUrl = `${designerHost}?file=${encodeURIComponent(filePath)}`;
+
+    console.log(`[PreviewPanel] Opening preview: ${designerUrl}`);
+
+    // Create iframe with CSP that allows localhost
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src ${designerHost} http://localhost:* https://localhost:*; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
   <style>
     html, body {
       margin: 0;
@@ -176,9 +188,9 @@ export class PreviewPanel {
 </html>`;
   }
 
-  updateFilePath(document: vscode.TextDocument): void {
+  async updateFilePath(document: vscode.TextDocument): Promise<void> {
     this.document = document;
-    this.panel.webview.html = this.getWebviewContent();
+    this.panel.webview.html = await this.getWebviewContent();
     this.panel.title = `Preview: ${this.getFileName()}`;
     this.sendBufferUpdate();
   }
