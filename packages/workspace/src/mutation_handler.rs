@@ -801,6 +801,23 @@ impl MutationHandler {
         })
     }
 
+    /// Extract raw span ID from a node_id that might be in semantic format.
+    /// Examples:
+    ///   "div[bb00315e-15]" -> "bb00315e-15"
+    ///   "div[bb00315e-15]:0" -> "bb00315e-15"
+    ///   "bb00315e-15" -> "bb00315e-15"
+    ///   "bb00315e-15-element" -> "bb00315e-15-element"
+    fn extract_span_id(node_id: &str) -> &str {
+        if let Some(bracket_start) = node_id.find('[') {
+            if let Some(bracket_end) = node_id.find(']') {
+                if bracket_start < bracket_end {
+                    return &node_id[bracket_start + 1..bracket_end];
+                }
+            }
+        }
+        node_id
+    }
+
     /// Apply SetStyleProperty mutation
     fn apply_set_style_property(
         &mut self,
@@ -810,7 +827,15 @@ impl MutationHandler {
         value: &str,
         crdt_doc: &mut CrdtDocument,
     ) -> Result<MutationResult, MutationError> {
-        tracing::info!("[SetStyleProperty] node_id={}, property={}, value={}", node_id, property, value);
+        // Empty value means delete the property (this is how the frontend signals deletion)
+        if value.is_empty() {
+            tracing::info!("[SetStyleProperty] Empty value = delete property {}", property);
+            return self.apply_delete_style_property(mutation_id, node_id, property, crdt_doc);
+        }
+
+        // Extract raw span ID from semantic format (e.g., "div[bb00315e-15]" -> "bb00315e-15")
+        let raw_node_id = Self::extract_span_id(node_id);
+        tracing::info!("[SetStyleProperty] node_id={}, raw={}, property={}, value={}", node_id, raw_node_id, property, value);
 
         // Validate CSS property name (alphanumeric and hyphens only)
         if !property.chars().all(|c| c.is_alphanumeric() || c == '-') {
@@ -832,13 +857,13 @@ impl MutationHandler {
         let all_ids: Vec<_> = self.index.all_node_ids().collect();
         tracing::info!("[SetStyleProperty] Available nodes: {:?}", all_ids);
 
-        // First try direct lookup
-        let node = self.index.get_node(node_id);
+        // First try direct lookup with raw span ID
+        let node = self.index.get_node(raw_node_id);
 
         // If node is a Frame, look for the -element variant which has the actual element positions
         let (actual_node_id, node) = match node {
             Some(n) if n.node_type == NodeType::Frame => {
-                let element_id = format!("{}-element", node_id);
+                let element_id = format!("{}-element", raw_node_id);
                 tracing::info!("[SetStyleProperty] Node is Frame, looking for element variant: {}", element_id);
                 match self.index.get_node(&element_id) {
                     Some(elem_node) => (element_id, elem_node),
@@ -846,21 +871,21 @@ impl MutationHandler {
                         // Frame without separate element entry - this shouldn't happen
                         // but fall back to using the frame (will likely fail)
                         tracing::warn!("[SetStyleProperty] No element variant found, using frame");
-                        (node_id.to_string(), n)
+                        (raw_node_id.to_string(), n)
                     }
                 }
             }
-            Some(n) => (node_id.to_string(), n),
+            Some(n) => (raw_node_id.to_string(), n),
             None => {
-                // Try the -element variant directly (in case node_id is the frame ID)
-                let element_id = format!("{}-element", node_id);
+                // Try the -element variant directly (in case raw_node_id is the frame ID)
+                let element_id = format!("{}-element", raw_node_id);
                 match self.index.get_node(&element_id) {
                     Some(elem_node) => {
                         tracing::info!("[SetStyleProperty] Found via element variant: {}", element_id);
                         (element_id, elem_node)
                     }
                     None => {
-                        tracing::error!("[SetStyleProperty] Node {} not found!", node_id);
+                        tracing::error!("[SetStyleProperty] Node {} (raw: {}) not found!", node_id, raw_node_id);
                         return Err(MutationError::NodeNotFound(node_id.to_string()));
                     }
                 }
@@ -973,11 +998,28 @@ impl MutationHandler {
         property: &str,
         crdt_doc: &mut CrdtDocument,
     ) -> Result<MutationResult, MutationError> {
-        // Find the node
-        let node = self
-            .index
-            .get_node(node_id)
-            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+        // Extract raw span ID from semantic format
+        let raw_node_id = Self::extract_span_id(node_id);
+
+        // Find the node - handle Frame -> Element variant lookup
+        let node = self.index.get_node(raw_node_id);
+        let (actual_node_id, node) = match node {
+            Some(n) if n.node_type == NodeType::Frame => {
+                let element_id = format!("{}-element", raw_node_id);
+                match self.index.get_node(&element_id) {
+                    Some(elem_node) => (element_id, elem_node),
+                    None => (raw_node_id.to_string(), n),
+                }
+            }
+            Some(n) => (raw_node_id.to_string(), n),
+            None => {
+                let element_id = format!("{}-element", raw_node_id);
+                match self.index.get_node(&element_id) {
+                    Some(elem_node) => (element_id, elem_node),
+                    None => return Err(MutationError::NodeNotFound(node_id.to_string())),
+                }
+            }
+        };
 
         // Allow both Element and Frame types (frames are elements with @frame metadata)
         if node.node_type != NodeType::Element && node.node_type != NodeType::Frame {
@@ -993,8 +1035,8 @@ impl MutationHandler {
         // Resolve current positions
         let (start, end) = self
             .index
-            .resolve_node_position(node_id, doc, &text)
-            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+            .resolve_node_position(&actual_node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(actual_node_id.to_string()))?;
 
         // Get the element source
         let element_source = {

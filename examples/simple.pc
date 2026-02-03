@@ -24,7 +24,7 @@ component Card {
 div {
     style {
         padding: 32px
-        color: orange
+        color: purple
         font-size: 32px
         font-weight: bold
         text-decoration: underline

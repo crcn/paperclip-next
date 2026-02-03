@@ -4951,3 +4951,499 @@ div {
         }
     }
 }
+
+
+// ============================================================================
+// TEST: SEMANTIC ID FORMAT HANDLING
+// ============================================================================
+
+#[test]
+fn test_set_style_with_semantic_id_format() {
+    // Bug: After the first mutation, the designer sends node_id in semantic format
+    // like "div[bb00315e-15]" instead of raw span ID "bb00315e-15".
+    // The mutation handler must handle both formats.
+
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    style {
+        color: red
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get the raw span ID (what the index actually stores)
+    let raw_span_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find an element")
+        .clone();
+
+    // Simulate what the designer sends AFTER first mutation: semantic format
+    let semantic_id = format!("div[{}]", raw_span_id);
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "semantic-1".to_string(),
+        node_id: semantic_id.clone(),
+        property: "color".to_string(),
+        value: "blue".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    
+    // This should succeed, not fail with NodeNotFound
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. })),
+        "Should handle semantic ID format. Got: {:?}",
+        result
+    );
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: blue"), "Should update color. Got: {}", text);
+}
+
+#[test]
+fn test_set_style_with_semantic_id_and_nth_child() {
+    // Even more complex: "div[bb00315e-15]:0" format
+    
+    let source = r#"div {
+    style {
+        color: red
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let raw_span_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find an element")
+        .clone();
+
+    // Semantic format with nth-child suffix
+    let semantic_id = format!("div[{}]:0", raw_span_id);
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "semantic-nth-1".to_string(),
+        node_id: semantic_id.clone(),
+        property: "color".to_string(),
+        value: "green".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. })),
+        "Should handle semantic ID with nth-child. Got: {:?}",
+        result
+    );
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: green"), "Should update color. Got: {}", text);
+}
+
+
+#[test]
+fn test_delete_style_with_semantic_id_format() {
+    // Bug: DeleteStyleProperty also receives semantic ID format after first mutation
+
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    style {
+        color: red
+        padding: 10px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get the raw span ID
+    let raw_span_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find an element")
+        .clone();
+
+    // Use semantic ID format
+    let semantic_id = format!("div[{}]", raw_span_id);
+
+    let mutation = Mutation::DeleteStyleProperty {
+        mutation_id: "delete-1".to_string(),
+        node_id: semantic_id.clone(),
+        property: "color".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. })),
+        "Should handle semantic ID format for delete. Got: {:?}",
+        result
+    );
+
+    let text = get_text(&crdt_doc);
+    assert!(!text.contains("color: red"), "Should delete color. Got: {}", text);
+    assert!(text.contains("padding: 10px"), "Should preserve padding. Got: {}", text);
+    
+    // Verify the result parses correctly
+    let parse_result = paperclip_parser::parse(&text);
+    assert!(parse_result.is_ok(), "Result should parse. Got: {:?}\nSource:\n{}", parse_result, text);
+}
+
+#[test]
+fn test_delete_style_produces_valid_syntax() {
+    // Ensure deleting a style property doesn't leave invalid syntax
+
+    let source = r#"div {
+    style {
+        color: red
+        padding: 10px
+        margin: 5px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find element")
+        .clone();
+
+    // Delete middle property
+    let mutation = Mutation::DeleteStyleProperty {
+        mutation_id: "delete-middle".to_string(),
+        node_id: element_id.clone(),
+        property: "padding".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    
+    // Must parse without errors
+    let parse_result = paperclip_parser::parse(&text);
+    assert!(parse_result.is_ok(), "Should produce valid syntax after delete. Parse error: {:?}\nSource:\n{}", parse_result, text);
+    
+    assert!(!text.contains("padding"), "Should delete padding");
+    assert!(text.contains("color: red"), "Should keep color");
+    assert!(text.contains("margin: 5px"), "Should keep margin");
+}
+
+#[test]
+fn test_multiple_style_mutations_produce_valid_syntax() {
+    // Setting style properties multiple times should always produce valid syntax
+
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    style {
+        color: red
+        padding: 10px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get the element ID (via frame lookup)
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Frame).unwrap_or(false)
+        })
+        .expect("Should find frame")
+        .clone();
+
+    // First mutation - change color
+    let mutation1 = Mutation::SetStyleProperty {
+        mutation_id: "m1".to_string(),
+        node_id: frame_id.clone(),
+        property: "color".to_string(),
+        value: "blue".to_string(),
+    };
+    let result1 = handler.apply_mutation(&mutation1, &mut crdt_doc);
+    assert!(matches!(result1, Ok(MutationResult::Applied { .. })), "First mutation failed: {:?}", result1);
+
+    let text1 = get_text(&crdt_doc);
+    let parse1 = paperclip_parser::parse(&text1);
+    assert!(parse1.is_ok(), "After first mutation, syntax invalid: {:?}\nSource:\n{}", parse1, text1);
+
+    // Second mutation - change color again  
+    let mutation2 = Mutation::SetStyleProperty {
+        mutation_id: "m2".to_string(),
+        node_id: frame_id.clone(),
+        property: "color".to_string(),
+        value: "green".to_string(),
+    };
+    let result2 = handler.apply_mutation(&mutation2, &mut crdt_doc);
+    assert!(matches!(result2, Ok(MutationResult::Applied { .. })), "Second mutation failed: {:?}", result2);
+
+    let text2 = get_text(&crdt_doc);
+    let parse2 = paperclip_parser::parse(&text2);
+    assert!(parse2.is_ok(), "After second mutation, syntax invalid: {:?}\nSource:\n{}", parse2, text2);
+
+    // Third mutation - add new property
+    let mutation3 = Mutation::SetStyleProperty {
+        mutation_id: "m3".to_string(),
+        node_id: frame_id.clone(),
+        property: "margin".to_string(),
+        value: "20px".to_string(),
+    };
+    let result3 = handler.apply_mutation(&mutation3, &mut crdt_doc);
+    assert!(matches!(result3, Ok(MutationResult::Applied { .. })), "Third mutation failed: {:?}", result3);
+
+    let text3 = get_text(&crdt_doc);
+    let parse3 = paperclip_parser::parse(&text3);
+    assert!(parse3.is_ok(), "After third mutation, syntax invalid: {:?}\nSource:\n{}", parse3, text3);
+
+    assert!(text3.contains("color: green"), "Should have green color");
+    assert!(text3.contains("margin: 20px"), "Should have margin");
+}
+
+#[test]
+fn test_style_mutation_with_semantic_id_after_previous_mutation() {
+    // Simulates the exact production scenario:
+    // 1. First mutation uses raw span ID
+    // 2. VDOM updates, subsequent mutations use semantic ID format
+
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    style {
+        color: red
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get raw IDs
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Frame).unwrap_or(false)
+        })
+        .expect("Should find frame")
+        .clone();
+    
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find element")
+        .clone();
+
+    // First mutation - raw span ID (how it works initially)
+    let mutation1 = Mutation::SetStyleProperty {
+        mutation_id: "raw-1".to_string(),
+        node_id: frame_id.clone(),
+        property: "color".to_string(),
+        value: "blue".to_string(),
+    };
+    let result1 = handler.apply_mutation(&mutation1, &mut crdt_doc);
+    assert!(matches!(result1, Ok(MutationResult::Applied { .. })));
+
+    let text1 = get_text(&crdt_doc);
+    assert!(paperclip_parser::parse(&text1).is_ok(), "First mutation produced invalid syntax:\n{}", text1);
+
+    // Second mutation - semantic ID format (how it works after VDOM update)
+    let semantic_id = format!("div[{}]", element_id);
+    let mutation2 = Mutation::SetStyleProperty {
+        mutation_id: "semantic-1".to_string(),
+        node_id: semantic_id.clone(),
+        property: "padding".to_string(),
+        value: "20px".to_string(),
+    };
+    let result2 = handler.apply_mutation(&mutation2, &mut crdt_doc);
+    assert!(matches!(result2, Ok(MutationResult::Applied { .. })), "Second mutation failed: {:?}", result2);
+
+    let text2 = get_text(&crdt_doc);
+    assert!(paperclip_parser::parse(&text2).is_ok(), "Second mutation produced invalid syntax:\n{}", text2);
+
+    // Third mutation - semantic ID again
+    let mutation3 = Mutation::SetStyleProperty {
+        mutation_id: "semantic-2".to_string(),
+        node_id: semantic_id.clone(),
+        property: "color".to_string(),
+        value: "green".to_string(),
+    };
+    let result3 = handler.apply_mutation(&mutation3, &mut crdt_doc);
+    assert!(matches!(result3, Ok(MutationResult::Applied { .. })), "Third mutation failed: {:?}", result3);
+
+    let text3 = get_text(&crdt_doc);
+    let parse3 = paperclip_parser::parse(&text3);
+    assert!(parse3.is_ok(), "Third mutation produced invalid syntax: {:?}\nSource:\n{}", parse3, text3);
+}
+
+#[test]
+fn test_style_mutation_with_exact_simple_pc_content() {
+    // Use exact content from simple.pc to reproduce production issue
+    let source = r#"/**
+ * @frame(x: -620, y: -1370, width: 1519, height: 1586)
+ */
+component Card {
+    render div {
+        style {
+            padding: 32px
+            color: orange
+            font-size: 32px
+            font-weight: bold
+            text-decoration: underline
+        }
+        text "hello world " {
+          style {
+            color: red
+          }
+        }
+    }
+}
+
+/**
+ * @frame(x: 2974, y: -167, width: 1308, height: 1288)
+ */
+div {
+    style {
+        padding: 32px
+        color: orange
+        font-size: 32px
+        font-weight: bold
+        text-decoration: underline
+    }
+    text "hello woddd" {
+        style {
+            color: red
+        }
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/Users/craig/Developer/crcn/paperclip-next/examples/simple.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get frame IDs - should have 2 frames
+    let frame_ids: Vec<_> = handler
+        .index()
+        .all_node_ids()
+        .filter(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Frame).unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    
+    assert_eq!(frame_ids.len(), 2, "Should have 2 frames: {:?}", frame_ids);
+
+    // Target the second frame (standalone div)
+    let second_frame_id = frame_ids.iter()
+        .find(|id| !id.contains("7"))  // First frame has "7" in the ID based on logs
+        .expect("Should find second frame")
+        .clone();
+
+    // Apply multiple mutations like user would
+    for i in 0..5 {
+        let mutation = Mutation::SetStyleProperty {
+            mutation_id: format!("m{}", i),
+            node_id: second_frame_id.clone(),
+            property: "color".to_string(),
+            value: if i % 2 == 0 { "blue".to_string() } else { "green".to_string() },
+        };
+
+        let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+        assert!(matches!(result, Ok(MutationResult::Applied { .. })), 
+            "Mutation {} failed: {:?}", i, result);
+
+        let text = get_text(&crdt_doc);
+        let parse_result = paperclip_parser::parse(&text);
+        assert!(parse_result.is_ok(), 
+            "After mutation {}, parse failed: {:?}\nSource:\n{}", i, parse_result, text);
+    }
+}
+
+#[test]
+fn test_set_style_with_empty_value_should_delete() {
+    // In production, delete is implemented as SetInlineStyle with empty value
+    // This should delete the property, not set it to empty
+
+    let source = r#"div {
+    style {
+        color: red
+        padding: 10px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new_with_path("/test.pc");
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .expect("Should find element")
+        .clone();
+
+    // Empty value should delete, not produce "color: "
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "delete-via-empty".to_string(),
+        node_id: element_id.clone(),
+        property: "color".to_string(),
+        value: "".to_string(),  // Empty value = delete
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    
+    // Should succeed (either as delete or as noop)
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. }) | Ok(MutationResult::Noop { .. })),
+        "Empty value mutation should not error. Got: {:?}",
+        result
+    );
+
+    let text = get_text(&crdt_doc);
+    
+    // Must produce valid syntax
+    let parse_result = paperclip_parser::parse(&text);
+    assert!(parse_result.is_ok(), 
+        "Empty value should not produce invalid syntax. Parse error: {:?}\nSource:\n{}", 
+        parse_result, text);
+
+    // Should not have "color: " with no value
+    assert!(!text.contains("color: \n"), "Should not have 'color: ' with no value");
+    assert!(!text.contains("color:\n"), "Should not have 'color:' with no value");
+}
