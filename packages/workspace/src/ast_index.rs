@@ -438,9 +438,58 @@ impl AstIndex {
     ) {
         let node_id = &span.id;
 
-        // Skip if already indexed (preserves Frame type from index_frames_with_components)
-        if self.nodes.contains_key(node_id) {
-            // Still update parent/child relationships
+        tracing::debug!("[AstIndex] index_span called: node_id={}, type={:?}", node_id, node_type);
+
+        // If already indexed as a Frame, we still want to index the Element separately
+        // because Frame points to @frame annotation but Element points to actual element.
+        // Use a suffix to differentiate element entries for nodes that are also frames.
+        let existing = self.nodes.get(node_id);
+        if let Some(existing_node) = existing {
+            tracing::debug!("[AstIndex] Node {} already exists as {:?}, incoming type: {:?}",
+                node_id, existing_node.node_type, node_type);
+
+            if existing_node.node_type == NodeType::Frame && node_type == NodeType::Element {
+                // This element is also a frame - index it with a different key
+                // The frame entry points to @frame, element entry points to actual element
+                let element_node_id = format!("{}-element", node_id);
+                tracing::info!("[AstIndex] Creating element variant: {}", element_node_id);
+
+                let start = span.start as u32;
+                let end = span.end as u32;
+
+                if let (Some(rel_start), Some(rel_end)) = (
+                    Self::create_sticky_index(text, txn, start),
+                    Self::create_sticky_index(text, txn, end),
+                ) {
+                    let expected = source
+                        .get(start as usize..end as usize)
+                        .unwrap_or("")
+                        .to_string();
+
+                    self.nodes.insert(
+                        element_node_id.clone(),
+                        NodePosition {
+                            node_id: element_node_id.clone(),
+                            rel_start,
+                            rel_end,
+                            expected_content: expected,
+                            node_type: NodeType::Element,
+                        },
+                    );
+                }
+
+                // Update parent/child with original node_id (for tree traversal)
+                if let Some(parent) = parent_id {
+                    self.parents.insert(node_id.clone(), parent.to_string());
+                    self.children
+                        .entry(parent.to_string())
+                        .or_default()
+                        .push(node_id.clone());
+                }
+                return;
+            }
+
+            // Already indexed with same type - just update relationships
             if let Some(parent) = parent_id {
                 self.parents.insert(node_id.clone(), parent.to_string());
                 self.children

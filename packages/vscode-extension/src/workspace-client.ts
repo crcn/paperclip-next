@@ -73,6 +73,36 @@ export interface StreamBufferRequest {
   expectedStateVersion?: number;
 }
 
+export interface MutationRequest {
+  clientId: string;
+  filePath: string;
+  mutation: {
+    mutationId: string;
+    timestamp: number;
+    setInlineStyle?: {
+      nodeId: string;
+      property: string;
+      value: string;
+    };
+    setFrameBounds?: {
+      frameId: string;
+      bounds: { x: number; y: number; width: number; height: number };
+    };
+    updateText?: {
+      nodeId: string;
+      content: string;
+    };
+  };
+  expectedVersion?: number;
+}
+
+export interface MutationResult {
+  success: boolean;
+  mutationId: string;
+  newVersion: number;
+  error?: string;
+}
+
 export type PreviewUpdateCallback = (update: PreviewUpdate) => void;
 export type ConnectionStateCallback = (connected: boolean) => void;
 
@@ -260,6 +290,95 @@ export class WorkspaceClient {
           } else {
             console.log('[WorkspaceClient] Preview closed:', response);
             resolve();
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Apply a mutation to a document via gRPC
+   */
+  async applyMutation(request: MutationRequest): Promise<MutationResult> {
+    if (!this.client) {
+      throw new Error('Client not connected');
+    }
+
+    return new Promise((resolve, reject) => {
+      // Build the proto mutation object
+      const protoMutation: any = {
+        mutationId: request.mutation.mutationId,
+        timestamp: request.mutation.timestamp,
+      };
+
+      if (request.mutation.setInlineStyle) {
+        protoMutation.setInlineStyle = {
+          nodeId: request.mutation.setInlineStyle.nodeId,
+          property: request.mutation.setInlineStyle.property,
+          value: request.mutation.setInlineStyle.value,
+        };
+      } else if (request.mutation.setFrameBounds) {
+        protoMutation.setFrameBounds = {
+          frameId: request.mutation.setFrameBounds.frameId,
+          bounds: request.mutation.setFrameBounds.bounds,
+        };
+      } else if (request.mutation.updateText) {
+        protoMutation.updateText = {
+          nodeId: request.mutation.updateText.nodeId,
+          content: request.mutation.updateText.content,
+        };
+      }
+
+      const protoRequest = {
+        clientId: request.clientId,
+        filePath: request.filePath,
+        mutation: protoMutation,
+        expectedVersion: request.expectedVersion || 0,
+      };
+
+      console.log('[WorkspaceClient] applyMutation:', JSON.stringify(protoRequest, null, 2));
+
+      this.client.ApplyMutation(
+        protoRequest,
+        (error: Error | null, response: any) => {
+          if (error) {
+            console.error('[WorkspaceClient] ApplyMutation failed:', error);
+            resolve({
+              success: false,
+              mutationId: request.mutation.mutationId,
+              newVersion: 0,
+              error: error.message,
+            });
+          } else {
+            console.log('[WorkspaceClient] ApplyMutation response:', response);
+            // Parse response - could be ack, rebased, or noop
+            if (response.ack) {
+              resolve({
+                success: true,
+                mutationId: response.ack.mutationId,
+                newVersion: Number(response.ack.newVersion),
+              });
+            } else if (response.noop) {
+              resolve({
+                success: true,
+                mutationId: response.noop.mutationId,
+                newVersion: 0,
+                error: response.noop.reason,
+              });
+            } else if (response.rebased) {
+              resolve({
+                success: true,
+                mutationId: response.rebased.originalMutationId,
+                newVersion: Number(response.rebased.newVersion),
+              });
+            } else {
+              resolve({
+                success: false,
+                mutationId: request.mutation.mutationId,
+                newVersion: 0,
+                error: 'Unknown response format',
+              });
+            }
           }
         }
       );

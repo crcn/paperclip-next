@@ -382,6 +382,15 @@ enum MutationPayload {
         frame_id: String,
         bounds: BoundsPayload,
     },
+    SetInlineStyle {
+        node_id: String,
+        property: String,
+        value: String,
+    },
+    DeleteInlineStyle {
+        node_id: String,
+        property: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -427,6 +436,17 @@ async fn mutation_handler(
             y: bounds.y,
             width: bounds.width,
             height: bounds.height,
+        },
+        MutationPayload::SetInlineStyle { node_id, property, value } => Mutation::SetStyleProperty {
+            mutation_id: mutation_id.clone(),
+            node_id: node_id.clone(),
+            property: property.clone(),
+            value: value.clone(),
+        },
+        MutationPayload::DeleteInlineStyle { node_id, property } => Mutation::DeleteStyleProperty {
+            mutation_id: mutation_id.clone(),
+            node_id: node_id.clone(),
+            property: property.clone(),
         },
     };
 

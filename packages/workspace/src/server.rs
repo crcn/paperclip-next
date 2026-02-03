@@ -1,4 +1,5 @@
 use crate::crdt::{CrdtBroadcast, CrdtClient, CrdtSessionManager};
+use crate::mutation_handler::{Mutation, MutationHandler};
 use crate::state::{StateError, WorkspaceState};
 use crate::watcher::FileWatcher;
 use std::collections::{HashMap, VecDeque};
@@ -478,22 +479,171 @@ impl WorkspaceService for WorkspaceServer {
         request: Request<proto::MutationRequest>,
     ) -> Result<Response<proto::MutationResponse>, Status> {
         let req = request.into_inner();
+        let file_path_str = req.file_path.clone();
+        let client_id = req.client_id.clone();
 
-        // For now, return a stub ack response
-        // TODO: Implement full mutation handling with CRDT integration
-        let response = proto::MutationResponse {
-            result: Some(proto::mutation_response::Result::Ack(proto::MutationAck {
-                mutation_id: req
-                    .mutation
-                    .as_ref()
-                    .and_then(|m| Some(m.mutation_id.clone()))
-                    .unwrap_or_default(),
-                new_version: req.expected_version + 1,
-                timestamp: chrono::Utc::now().timestamp_millis(),
-            })),
+        tracing::info!("==========================================");
+        tracing::info!("[gRPC] ApplyMutation v2 - client={}, file={}", client_id, file_path_str);
+        tracing::info!("[gRPC] Mutation: {:?}", req.mutation);
+
+        // Resolve full path
+        let full_path = if std::path::Path::new(&file_path_str).is_absolute() {
+            PathBuf::from(&file_path_str)
+        } else {
+            self.root_dir.join(&file_path_str)
         };
 
-        Ok(Response::new(response))
+        // Extract mutation from proto
+        let proto_mutation = req.mutation.ok_or_else(|| {
+            Status::invalid_argument("Missing mutation")
+        })?;
+
+        let mutation_id = proto_mutation.mutation_id.clone();
+
+        // Convert proto mutation to internal Mutation enum
+        let mutation = match proto_mutation.mutation_type {
+            Some(proto::mutation::MutationType::SetFrameBounds(m)) => {
+                let bounds = m.bounds.ok_or_else(|| {
+                    Status::invalid_argument("Missing bounds")
+                })?;
+                Mutation::SetFrameBounds {
+                    mutation_id: mutation_id.clone(),
+                    frame_id: m.frame_id,
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                }
+            }
+            Some(proto::mutation::MutationType::SetInlineStyle(m)) => {
+                Mutation::SetStyleProperty {
+                    mutation_id: mutation_id.clone(),
+                    node_id: m.node_id,
+                    property: m.property,
+                    value: m.value,
+                }
+            }
+            Some(proto::mutation::MutationType::UpdateText(m)) => {
+                Mutation::SetTextContent {
+                    mutation_id: mutation_id.clone(),
+                    node_id: m.node_id,
+                    content: m.content,
+                }
+            }
+            _ => {
+                return Err(Status::unimplemented("Mutation type not implemented"));
+            }
+        };
+
+        // Get or create CRDT session for this file
+        let session = match std::fs::read_to_string(&full_path) {
+            Ok(content) => self.crdt_sessions.get_or_create_session_with_content(&file_path_str, &content),
+            Err(e) => {
+                return Err(Status::internal(format!("Failed to read file: {}", e)));
+            }
+        };
+
+        // Apply mutation via MutationHandler
+        let result = {
+            let mut session_guard = session.write().await;
+            let crdt_doc = &mut session_guard.document;
+
+            // Build mutation handler with file path
+            let mut handler = MutationHandler::new_with_path(&full_path.to_string_lossy());
+            let source = crdt_doc.get_text();
+
+            if let Err(e) = handler.rebuild_index(crdt_doc.doc(), &source) {
+                return Err(Status::internal(format!("Failed to build mutation index: {}", e)));
+            }
+
+            // Apply the mutation
+            handler.apply_mutation(&mutation, crdt_doc)
+        };
+
+        match result {
+            Ok(mutation_result) => {
+                tracing::info!("[gRPC] Mutation result: {:?}", mutation_result);
+
+                // Handle different mutation results appropriately
+                match mutation_result {
+                    crate::mutation_handler::MutationResult::Applied { mutation_id: applied_id, new_version: applied_version } => {
+                        let session_guard = session.read().await;
+                        let new_source = session_guard.document.get_text();
+                        let version = session_guard.document.version();
+                        tracing::info!("[gRPC] Applied! New source length: {}, version: {}", new_source.len(), version);
+                        drop(session_guard);
+
+                        // Write updated source back to file
+                        if let Err(e) = std::fs::write(&full_path, &new_source) {
+                            return Err(Status::internal(format!("Failed to write file: {}", e)));
+                        }
+                        tracing::info!("[gRPC] File written to: {:?}", full_path);
+
+                        // Update WorkspaceState and get patches for broadcast
+                        let patches = {
+                            let mut workspace_state = self.state.lock().unwrap();
+                            workspace_state.update_file(full_path.clone(), new_source, &self.root_dir)
+                        };
+
+                        if let Ok(patches) = patches {
+                            // Broadcast update to SSE subscribers
+                            let patches_json: Vec<serde_json::Value> = patches
+                                .iter()
+                                .filter_map(|p| serde_json::to_value(p).ok())
+                                .collect();
+
+                            let update = crate::BroadcastUpdate {
+                                file_path: file_path_str.clone(),
+                                patches_json: serde_json::to_string(&patches_json).unwrap_or_default(),
+                                error: None,
+                                version,
+                            };
+                            let _ = self.update_sender.send(update);
+                        }
+
+                        let response = proto::MutationResponse {
+                            result: Some(proto::mutation_response::Result::Ack(proto::MutationAck {
+                                mutation_id: applied_id,
+                                new_version: version,
+                                timestamp: chrono::Utc::now().timestamp_millis(),
+                            })),
+                        };
+
+                        Ok(Response::new(response))
+                    }
+                    crate::mutation_handler::MutationResult::Noop { mutation_id: noop_id, reason } => {
+                        tracing::warn!("[gRPC] Mutation was NOOP: {}", reason);
+                        let response = proto::MutationResponse {
+                            result: Some(proto::mutation_response::Result::Noop(proto::MutationNoop {
+                                mutation_id: noop_id,
+                                reason,
+                            })),
+                        };
+                        Ok(Response::new(response))
+                    }
+                    crate::mutation_handler::MutationResult::Rebased { original_mutation_id, reason, new_version } => {
+                        tracing::info!("[gRPC] Mutation was rebased: {}", reason);
+                        let response = proto::MutationResponse {
+                            result: Some(proto::mutation_response::Result::Rebased(proto::MutationRebased {
+                                original_mutation_id,
+                                transformed_mutation: None,
+                                new_version,
+                                reason,
+                            })),
+                        };
+                        Ok(Response::new(response))
+                    }
+                    crate::mutation_handler::MutationResult::Rejected { mutation_id: rejected_id, reason } => {
+                        tracing::error!("[gRPC] Mutation was rejected: {}", reason);
+                        Err(Status::failed_precondition(format!("Mutation rejected: {}", reason)))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("[gRPC] Mutation error: {:?}", e);
+                Err(Status::internal(format!("Mutation failed: {}", e)))
+            }
+        }
     }
 
     async fn get_document_outline(

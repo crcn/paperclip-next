@@ -702,7 +702,7 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
         }
       }
 
-      // Handle style/changed - send SetInlineStyle mutation to server
+      // Handle style/changed - send SetInlineStyle mutation via postMessage to VSCode
       if (event.type === "style/changed") {
         const { property, value } = event.payload;
         const selectedElement = prevState.selectedElement;
@@ -711,29 +711,23 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
           return;
         }
 
-        const serverUrl = propsRef.current?.serverUrl || "";
-        const filePath = propsRef.current?.filePath;
+        const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        if (filePath) {
-          sendMutation(serverUrl, filePath, {
-            type: "SetInlineStyle",
+        // Send mutation to VSCode extension via postMessage
+        console.log("[API] Sending SetInlineStyle mutation via postMessage");
+        window.parent.postMessage({
+          type: "mutation",
+          mutationId,
+          mutationType: "SetInlineStyle",
+          payload: {
             node_id: selectedElement.sourceId,
             property,
             value,
-          }).then((response) => {
-            if (response.success) {
-              console.log("[API] Style mutation acknowledged:", response.mutation_id);
-            } else {
-              console.error("[API] Style mutation failed:", response.error);
-              // TODO: Revert optimistic update on failure
-            }
-          });
-        } else {
-          console.error("[API] No filePath available for style mutation");
-        }
+          },
+        }, "*");
       }
 
-      // Handle style/removed - send DeleteInlineStyle mutation to server
+      // Handle style/removed - send DeleteInlineStyle mutation via postMessage to VSCode
       if (event.type === "style/removed") {
         const { property } = event.payload;
         const selectedElement = prevState.selectedElement;
@@ -742,25 +736,19 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
           return;
         }
 
-        const serverUrl = propsRef.current?.serverUrl || "";
-        const filePath = propsRef.current?.filePath;
+        const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        if (filePath) {
-          sendMutation(serverUrl, filePath, {
-            type: "DeleteInlineStyle",
+        // Send mutation to VSCode extension via postMessage
+        console.log("[API] Sending DeleteInlineStyle mutation via postMessage");
+        window.parent.postMessage({
+          type: "mutation",
+          mutationId,
+          mutationType: "DeleteInlineStyle",
+          payload: {
             node_id: selectedElement.sourceId,
             property,
-          }).then((response) => {
-            if (response.success) {
-              console.log("[API] Style delete mutation acknowledged:", response.mutation_id);
-            } else {
-              console.error("[API] Style delete mutation failed:", response.error);
-              // TODO: Revert optimistic update on failure
-            }
-          });
-        } else {
-          console.error("[API] No filePath available for style mutation");
-        }
+          },
+        }, "*");
       }
     },
 

@@ -19,7 +19,7 @@ component Card {
 }
 
 /**
- * @frame(x: 2978, y: -69, width: 1308, height: 1288)
+ * @frame(x: 2974, y: -167, width: 1308, height: 1288)
  */
 div {
     style {

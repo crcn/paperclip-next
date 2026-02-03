@@ -11,7 +11,7 @@
 
 import * as vscode from 'vscode';
 import * as grpc from '@grpc/grpc-js';
-import { WorkspaceClient, PreviewUpdate } from './workspace-client';
+import { WorkspaceClient, PreviewUpdate, MutationRequest } from './workspace-client';
 
 // Debounce delay for sending updates to server
 const DEBOUNCE_MS = 100;
@@ -66,8 +66,82 @@ export class PreviewPanel {
       })
     );
 
+    // Handle messages from webview (including mutations from designer iframe)
+    this.disposables.push(
+      this.panel.webview.onDidReceiveMessage(async (message) => {
+        await this.handleWebviewMessage(message);
+      })
+    );
+
     // Start streaming buffer
     this.startStreamBuffer();
+  }
+
+  /**
+   * Handle messages from the webview (forwarded from designer iframe)
+   */
+  private async handleWebviewMessage(message: any): Promise<void> {
+    console.log('[PreviewPanel] Received webview message:', message);
+
+    if (message.type === 'mutation') {
+      const { mutationId, mutationType, payload } = message;
+      const filePath = this.document.uri.fsPath;
+
+      const mutationRequest: MutationRequest = {
+        clientId: this.client.getClientId(),
+        filePath,
+        mutation: {
+          mutationId,
+          timestamp: Date.now(),
+        },
+      };
+
+      // Build mutation based on type
+      if (mutationType === 'SetInlineStyle') {
+        mutationRequest.mutation.setInlineStyle = {
+          nodeId: payload.node_id,
+          property: payload.property,
+          value: payload.value,
+        };
+      } else if (mutationType === 'DeleteInlineStyle') {
+        // Delete is a SetInlineStyle with empty value (or we could add a delete mutation type)
+        mutationRequest.mutation.setInlineStyle = {
+          nodeId: payload.node_id,
+          property: payload.property,
+          value: '', // Empty value to delete
+        };
+      } else if (mutationType === 'SetFrameBounds') {
+        mutationRequest.mutation.setFrameBounds = {
+          frameId: payload.frame_id,
+          bounds: payload.bounds,
+        };
+      } else {
+        console.warn('[PreviewPanel] Unknown mutation type:', mutationType);
+        return;
+      }
+
+      try {
+        const result = await this.client.applyMutation(mutationRequest);
+        console.log('[PreviewPanel] Mutation result:', result);
+
+        // Send result back to designer iframe
+        this.panel.webview.postMessage({
+          type: 'mutationResult',
+          mutationId,
+          success: result.success,
+          newVersion: result.newVersion,
+          error: result.error,
+        });
+      } catch (error) {
+        console.error('[PreviewPanel] Mutation error:', error);
+        this.panel.webview.postMessage({
+          type: 'mutationResult',
+          mutationId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
   }
 
   private getFileName(): string {
@@ -181,6 +255,9 @@ export class PreviewPanel {
   <div class="loader"></div>
 </body>
 <script>
+  // Get VSCode webview API for messaging
+  const vscode = acquireVsCodeApi();
+
   const iframe = document.createElement("iframe");
   iframe.src = "${designerUrl}";
   Object.assign(iframe.style, {
@@ -193,6 +270,26 @@ export class PreviewPanel {
     left: 0
   });
   document.body.appendChild(iframe);
+
+  // Handle all messages
+  window.addEventListener("message", (event) => {
+    console.log("[Webview] Received message:", event.data, "source:", event.source === iframe.contentWindow ? "iframe" : event.source === window ? "window" : "unknown");
+
+    // Message from iframe (designer) - forward to VSCode extension
+    if (event.source === iframe.contentWindow) {
+      if (event.data && event.data.type === "mutation") {
+        console.log("[Webview] Forwarding mutation to extension:", event.data);
+        vscode.postMessage(event.data);
+      }
+      return;
+    }
+
+    // Message from VSCode extension - forward to iframe
+    if (event.data && event.data.type === "mutationResult") {
+      console.log("[Webview] Forwarding mutation result to iframe:", event.data);
+      iframe.contentWindow?.postMessage(event.data, "*");
+    }
+  });
 </script>
 </html>`;
   }

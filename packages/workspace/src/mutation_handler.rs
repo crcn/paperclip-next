@@ -810,6 +810,8 @@ impl MutationHandler {
         value: &str,
         crdt_doc: &mut CrdtDocument,
     ) -> Result<MutationResult, MutationError> {
+        tracing::info!("[SetStyleProperty] node_id={}, property={}, value={}", node_id, property, value);
+
         // Validate CSS property name (alphanumeric and hyphens only)
         if !property.chars().all(|c| c.is_alphanumeric() || c == '-') {
             return Err(MutationError::InvalidMutation(format!(
@@ -826,13 +828,48 @@ impl MutationHandler {
             )));
         }
 
-        // Find the node
-        let node = self
-            .index
-            .get_node(node_id)
-            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+        // Find the node - for frames, we need to look up the element variant
+        let all_ids: Vec<_> = self.index.all_node_ids().collect();
+        tracing::info!("[SetStyleProperty] Available nodes: {:?}", all_ids);
 
-        // Allow both Element and Frame types (frames are elements with @frame metadata)
+        // First try direct lookup
+        let node = self.index.get_node(node_id);
+
+        // If node is a Frame, look for the -element variant which has the actual element positions
+        let (actual_node_id, node) = match node {
+            Some(n) if n.node_type == NodeType::Frame => {
+                let element_id = format!("{}-element", node_id);
+                tracing::info!("[SetStyleProperty] Node is Frame, looking for element variant: {}", element_id);
+                match self.index.get_node(&element_id) {
+                    Some(elem_node) => (element_id, elem_node),
+                    None => {
+                        // Frame without separate element entry - this shouldn't happen
+                        // but fall back to using the frame (will likely fail)
+                        tracing::warn!("[SetStyleProperty] No element variant found, using frame");
+                        (node_id.to_string(), n)
+                    }
+                }
+            }
+            Some(n) => (node_id.to_string(), n),
+            None => {
+                // Try the -element variant directly (in case node_id is the frame ID)
+                let element_id = format!("{}-element", node_id);
+                match self.index.get_node(&element_id) {
+                    Some(elem_node) => {
+                        tracing::info!("[SetStyleProperty] Found via element variant: {}", element_id);
+                        (element_id, elem_node)
+                    }
+                    None => {
+                        tracing::error!("[SetStyleProperty] Node {} not found!", node_id);
+                        return Err(MutationError::NodeNotFound(node_id.to_string()));
+                    }
+                }
+            }
+        };
+
+        tracing::info!("[SetStyleProperty] Using node: {} ({:?})", actual_node_id, node.node_type);
+
+        // Allow both Element and Frame types (though Frame should have been redirected above)
         if node.node_type != NodeType::Element && node.node_type != NodeType::Frame {
             return Err(MutationError::InvalidMutation(format!(
                 "Node {} is not an element (got {:?})",
@@ -843,14 +880,14 @@ impl MutationHandler {
         let doc = crdt_doc.doc();
         let text = doc.get_or_insert_text("content");
 
-        // Check for conflicts
-        self.index.check_conflict(node_id, doc, &text)?;
+        // Check for conflicts using the actual node ID (element variant if applicable)
+        self.index.check_conflict(&actual_node_id, doc, &text)?;
 
-        // Resolve current positions
+        // Resolve current positions using the actual node ID
         let (start, end) = self
             .index
-            .resolve_node_position(node_id, doc, &text)
-            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+            .resolve_node_position(&actual_node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(actual_node_id.to_string()))?;
 
         // Get the element source
         let element_source = {
@@ -859,9 +896,12 @@ impl MutationHandler {
             full_text[start as usize..end as usize].to_string()
         };
 
+        tracing::info!("[SetStyleProperty] Element source ({} bytes): {:?}", element_source.len(), &element_source[..element_source.len().min(200)]);
+
         // Find the style block within the element
         // Look for "style {" pattern (without variants for Phase 1)
         if let Some(style_info) = Self::find_style_block(&element_source) {
+            tracing::info!("[SetStyleProperty] Found style block at {:?}", style_info);
             // Check if property already exists
             if let Some((prop_start, prop_end)) =
                 Self::find_property_in_style(&element_source, &style_info, property)
@@ -893,8 +933,11 @@ impl MutationHandler {
         }
 
         // No style block found - need to create one
+        tracing::info!("[SetStyleProperty] No style block found, creating new one");
+
         // Find insertion point (after tag name and attributes, before children or closing)
         if let Some(insert_pos) = Self::find_style_insertion_point(&element_source) {
+            tracing::info!("[SetStyleProperty] Found insertion point at offset {}", insert_pos);
             let abs_insert_pos = start + insert_pos as u32;
 
             // Create new style block
@@ -902,6 +945,7 @@ impl MutationHandler {
                 "\n        style {{\n            {}: {}\n        }}",
                 property, value
             );
+            tracing::info!("[SetStyleProperty] Inserting new style block: {:?}", new_style);
             crdt_doc.insert(abs_insert_pos, &new_style);
 
             // Rebuild index
@@ -914,6 +958,7 @@ impl MutationHandler {
             });
         }
 
+        tracing::error!("[SetStyleProperty] Could not find insertion point! Element source: {:?}", &element_source[..element_source.len().min(500)]);
         Ok(MutationResult::Noop {
             mutation_id: mutation_id.to_string(),
             reason: "Could not find position to insert style".to_string(),
