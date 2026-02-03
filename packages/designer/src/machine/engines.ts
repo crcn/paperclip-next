@@ -15,7 +15,12 @@ import {
   DesignerEvent,
   DesignerState,
   Frame,
+  FrameBounds,
+  PendingMutation,
+  Point,
+  ResizeHandle,
 } from "./state";
+import { screenToCanvas } from "./geometry";
 
 // ============================================================================
 // SSE Engine
@@ -316,8 +321,10 @@ function extractFramesFromDocument(doc: VDocument): Frame[] {
     // Oneof check: if it's an element, extract frame data
     if (node.element) {
       const attrs = node.element.attributes;
+      // Use sourceId for mutations (maps to AST span.id), fall back to semanticId
+      const frameId = node.element.sourceId ?? node.element.semanticId ?? `frame-${index}`;
       return {
-        id: node.element.semanticId ?? `frame-${index}`,
+        id: frameId,
         bounds: {
           x: parseFloat(attrs["data-frame-x"] ?? "0") || index * 1100,
           y: parseFloat(attrs["data-frame-y"] ?? "0") || 0,
@@ -337,6 +344,107 @@ function extractFramesFromDocument(doc: VDocument): Frame[] {
       },
     };
   });
+}
+
+// ============================================================================
+// Mutation API
+// ============================================================================
+
+const MIN_FRAME_SIZE = 50;
+
+/**
+ * Calculate new frame bounds based on resize handle drag
+ */
+function calculateResizedBounds(
+  startBounds: FrameBounds,
+  handle: ResizeHandle,
+  delta: Point
+): FrameBounds {
+  let { x, y, width, height } = startBounds;
+
+  // Handle horizontal resize
+  if (handle.includes("w")) {
+    const newWidth = Math.max(MIN_FRAME_SIZE, width - delta.x);
+    if (newWidth !== width) {
+      x = x + (width - newWidth);
+      width = newWidth;
+    }
+  } else if (handle.includes("e")) {
+    width = Math.max(MIN_FRAME_SIZE, width + delta.x);
+  }
+
+  // Handle vertical resize
+  if (handle.includes("n")) {
+    const newHeight = Math.max(MIN_FRAME_SIZE, height - delta.y);
+    if (newHeight !== height) {
+      y = y + (height - newHeight);
+      height = newHeight;
+    }
+  } else if (handle.includes("s")) {
+    height = Math.max(MIN_FRAME_SIZE, height + delta.y);
+  }
+
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+/**
+ * Server mutation response
+ */
+interface MutationResponse {
+  success: boolean;
+  mutation_id: string;
+  version: number;
+  error?: string;
+}
+
+/**
+ * Send a mutation to the server
+ * Returns the server response with mutation_id and version
+ */
+async function sendMutation(
+  serverUrl: string,
+  filePath: string,
+  mutation: { type: string; [key: string]: unknown }
+): Promise<MutationResponse> {
+  const url = `${serverUrl}/api/mutation`;
+
+  console.log("[API] Sending mutation:", { filePath, mutation });
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        file_path: filePath,
+        mutation,
+      }),
+    });
+
+    const result: MutationResponse = await response.json();
+
+    if (!response.ok || !result.success) {
+      console.error("[API] Mutation failed:", response.status, result.error);
+      return result;
+    }
+
+    console.log("[API] Mutation succeeded:", result);
+    return result;
+  } catch (err) {
+    console.error("[API] Mutation error:", err);
+    return {
+      success: false,
+      mutation_id: "",
+      version: 0,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
 }
 
 // ============================================================================
@@ -428,8 +536,100 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
       }
     },
 
-    handleEvent(_event, _prevState) {
-      // No events to handle currently
+    handleEvent(event, prevState) {
+      // Handle tool/resizeEnd - send mutation to server
+      if (event.type === "tool/resizeEnd") {
+        const drag = prevState.tool.drag;
+        if (!drag) {
+          console.log("[API] tool/resizeEnd - no drag state");
+          return;
+        }
+
+        // Get frame info
+        const frame = prevState.frames[drag.frameIndex];
+        if (!frame) {
+          console.log("[API] tool/resizeEnd - no frame at index", drag.frameIndex);
+          return;
+        }
+
+        // Calculate the delta in canvas space (same logic as reducer)
+        const { transform } = prevState.canvas;
+        const startCanvas = screenToCanvas(drag.startMouse, transform);
+        const endCanvas = screenToCanvas(drag.currentMouse, transform);
+        const delta = {
+          x: endCanvas.x - startCanvas.x,
+          y: endCanvas.y - startCanvas.y,
+        };
+
+        // Calculate new bounds
+        const newBounds = calculateResizedBounds(drag.startBounds, drag.handle, delta);
+
+        // Generate client-side mutation ID for tracking
+        const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        console.log("[API] Sending SetFrameBounds mutation:", {
+          mutationId,
+          frameId: frame.id,
+          bounds: newBounds,
+        });
+
+        // Create pending mutation for optimistic update tracking
+        const pendingMutation: PendingMutation = {
+          mutationId,
+          type: "setFrameBounds",
+          frameId: frame.id,
+          optimisticBounds: newBounds,
+          createdAt: Date.now(),
+        };
+
+        // Dispatch mutation/started to track the pending mutation
+        machine.dispatch({
+          type: "mutation/started",
+          payload: { mutation: pendingMutation },
+        });
+
+        // Send mutation to server
+        const serverUrl = propsRef.current?.serverUrl || "";
+        const filePath = propsRef.current?.filePath;
+
+        if (filePath) {
+          sendMutation(serverUrl, filePath, {
+            type: "setFrameBounds",
+            frame_id: frame.id,
+            bounds: newBounds,
+          }).then((response) => {
+            if (response.success) {
+              // Mutation acknowledged by server
+              machine.dispatch({
+                type: "mutation/acknowledged",
+                payload: {
+                  mutationId: pendingMutation.mutationId,
+                  version: response.version,
+                },
+              });
+            } else {
+              // Mutation failed - dispatch failure to trigger revert
+              machine.dispatch({
+                type: "mutation/failed",
+                payload: {
+                  mutationId: pendingMutation.mutationId,
+                  error: response.error || "Unknown error",
+                },
+              });
+            }
+          });
+        } else {
+          console.error("[API] No filePath available for mutation");
+          // Immediately fail if no file path
+          machine.dispatch({
+            type: "mutation/failed",
+            payload: {
+              mutationId: pendingMutation.mutationId,
+              error: "No file path available",
+            },
+          });
+        }
+      }
     },
 
     handlePropsChange(prevProps: SSEEngineProps, nextProps: SSEEngineProps) {

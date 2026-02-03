@@ -123,7 +123,7 @@ The overlay div currently has `pointerEvents: "none"`. Strategy:
 - [x] Dragging edge handles resizes frame in one dimension
 - [x] Ghost preview shows new bounds during drag
 - [x] Frame bounds update on drag completion (mouseup)
-- [ ] Changes persist to `@frame` doc comment via SetFrameBounds mutation
+- [x] Changes persist to `@frame` doc comment via SetFrameBounds mutation
 
 ### Handle Behavior
 - [x] Handles maintain constant screen-space size (8x8px) regardless of zoom
@@ -132,15 +132,15 @@ The overlay div currently has `pointerEvents: "none"`. Strategy:
 - [x] Minimum frame size enforced (50x50px) to prevent negative dimensions
 
 ### @frame Persistence
-- [ ] Existing @frame comment is updated with new bounds
-- [ ] Missing @frame comment is created with full bounds
+- [x] Existing @frame comment is updated with new bounds
+- [x] Missing @frame comment is created with full bounds
 - [x] Numeric values are integers (no decimals)
 
 ### State Management
 - [x] New events: `tool/resizeStart`, `tool/resizeMove`, `tool/resizeEnd`
 - [x] Drag state tracked in DesignerState
 - [x] Reducer handles all resize events
-- [ ] Engine persists changes on `tool/resizeEnd`
+- [x] Engine persists changes on `tool/resizeEnd`
 
 ## Success Metrics
 

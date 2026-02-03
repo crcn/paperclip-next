@@ -1,0 +1,535 @@
+//! Mutation Handler - Translates semantic mutations to CRDT edits
+//!
+//! This module takes semantic visual mutations (SetFrameBounds, MoveNode, etc.)
+//! and translates them into Y.Text CRDT edits using StickyIndex for safety.
+
+use crate::ast_index::{AstIndex, ConflictError, NodeType};
+use crate::crdt::CrdtDocument;
+use yrs::{Doc, GetString, Transact};
+
+/// Result of applying a mutation
+#[derive(Debug)]
+pub enum MutationResult {
+    /// Mutation was applied successfully
+    Applied { mutation_id: String, new_version: u64 },
+    /// Mutation was transformed due to concurrent changes
+    Rebased {
+        original_mutation_id: String,
+        reason: String,
+        new_version: u64,
+    },
+    /// Mutation had no effect (node deleted, already at target, etc.)
+    Noop { mutation_id: String, reason: String },
+    /// Mutation was rejected due to conflict
+    Rejected { mutation_id: String, reason: String },
+}
+
+/// Semantic mutations that can be applied
+#[derive(Debug, Clone)]
+pub enum Mutation {
+    SetFrameBounds {
+        mutation_id: String,
+        frame_id: String,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
+    SetStyleProperty {
+        mutation_id: String,
+        node_id: String,
+        property: String,
+        value: String,
+    },
+    DeleteStyleProperty {
+        mutation_id: String,
+        node_id: String,
+        property: String,
+    },
+    SetTextContent {
+        mutation_id: String,
+        node_id: String,
+        content: String,
+    },
+    DeleteNode {
+        mutation_id: String,
+        node_id: String,
+    },
+    MoveNode {
+        mutation_id: String,
+        node_id: String,
+        new_parent_id: String,
+        index: u32,
+    },
+    InsertNode {
+        mutation_id: String,
+        parent_id: String,
+        index: u32,
+        source: String,
+    },
+    SetAttribute {
+        mutation_id: String,
+        node_id: String,
+        name: String,
+        value: String,
+    },
+}
+
+impl Mutation {
+    pub fn mutation_id(&self) -> &str {
+        match self {
+            Mutation::SetFrameBounds { mutation_id, .. } => mutation_id,
+            Mutation::SetStyleProperty { mutation_id, .. } => mutation_id,
+            Mutation::DeleteStyleProperty { mutation_id, .. } => mutation_id,
+            Mutation::SetTextContent { mutation_id, .. } => mutation_id,
+            Mutation::DeleteNode { mutation_id, .. } => mutation_id,
+            Mutation::MoveNode { mutation_id, .. } => mutation_id,
+            Mutation::InsertNode { mutation_id, .. } => mutation_id,
+            Mutation::SetAttribute { mutation_id, .. } => mutation_id,
+        }
+    }
+}
+
+/// Errors that can occur during mutation handling
+#[derive(Debug, thiserror::Error)]
+pub enum MutationError {
+    #[error("Node not found: {0}")]
+    NodeNotFound(String),
+
+    #[error("Conflict detected: {0}")]
+    Conflict(#[from] ConflictError),
+
+    #[error("Invalid mutation: {0}")]
+    InvalidMutation(String),
+
+    #[error("Position resolution failed for node: {0}")]
+    PositionResolutionFailed(String),
+
+    #[error("Parse error after mutation: {0}")]
+    ParseError(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+/// Handles mutation translation and application
+pub struct MutationHandler {
+    /// Current AST index (rebuilt after each successful mutation)
+    index: AstIndex,
+    /// File path for consistent span.id generation (CRC32 of path)
+    file_path: String,
+}
+
+impl MutationHandler {
+    /// Create a new mutation handler (legacy, uses empty path - span.ids may not match)
+    pub fn new() -> Self {
+        Self {
+            index: AstIndex::new(),
+            file_path: String::new(),
+        }
+    }
+
+    /// Create a new mutation handler with file path for correct span.id generation
+    pub fn new_with_path(file_path: &str) -> Self {
+        Self {
+            index: AstIndex::new(),
+            file_path: file_path.to_string(),
+        }
+    }
+
+    /// Rebuild the index from current document state
+    /// Uses stored file_path for consistent span.id generation
+    pub fn rebuild_index(&mut self, doc: &Doc, source: &str) -> Result<(), MutationError> {
+        let ast = paperclip_parser::parse_with_path(source, &self.file_path)
+            .map_err(|e| MutationError::ParseError(e.to_string()))?;
+        self.index = AstIndex::build_from_ast(&ast, doc, source);
+        Ok(())
+    }
+
+    /// Apply a mutation to the CRDT document
+    pub fn apply_mutation(
+        &mut self,
+        mutation: &Mutation,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        match mutation {
+            Mutation::SetFrameBounds {
+                mutation_id,
+                frame_id,
+                x,
+                y,
+                width,
+                height,
+            } => self.apply_set_frame_bounds(mutation_id, frame_id, *x, *y, *width, *height, crdt_doc),
+            Mutation::SetTextContent {
+                mutation_id,
+                node_id,
+                content,
+            } => self.apply_set_text_content(mutation_id, node_id, content, crdt_doc),
+            Mutation::DeleteNode {
+                mutation_id,
+                node_id,
+            } => self.apply_delete_node(mutation_id, node_id, crdt_doc),
+            Mutation::SetStyleProperty {
+                mutation_id,
+                node_id: _,
+                property: _,
+                value: _,
+            } => Ok(MutationResult::Noop {
+                mutation_id: mutation_id.clone(),
+                reason: "Style property editing not yet implemented".to_string(),
+            }),
+            Mutation::DeleteStyleProperty {
+                mutation_id,
+                node_id: _,
+                property: _,
+            } => Ok(MutationResult::Noop {
+                mutation_id: mutation_id.clone(),
+                reason: "Style property deletion not yet implemented".to_string(),
+            }),
+            Mutation::MoveNode {
+                mutation_id,
+                node_id,
+                new_parent_id,
+                index,
+            } => self.apply_move_node(mutation_id, node_id, new_parent_id, *index, crdt_doc),
+            Mutation::InsertNode {
+                mutation_id,
+                parent_id,
+                index,
+                source,
+            } => self.apply_insert_node(mutation_id, parent_id, *index, source, crdt_doc),
+            Mutation::SetAttribute {
+                mutation_id,
+                node_id: _,
+                name: _,
+                value: _,
+            } => Ok(MutationResult::Noop {
+                mutation_id: mutation_id.clone(),
+                reason: "Attribute editing not yet implemented".to_string(),
+            }),
+        }
+    }
+
+    /// Apply SetFrameBounds mutation
+    fn apply_set_frame_bounds(
+        &mut self,
+        mutation_id: &str,
+        frame_id: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Debug: Log what frame_id is being requested
+        tracing::debug!("SetFrameBounds: Looking for frame_id={}", frame_id);
+
+        // Find the frame node
+        let node = self
+            .index
+            .get_node(frame_id)
+            .ok_or_else(|| {
+                // Debug: Log all available node IDs on failure
+                let all_ids: Vec<_> = self.index.all_node_ids().collect();
+                let frame_ids: Vec<_> = all_ids.iter()
+                    .filter(|id| self.index.get_node(id).map(|n| n.node_type == NodeType::Frame).unwrap_or(false))
+                    .collect();
+                tracing::error!(
+                    "SetFrameBounds failed: frame_id={} not found. Available frames: {:?}. All nodes: {:?}",
+                    frame_id, frame_ids, all_ids
+                );
+                MutationError::NodeNotFound(frame_id.to_string())
+            })?;
+
+        if node.node_type != NodeType::Frame {
+            return Err(MutationError::InvalidMutation(format!(
+                "Node {} is not a frame",
+                frame_id
+            )));
+        }
+
+        // Get doc reference for read operations
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Check for conflicts
+        self.index.check_conflict(frame_id, doc, &text)?;
+
+        // Resolve current positions
+        let (start, end) = self
+            .index
+            .resolve_node_position(frame_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(frame_id.to_string()))?;
+
+        // Generate new frame text
+        let new_frame = format!(
+            "@frame(x: {}, y: {}, width: {}, height: {})",
+            x as i32, y as i32, width as i32, height as i32
+        );
+
+        // Apply the edit atomically
+        crdt_doc.edit_range(start, end, &new_frame);
+
+        // Rebuild index after mutation
+        let current_text = crdt_doc.get_text();
+        self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+        Ok(MutationResult::Applied {
+            mutation_id: mutation_id.to_string(),
+            new_version: crdt_doc.version(),
+        })
+    }
+
+    /// Apply SetTextContent mutation
+    fn apply_set_text_content(
+        &mut self,
+        mutation_id: &str,
+        node_id: &str,
+        content: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Find the text node
+        let node = self
+            .index
+            .get_node(node_id)
+            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+
+        if node.node_type != NodeType::Text {
+            return Err(MutationError::InvalidMutation(format!(
+                "Node {} is not a text node",
+                node_id
+            )));
+        }
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Check for conflicts
+        self.index.check_conflict(node_id, doc, &text)?;
+
+        // Resolve current positions
+        let (start, end) = self
+            .index
+            .resolve_node_position(node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+
+        // Parse the current text node to find the content part
+        let current_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            full_text[start as usize..end as usize].to_string()
+        };
+
+        // Find the quoted content and replace it
+        if let Some(quote_start) = current_source.find('"') {
+            if let Some(quote_end) = current_source.rfind('"') {
+                if quote_start < quote_end {
+                    let abs_quote_start = start + quote_start as u32 + 1;
+                    let abs_quote_end = start + quote_end as u32;
+
+                    // Apply the edit
+                    crdt_doc.edit_range(abs_quote_start, abs_quote_end, content);
+
+                    // Rebuild index
+                    let current_text = crdt_doc.get_text();
+                    self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+                    return Ok(MutationResult::Applied {
+                        mutation_id: mutation_id.to_string(),
+                        new_version: crdt_doc.version(),
+                    });
+                }
+            }
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: "Could not find text content to replace".to_string(),
+        })
+    }
+
+    /// Apply DeleteNode mutation
+    fn apply_delete_node(
+        &mut self,
+        mutation_id: &str,
+        node_id: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Find the node
+        let _node = self
+            .index
+            .get_node(node_id)
+            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Resolve current positions
+        let (start, end) = self
+            .index
+            .resolve_node_position(node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+
+        // Delete the node
+        crdt_doc.delete(start, end - start);
+
+        // Rebuild index
+        let current_text = crdt_doc.get_text();
+        self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+        Ok(MutationResult::Applied {
+            mutation_id: mutation_id.to_string(),
+            new_version: crdt_doc.version(),
+        })
+    }
+
+    /// Apply MoveNode mutation
+    fn apply_move_node(
+        &mut self,
+        mutation_id: &str,
+        node_id: &str,
+        new_parent_id: &str,
+        _index: u32,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Find both nodes
+        let _node = self
+            .index
+            .get_node(node_id)
+            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+        let _parent = self
+            .index
+            .get_node(new_parent_id)
+            .ok_or_else(|| MutationError::NodeNotFound(new_parent_id.to_string()))?;
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Resolve node position
+        let (node_start, node_end) = self
+            .index
+            .resolve_node_position(node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+
+        // Get the node's source text
+        let node_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            full_text[node_start as usize..node_end as usize].to_string()
+        };
+
+        // Find insertion point in new parent
+        let (parent_start, _parent_end) = self
+            .index
+            .resolve_node_position(new_parent_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(new_parent_id.to_string()))?;
+
+        // Find the closing brace of the parent
+        let parent_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            let (_, pe) = self
+                .index
+                .resolve_node_position(new_parent_id, doc, &text)
+                .unwrap();
+            full_text[parent_start as usize..pe as usize].to_string()
+        };
+
+        // Find last closing brace
+        if let Some(close_brace) = parent_source.rfind('}') {
+            let insert_pos = parent_start + close_brace as u32;
+
+            // Delete first (so positions don't shift)
+            crdt_doc.delete(node_start, node_end - node_start);
+
+            // Recalculate insert position
+            let adjusted_insert = if node_start < parent_start {
+                insert_pos - (node_end - node_start)
+            } else {
+                insert_pos
+            };
+
+            // Insert at new location
+            crdt_doc.insert(adjusted_insert, &format!("\n    {}", node_source));
+
+            // Rebuild index
+            let current_text = crdt_doc.get_text();
+            self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+            return Ok(MutationResult::Applied {
+                mutation_id: mutation_id.to_string(),
+                new_version: crdt_doc.version(),
+            });
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: "Could not find insertion point in parent".to_string(),
+        })
+    }
+
+    /// Apply InsertNode mutation
+    fn apply_insert_node(
+        &mut self,
+        mutation_id: &str,
+        parent_id: &str,
+        _index: u32,
+        source: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Find the parent node
+        let _parent = self
+            .index
+            .get_node(parent_id)
+            .ok_or_else(|| MutationError::NodeNotFound(parent_id.to_string()))?;
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Resolve parent position
+        let (parent_start, parent_end) = self
+            .index
+            .resolve_node_position(parent_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(parent_id.to_string()))?;
+
+        // Find the closing brace of the parent
+        let parent_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            full_text[parent_start as usize..parent_end as usize].to_string()
+        };
+
+        if let Some(close_brace) = parent_source.rfind('}') {
+            let insert_pos = parent_start + close_brace as u32;
+
+            // Insert the new node
+            crdt_doc.insert(insert_pos, &format!("\n    {}", source));
+
+            // Rebuild index
+            let current_text = crdt_doc.get_text();
+            self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+            return Ok(MutationResult::Applied {
+                mutation_id: mutation_id.to_string(),
+                new_version: crdt_doc.version(),
+            });
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: "Could not find insertion point in parent".to_string(),
+        })
+    }
+
+    /// Get the current index for inspection
+    pub fn index(&self) -> &AstIndex {
+        &self.index
+    }
+}
+
+impl Default for MutationHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}

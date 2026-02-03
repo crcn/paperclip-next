@@ -24,6 +24,7 @@ message ElementNode {
   repeated VNode children = 4;
   string semantic_id = 5;  // Stable identity for diffing
   optional string key = 6;  // Explicit key for repeat items
+  optional string source_id = 7;  // Maps back to AST span.id for mutations
 }
 
 message TextNode {

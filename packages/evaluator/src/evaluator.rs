@@ -634,7 +634,8 @@ impl Evaluator {
                 // Build semantic ID from current context (includes this element)
                 let semantic_id = self.context.get_semantic_id();
 
-                let mut vnode = VNode::element(tag_name, semantic_id);
+                let mut vnode = VNode::element(tag_name, semantic_id)
+                    .with_source_id(span.id.clone());  // Map back to AST for mutations
 
                 // Generate and apply class name for CSS synchronization
                 let class_name = get_style_namespace(

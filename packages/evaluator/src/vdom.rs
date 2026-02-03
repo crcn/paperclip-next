@@ -55,6 +55,9 @@ pub enum VNode {
         children: Vec<VNode>,
         /// Semantic identity (stable across refactoring) - REQUIRED
         semantic_id: SemanticID,
+        /// Source ID mapping back to AST span.id (for mutations)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_id: Option<String>,
         /// Explicit key for repeat items (from key attribute)
         #[serde(skip_serializing_if = "Option::is_none")]
         key: Option<String>,
@@ -85,6 +88,7 @@ impl VNode {
             styles: HashMap::new(),
             children: Vec::new(),
             semantic_id,
+            source_id: None,
             key: None,
         }
     }
@@ -158,6 +162,17 @@ impl VNode {
         } = self
         {
             *node_key = Some(key.into());
+        }
+        self
+    }
+
+    pub fn with_source_id(mut self, id: impl Into<String>) -> Self {
+        if let VNode::Element {
+            source_id: ref mut sid,
+            ..
+        } = self
+        {
+            *sid = Some(id.into());
         }
         self
     }

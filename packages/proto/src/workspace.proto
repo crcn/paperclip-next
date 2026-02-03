@@ -26,6 +26,9 @@ service WorkspaceService {
 
   // NEW: Heartbeat for liveness tracking
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // NEW: Bidirectional CRDT sync for collaborative editing
+  rpc CrdtSync(stream CrdtSyncRequest) returns (stream CrdtSyncResponse);
 }
 
 // Request to start preview streaming
@@ -119,7 +122,22 @@ message Mutation {
     SetAttribute set_attribute = 6;
     RemoveNode remove_node = 7;
     InsertElement insert_element = 8;
+    SetFrameBounds set_frame_bounds = 9;
   }
+}
+
+// Set frame bounds (updates @frame doc comment)
+message SetFrameBounds {
+  string frame_id = 1;
+  Bounds bounds = 2;
+}
+
+// Frame bounds
+message Bounds {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
 }
 
 // Move an element to a new parent at index
@@ -202,6 +220,103 @@ message SourceSpan {
   uint32 start_col = 2;
   uint32 end_line = 3;
   uint32 end_col = 4;
+}
+
+// ============================================================================
+// CRDT Sync Support (Collaborative Editing)
+// ============================================================================
+
+// Bidirectional CRDT sync stream
+// Client sends updates, server broadcasts to other clients and sends VDOM patches
+message CrdtSyncRequest {
+  string client_id = 1;
+  string file_path = 2;
+
+  oneof message_type {
+    // Initial sync - join session and get current state
+    CrdtJoin join = 3;
+    // Send local CRDT update
+    CrdtUpdate update = 4;
+    // Acknowledge received update (for flow control)
+    CrdtAck ack = 5;
+  }
+}
+
+// Join a CRDT editing session
+message CrdtJoin {
+  // Client's current state vector (empty for new session)
+  bytes state_vector = 1;
+}
+
+// CRDT update (Yjs-compatible binary format)
+message CrdtUpdate {
+  // Delta update (encoded via Y.encodeStateAsUpdate)
+  bytes update = 1;
+  // Client's state vector after this update
+  bytes state_vector = 2;
+  // Origin of the change (for filtering)
+  string origin = 3;
+}
+
+// Acknowledge receipt of an update
+message CrdtAck {
+  uint64 sequence = 1;
+}
+
+// Server response in CRDT sync stream
+message CrdtSyncResponse {
+  oneof message_type {
+    // Welcome message with current document state
+    CrdtWelcome welcome = 1;
+    // Remote CRDT update from another client
+    CrdtUpdate remote_update = 2;
+    // VDOM patch after successful parse
+    CrdtVdomPatch vdom_patch = 3;
+    // CSSOM update after successful parse
+    CrdtCssomPatch cssom_patch = 4;
+    // Parse error (document still synced, just invalid)
+    CrdtParseError parse_error = 5;
+  }
+}
+
+// Welcome message when joining a session
+message CrdtWelcome {
+  // Full document state (for new clients)
+  bytes document_state = 1;
+  // Current state vector
+  bytes state_vector = 2;
+  // Current VDOM (if document is valid)
+  optional paperclip.patches.VDocPatch initial_vdom = 3;
+  // Session info
+  uint64 version = 4;
+  uint32 client_count = 5;
+}
+
+// VDOM patch from server after parse
+message CrdtVdomPatch {
+  repeated paperclip.patches.VDocPatch patches = 1;
+  uint64 version = 2;
+  // Which client triggered this update (for origin filtering)
+  string origin_client_id = 3;
+}
+
+// CSSOM update from server
+message CrdtCssomPatch {
+  repeated CssRule rules = 1;
+  uint64 version = 2;
+}
+
+// CSS rule for CSSOM
+message CssRule {
+  string selector = 1;
+  map<string, string> properties = 2;
+}
+
+// Parse error (document synced but invalid)
+message CrdtParseError {
+  string error = 1;
+  uint32 line = 2;
+  uint32 column = 3;
 }
 
 // ============================================================================

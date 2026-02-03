@@ -34,7 +34,11 @@ export interface ElementNode {
   /** Stable identity for diffing */
   semanticId: string;
   /** Explicit key for repeat items */
-  key?: string | undefined;
+  key?:
+    | string
+    | undefined;
+  /** Maps back to AST span.id for mutations */
+  sourceId?: string | undefined;
 }
 
 export interface ElementNode_AttributesEntry {
@@ -285,7 +289,7 @@ export const ErrorNode = {
 };
 
 function createBaseElementNode(): ElementNode {
-  return { tag: "", attributes: {}, styles: {}, children: [], semanticId: "", key: undefined };
+  return { tag: "", attributes: {}, styles: {}, children: [], semanticId: "", key: undefined, sourceId: undefined };
 }
 
 export const ElementNode = {
@@ -307,6 +311,9 @@ export const ElementNode = {
     }
     if (message.key !== undefined) {
       writer.uint32(50).string(message.key);
+    }
+    if (message.sourceId !== undefined) {
+      writer.uint32(58).string(message.sourceId);
     }
     return writer;
   },
@@ -366,6 +373,13 @@ export const ElementNode = {
 
           message.key = reader.string();
           continue;
+        case 7:
+          if (tag !== 58) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -393,6 +407,7 @@ export const ElementNode = {
       children: globalThis.Array.isArray(object?.children) ? object.children.map((e: any) => VNode.fromJSON(e)) : [],
       semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
       key: isSet(object.key) ? globalThis.String(object.key) : undefined,
+      sourceId: isSet(object.sourceId) ? globalThis.String(object.sourceId) : undefined,
     };
   },
 
@@ -428,6 +443,9 @@ export const ElementNode = {
     if (message.key !== undefined) {
       obj.key = message.key;
     }
+    if (message.sourceId !== undefined) {
+      obj.sourceId = message.sourceId;
+    }
     return obj;
   },
 
@@ -455,6 +473,7 @@ export const ElementNode = {
     message.children = object.children?.map((e) => VNode.fromPartial(e)) || [];
     message.semanticId = object.semanticId ?? "";
     message.key = object.key ?? undefined;
+    message.sourceId = object.sourceId ?? undefined;
     return message;
   },
 };

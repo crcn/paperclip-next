@@ -4,13 +4,17 @@
  * Architecture:
  *   VS Code Extension <-> Workspace Server <-> Designer (in iframe)
  *
- * - VS Code sends buffer changes to workspace server via gRPC
- * - Designer in iframe receives updates from server via SSE
+ * - VS Code sends buffer content to server via gRPC StreamBuffer
+ * - Server evaluates and sends VDOM patches back
+ * - Designer in iframe receives VDOM updates from server via SSE
  */
 
 import * as vscode from 'vscode';
-import { WorkspaceClient } from './workspace-client';
 import * as grpc from '@grpc/grpc-js';
+import { WorkspaceClient, PreviewUpdate } from './workspace-client';
+
+// Debounce delay for sending updates to server
+const DEBOUNCE_MS = 100;
 
 export class PreviewPanel {
   private panel: vscode.WebviewPanel;
@@ -21,6 +25,7 @@ export class PreviewPanel {
   private httpPort: number;
   private currentStream: grpc.ClientReadableStream<any> | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
+  private stateVersion: number = 0;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -61,17 +66,8 @@ export class PreviewPanel {
       })
     );
 
-    // Listen for document changes and send to server
-    this.disposables.push(
-      vscode.workspace.onDidChangeTextDocument(e => {
-        if (e.document.uri.toString() === this.document.uri.toString()) {
-          this.onDocumentChange();
-        }
-      })
-    );
-
-    // Send initial buffer content
-    this.sendBufferUpdate();
+    // Start streaming buffer
+    this.startStreamBuffer();
   }
 
   private getFileName(): string {
@@ -79,27 +75,19 @@ export class PreviewPanel {
     return parts[parts.length - 1];
   }
 
-  private onDocumentChange(): void {
-    // Debounce rapid changes (100ms)
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    this.debounceTimer = setTimeout(() => {
-      this.sendBufferUpdate();
-    }, 100);
-  }
+  /**
+   * Start streaming buffer to server for live preview.
+   */
+  private startStreamBuffer(): void {
+    const filePath = this.document.uri.fsPath;
+    const content = this.document.getText();
+    console.log(`[PreviewPanel] Starting stream for ${filePath}`);
 
-  private sendBufferUpdate(): void {
-    // Cancel previous stream
+    // Cancel any existing stream
     if (this.currentStream) {
       this.currentStream.cancel();
       this.currentStream = null;
     }
-
-    const content = this.document.getText();
-    const filePath = this.document.uri.fsPath;
-
-    console.log(`[PreviewPanel] Sending buffer update for ${filePath}, ${content.length} chars`);
 
     try {
       this.currentStream = this.client.streamBuffer(
@@ -107,15 +95,34 @@ export class PreviewPanel {
           clientId: this.client.getClientId(),
           filePath,
           content,
+          expectedStateVersion: this.stateVersion,
         },
-        (update) => {
-          // Server processes the buffer - designer will get update via SSE
-          console.log(`[PreviewPanel] Buffer processed v${update.version}`);
+        (update: PreviewUpdate) => {
+          this.stateVersion = update.version;
+          // Designer in iframe receives updates via SSE, nothing to do here
         }
       );
     } catch (error) {
-      console.error('[PreviewPanel] Failed to send buffer update:', error);
+      console.error('[PreviewPanel] Failed to start stream:', error);
     }
+
+    // Listen for document changes
+    this.disposables.push(
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.document !== this.document) return;
+        this.scheduleUpdate();
+      })
+    );
+  }
+
+  private scheduleUpdate(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      this.startStreamBuffer();
+    }, DEBOUNCE_MS);
   }
 
   private async setWebviewContent(): Promise<void> {
@@ -129,7 +136,9 @@ export class PreviewPanel {
     const designerHost = await vscode.env.asExternalUri(
       vscode.Uri.parse(`http://localhost:${this.httpPort}`)
     );
-    const designerUrl = `${designerHost}?file=${encodeURIComponent(filePath)}`;
+    // Add timestamp to bust VSCode webview cache
+    const cacheBust = Date.now();
+    const designerUrl = `${designerHost}?file=${encodeURIComponent(filePath)}&_t=${cacheBust}`;
 
     console.log(`[PreviewPanel] Opening preview: ${designerUrl}`);
 
@@ -189,10 +198,19 @@ export class PreviewPanel {
   }
 
   async updateFilePath(document: vscode.TextDocument): Promise<void> {
+    // Cancel existing stream
+    if (this.currentStream) {
+      this.currentStream.cancel();
+      this.currentStream = null;
+    }
+
     this.document = document;
+    this.stateVersion = 0;
     this.panel.webview.html = await this.getWebviewContent();
     this.panel.title = `Preview: ${this.getFileName()}`;
-    this.sendBufferUpdate();
+
+    // Start new stream for new document
+    this.startStreamBuffer();
   }
 
   reveal(): void {

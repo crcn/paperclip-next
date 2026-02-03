@@ -1,3 +1,6 @@
+/**
+ * @frame(x: 500, y: 600, width: 700, height: 800)
+ */
 public component Button {
     variant hover
     variant active

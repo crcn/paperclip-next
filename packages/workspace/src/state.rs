@@ -375,6 +375,7 @@ fn convert_vnode_to_proto(node: &VNode) -> proto_vdom::VNode {
             styles,
             children,
             semantic_id,
+            source_id,
             key,
         } => proto_vdom::VNode {
             node_type: Some(proto_vdom::v_node::NodeType::Element(
@@ -385,6 +386,7 @@ fn convert_vnode_to_proto(node: &VNode) -> proto_vdom::VNode {
                     children: children.iter().map(convert_vnode_to_proto).collect(),
                     semantic_id: semantic_id.to_selector(),
                     key: key.clone(),
+                    source_id: source_id.clone(),
                 },
             )),
         },

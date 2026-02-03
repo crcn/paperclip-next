@@ -87,6 +87,22 @@ export interface ToolState {
 export const DEFAULT_TOOL_STATE: ToolState = {};
 
 // ============================================================================
+// Pending Mutations (for optimistic updates)
+// ============================================================================
+
+export interface PendingMutation {
+  mutationId: string;
+  type: "setFrameBounds";
+  frameId: string;
+  optimisticBounds: FrameBounds;
+  createdAt: number;
+}
+
+export interface PendingMutationsState {
+  mutations: Map<string, PendingMutation>;
+}
+
+// ============================================================================
 // Canvas State
 // ============================================================================
 
@@ -115,6 +131,7 @@ export interface DesignerState {
   rects: Record<string, Box>;
   centeredInitial: boolean;
   tool: ToolState;
+  pendingMutations: Map<string, PendingMutation>;
 }
 
 export const DEFAULT_DESIGNER_STATE: DesignerState = {
@@ -123,6 +140,7 @@ export const DEFAULT_DESIGNER_STATE: DesignerState = {
   rects: {},
   centeredInitial: false,
   tool: DEFAULT_TOOL_STATE,
+  pendingMutations: new Map(),
 };
 
 // ============================================================================
@@ -141,4 +159,8 @@ export type DesignerEvent =
   | BaseEvent<"document/loaded", { document: VDocument; frames: Frame[] }>
   | BaseEvent<"tool/resizeStart", { handle: ResizeHandle; mouse: Point }>
   | BaseEvent<"tool/resizeMove", Point>
-  | BaseEvent<"tool/resizeEnd">;
+  | BaseEvent<"tool/resizeEnd">
+  // Mutation lifecycle events
+  | BaseEvent<"mutation/started", { mutation: PendingMutation }>
+  | BaseEvent<"mutation/acknowledged", { mutationId: string; version: number }>
+  | BaseEvent<"mutation/failed", { mutationId: string; error: string }>;

@@ -1,14 +1,17 @@
 use axum::{
-    extract::{Query, State},
-    response::{Html, sse::{Event, Sse}},
-    routing::get,
+    extract::{Query, State, Json},
+    response::{Html, sse::{Event, Sse}, IntoResponse},
+    routing::{get, post},
     Router,
+    http::StatusCode,
 };
 use futures::stream::{self, Stream};
 use paperclip_bundle::Bundle;
 use paperclip_evaluator::Evaluator;
 use paperclip_parser::parse_with_path;
-use paperclip_workspace::{convert_vdom_to_proto, WorkspaceServer};
+use paperclip_workspace::{
+    convert_vdom_to_proto, Mutation, MutationHandler, WorkspaceServer,
+};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::path::PathBuf;
@@ -129,6 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Serve static files from designer build directory + API routes
         Router::new()
             .route("/api/preview", get(preview_sse_handler))
+            .route("/api/mutation", post(mutation_handler))
             .with_state(http_state)
             .fallback_service(ServeDir::new(designer_path).append_index_html_on_directories(true))
             .layer(CorsLayer::permissive())
@@ -136,6 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Serve a placeholder page if no designer directory specified
         Router::new()
             .route("/api/preview", get(preview_sse_handler))
+            .route("/api/mutation", post(mutation_handler))
             .with_state(http_state)
             .route("/", get(|| async {
                 Html(r#"
@@ -358,3 +363,208 @@ fn process_file_to_json(
 
     Ok(vec![patch])
 }
+
+// ============================================================================
+// Mutation API
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct MutationRequest {
+    file_path: String,
+    mutation: MutationPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum MutationPayload {
+    #[serde(rename = "setFrameBounds")]
+    SetFrameBounds {
+        frame_id: String,
+        bounds: BoundsPayload,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+struct BoundsPayload {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+#[derive(Debug, Serialize)]
+struct MutationResponse {
+    success: bool,
+    mutation_id: String,
+    version: u64,
+    error: Option<String>,
+}
+
+/// HTTP POST endpoint for applying mutations from the designer
+/// Uses CRDT-backed MutationHandler for collaborative editing
+async fn mutation_handler(
+    State(state): State<Arc<HttpState>>,
+    Json(request): Json<MutationRequest>,
+) -> impl IntoResponse {
+    tracing::info!("Received mutation request for: {:?}", request.file_path);
+
+    // Generate mutation ID
+    let mutation_id = format!("mut-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+
+    // Resolve full path
+    let full_path = if std::path::Path::new(&request.file_path).is_absolute() {
+        std::path::PathBuf::from(&request.file_path)
+    } else {
+        state.root_dir.join(&request.file_path)
+    };
+
+    // Convert HTTP payload to Mutation enum
+    let mutation = match &request.mutation {
+        MutationPayload::SetFrameBounds { frame_id, bounds } => Mutation::SetFrameBounds {
+            mutation_id: mutation_id.clone(),
+            frame_id: frame_id.clone(),
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+        },
+    };
+
+    // Get or create CRDT session for this file
+    let file_path_str = request.file_path.clone();
+    let crdt_sessions = state.workspace.crdt_sessions();
+
+    // Load initial content from file if session doesn't exist
+    let session = match std::fs::read_to_string(&full_path) {
+        Ok(content) => crdt_sessions.get_or_create_session_with_content(&file_path_str, &content),
+        Err(e) => {
+            tracing::error!("Failed to read file: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(MutationResponse {
+                    success: false,
+                    mutation_id: mutation_id.clone(),
+                    version: 0,
+                    error: Some(format!("Failed to read file: {}", e)),
+                }),
+            );
+        }
+    };
+
+    // Apply mutation via MutationHandler
+    let result = {
+        let mut session_guard = session.write().await;
+        let crdt_doc = &mut session_guard.document;
+
+        // Build mutation handler with file path for correct span.id generation
+        let mut handler = MutationHandler::new_with_path(&full_path.to_string_lossy());
+        let source = crdt_doc.get_text();
+
+        if let Err(e) = handler.rebuild_index(crdt_doc.doc(), &source) {
+            tracing::error!("Failed to build mutation index: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(MutationResponse {
+                    success: false,
+                    mutation_id: mutation_id.clone(),
+                    version: crdt_doc.version(),
+                    error: Some(format!("Failed to build mutation index: {}", e)),
+                }),
+            );
+        }
+
+        // Apply the mutation
+        handler.apply_mutation(&mutation, crdt_doc)
+    };
+
+    match result {
+        Ok(mutation_result) => {
+            let session_guard = session.read().await;
+            let new_source = session_guard.document.get_text();
+            let version = session_guard.document.version();
+            drop(session_guard);
+
+            // Write updated source back to file
+            if let Err(e) = std::fs::write(&full_path, &new_source) {
+                tracing::error!("Failed to write file: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(MutationResponse {
+                        success: false,
+                        mutation_id: mutation_id.clone(),
+                        version,
+                        error: Some(format!("Failed to write file: {}", e)),
+                    }),
+                );
+            }
+
+            // Update WorkspaceState and get patches for broadcast
+            let patches = {
+                let mut workspace_state = state.workspace.workspace_state().lock().unwrap();
+                workspace_state.update_file(full_path.clone(), new_source, &state.root_dir)
+            };
+
+            match patches {
+                Ok(patches) => {
+                    tracing::info!(
+                        "Mutation {:?} applied successfully, version {}",
+                        mutation_result,
+                        version
+                    );
+
+                    // Convert patches to JSON for broadcast
+                    let patches_json: Vec<serde_json::Value> = patches
+                        .iter()
+                        .filter_map(|p| serde_json::to_value(p).ok())
+                        .collect();
+
+                    // Broadcast update to SSE subscribers
+                    let update = paperclip_workspace::BroadcastUpdate {
+                        file_path: request.file_path.clone(),
+                        patches_json: serde_json::to_string(&patches_json).unwrap_or_default(),
+                        error: None,
+                        version,
+                    };
+                    let _ = state.workspace.broadcast(update);
+
+                    (
+                        StatusCode::OK,
+                        Json(MutationResponse {
+                            success: true,
+                            mutation_id,
+                            version,
+                            error: None,
+                        }),
+                    )
+                }
+                Err(e) => {
+                    tracing::error!("Failed to process updated file: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(MutationResponse {
+                            success: false,
+                            mutation_id,
+                            version,
+                            error: Some(format!("Failed to process file: {}", e)),
+                        }),
+                    )
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Mutation failed: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(MutationResponse {
+                    success: false,
+                    mutation_id,
+                    version: 0,
+                    error: Some(e.to_string()),
+                }),
+            )
+        }
+    }
+}
+
+// Old mutation helper functions have been removed - mutations are now handled
+// via the CRDT-backed MutationHandler in apply_mutation above.

@@ -2,15 +2,17 @@
 
 ## Overview
 
-Paperclip uses a **code-first, AST-level collaboration model** where the source code (`.pc` files) is the source of truth, and VDOM/patches are derived views optimized for streaming updates to clients.
+Paperclip uses a **Y.Text-backed collaboration model** where the source text (`.pc` files) is the source of truth via character-level CRDT, and AST/VDOM are derived views via parsing and evaluation.
+
+> **Revision (2026-02-02)**: This document was updated to use Y.Text as source of truth. The previous AST-first model did not support real-time collaborative text editing between multiple developers. See `docs/plans/2026-02-02-feat-multi-designer-session-sync-plan.md` for the full rationale.
 
 ## Core Principles
 
-1. **AST is source of truth**: VDOM and patches are derived views, never canonical
-2. **CRDT for convergence**: Guarantees eventual consistency, but we define operation semantics
-3. **Structural collaboration**: Node-level operations (move, update, delete), not text-level
+1. **Y.Text is source of truth**: AST and VDOM are derived via parsing/evaluation
+2. **Character-level CRDT**: Enables real-time collaborative text editing (multiple devs, same file)
+3. **Semantic mutations**: Visual operations are semantic (SetFrameBounds, MoveElement), translated to Y.Text edits server-side
 4. **Optimistic clients**: Local state is a speculative projection that can be rebuilt
-5. **Server authority**: Client state always defers to server
+5. **Server authority**: Server applies mutations, re-parses, re-evaluates, broadcasts results
 
 ## Architecture Layers
 
@@ -130,7 +132,7 @@ Optional CRDT backend for collaboration:
 let doc = Document::collaborative(path, source)?;
 ```
 
-**Key insight**: CRDT operates on **AST structure**, not character-level text. This keeps the system simple and predictable.
+**Key insight**: Y.Text CRDT is the source of truth. Visual mutations are semantic operations that get translated to Y.Text edits using RelativePositions. This enables real-time collaborative text editing while keeping visual operations predictable.
 
 ## Collaboration Model
 
@@ -315,25 +317,25 @@ To preserve AST integrity, we **do not support**:
 
 ## What We Explicitly Do NOT Do
 
-1. ❌ **Character-level text CRDT**: Too complex, unnecessary
-2. ❌ **Patch-level OT**: Wrong abstraction layer
-3. ❌ **Automatic merge of conflicting content**: Be explicit
-4. ❌ **Generate synthetic nodes**: All nodes from AST
-5. ❌ **Per-instance repeat customization**: Breaks template model
+1. ❌ **Patch-level OT**: Wrong abstraction layer
+2. ❌ **Generate synthetic nodes**: All nodes from AST
+3. ❌ **Per-instance repeat customization**: Breaks template model
+4. ❌ **Client-side mutation-to-text translation**: Server does this with RelativePositions
+5. ❌ **AST as source of truth**: Y.Text is source of truth (AST is derived)
 
 ## References
 
-- **Yjs**: CRDT library we use for convergence guarantees
-- **Operational Transformation**: Inspiration for mutation model
-- **Figma multiplayer**: Similar architecture (visual → structured ops → CRDT)
-- **Google Docs**: Character-level CRDT (we do AST-level instead)
+- **Yjs**: CRDT library we use for Y.Text convergence
+- **Yjs RelativePositions**: Used to translate visual mutations to Y.Text edits safely
+- **Figma multiplayer**: Inspiration for visual mutation model
+- **Google Docs**: Similar Y.Text-based collaboration model
 
 ## Summary
 
-**Paperclip collaboration is AST-first, intent-driven, CRDT-backed, and render-derived — never patch-merged.**
+**Paperclip collaboration is Y.Text-backed, intent-driven, and render-derived.**
 
 This architecture:
-- Respects source code as truth
-- Scales to real-time collaboration
-- Avoids visual editor pitfalls
-- Keeps Paperclip's code-first integrity
+- Enables real-time collaborative text editing (multiple devs, same file)
+- Visual mutations are semantic, translated to Y.Text edits server-side
+- AST and VDOM are derived views (parse and evaluate from Y.Text)
+- RelativePositions ensure mutation translation is safe from concurrent edits

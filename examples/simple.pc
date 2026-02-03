@@ -1,3 +1,6 @@
+/**
+ * @frame(x: 87, y: -168, width: 937, height: 936)
+ */
 component Card {
     render div {
         style {

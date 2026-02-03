@@ -90,6 +90,19 @@ export interface Mutation {
     setAttribute?: SetAttribute | undefined;
     removeNode?: RemoveNode | undefined;
     insertElement?: InsertElement | undefined;
+    setFrameBounds?: SetFrameBounds | undefined;
+}
+/** Set frame bounds (updates @frame doc comment) */
+export interface SetFrameBounds {
+    frameId: string;
+    bounds?: Bounds | undefined;
+}
+/** Frame bounds */
+export interface Bounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
 }
 /** Move an element to a new parent at index */
 export interface MoveElement {
@@ -256,6 +269,22 @@ export declare const Mutation: {
     toJSON(message: Mutation): unknown;
     create<I extends Exact<DeepPartial<Mutation>, I>>(base?: I): Mutation;
     fromPartial<I extends Exact<DeepPartial<Mutation>, I>>(object: I): Mutation;
+};
+export declare const SetFrameBounds: {
+    encode(message: SetFrameBounds, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): SetFrameBounds;
+    fromJSON(object: any): SetFrameBounds;
+    toJSON(message: SetFrameBounds): unknown;
+    create<I extends Exact<DeepPartial<SetFrameBounds>, I>>(base?: I): SetFrameBounds;
+    fromPartial<I extends Exact<DeepPartial<SetFrameBounds>, I>>(object: I): SetFrameBounds;
+};
+export declare const Bounds: {
+    encode(message: Bounds, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): Bounds;
+    fromJSON(object: any): Bounds;
+    toJSON(message: Bounds): unknown;
+    create<I extends Exact<DeepPartial<Bounds>, I>>(base?: I): Bounds;
+    fromPartial<I extends Exact<DeepPartial<Bounds>, I>>(object: I): Bounds;
 };
 export declare const MoveElement: {
     encode(message: MoveElement, writer?: _m0.Writer): _m0.Writer;

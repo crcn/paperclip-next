@@ -266,6 +266,13 @@ export class WorkspaceClient {
     });
   }
 
+  /**
+   * Get the raw gRPC client for advanced usage (e.g., with CrdtGrpcTransport).
+   */
+  getRawClient(): any {
+    return this.client;
+  }
+
   onConnectionStateChange(callback: ConnectionStateCallback): void {
     this.connectionStateCallbacks.add(callback);
   }

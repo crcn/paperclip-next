@@ -6,6 +6,14 @@
 export { WorkspaceClient, createWorkspaceClient } from './client.js';
 export type { WorkspaceClientConfig } from './client.js';
 
+// CRDT collaborative editing
+export { CRDTDocument } from './crdt.js';
+export type { TextDelta, ChangeOptions, ChangeHandler } from './crdt.js';
+
+// Session-based sync (combines CRDT + rendering)
+export { DocumentSession } from './sync.js';
+export type { SyncTransport, VDOMHandler, CSSOMHandler } from './sync.js';
+
 export { EventEmitter } from './events.js';
 export type {
   WorkspaceEvent,
@@ -33,6 +41,14 @@ export type {
   ConnectionError,
   RpcError,
 } from './transport/interface.js';
+
+// CRDT transport for gRPC-based sync
+export { CrdtGrpcTransport, createMockCrdtTransport } from './transport/crdt-grpc.js';
+export type {
+  CrdtGrpcTransportConfig,
+  CrdtGrpcClient,
+  CrdtGrpcStream,
+} from './transport/crdt-grpc.js';
 
 export type {
   // VDOM types

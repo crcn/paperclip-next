@@ -26,6 +26,8 @@ export interface ElementNode {
     semanticId: string;
     /** Explicit key for repeat items */
     key?: string | undefined;
+    /** Maps back to AST span.id for mutations */
+    sourceId?: string | undefined;
 }
 export interface ElementNode_AttributesEntry {
     key: string;

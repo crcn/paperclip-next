@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "@paperclip/common";
 import { DesignerMachine, DesignerEvent, Transform } from "../machine";
 import { Frames } from "./Frames";

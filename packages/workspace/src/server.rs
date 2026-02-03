@@ -1,3 +1,4 @@
+use crate::crdt::{CrdtBroadcast, CrdtClient, CrdtSessionManager};
 use crate::state::{StateError, WorkspaceState};
 use crate::watcher::FileWatcher;
 use std::collections::{HashMap, VecDeque};
@@ -8,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt as _};
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 use unicode_normalization::UnicodeNormalization;
 
 // Production limits
@@ -96,6 +97,8 @@ pub struct WorkspaceServer {
     rate_limiter: Arc<Mutex<ProcessRateLimiter>>,
     // Broadcast channel for SSE subscribers
     update_sender: tokio::sync::broadcast::Sender<BroadcastUpdate>,
+    // CRDT session manager for collaborative editing
+    crdt_sessions: Arc<CrdtSessionManager>,
 }
 
 impl WorkspaceServer {
@@ -116,6 +119,7 @@ impl WorkspaceServer {
             total_vdom_bytes: Arc::new(AtomicUsize::new(0)),
             rate_limiter: Arc::new(Mutex::new(ProcessRateLimiter::new(RATE_LIMIT_PER_PROCESS))),
             update_sender,
+            crdt_sessions: Arc::new(CrdtSessionManager::new()),
         };
 
         // Start background cleanup task
@@ -138,6 +142,21 @@ impl WorkspaceServer {
     fn broadcast_update(&self, update: BroadcastUpdate) {
         // Ignore send errors (no subscribers)
         let _ = self.update_sender.send(update);
+    }
+
+    /// Public method to broadcast an update (for HTTP mutation handler)
+    pub fn broadcast(&self, update: BroadcastUpdate) {
+        self.broadcast_update(update);
+    }
+
+    /// Get CRDT session manager (for HTTP mutation handler)
+    pub fn crdt_sessions(&self) -> &CrdtSessionManager {
+        &self.crdt_sessions
+    }
+
+    /// Get workspace state (for HTTP mutation handler)
+    pub fn workspace_state(&self) -> &Mutex<WorkspaceState> {
+        &self.state
     }
 
     fn start_cleanup_task(&self) {
@@ -739,6 +758,298 @@ impl WorkspaceService for WorkspaceServer {
                 .as_secs(),
         }))
     }
+
+    // CRDT sync for collaborative editing
+    type CrdtSyncStream = Pin<Box<dyn Stream<Item = Result<proto::CrdtSyncResponse, Status>> + Send + 'static>>;
+
+    async fn crdt_sync(
+        &self,
+        request: Request<Streaming<proto::CrdtSyncRequest>>,
+    ) -> Result<Response<Self::CrdtSyncStream>, Status> {
+        let mut in_stream = request.into_inner();
+
+        // Channels for this client
+        let (tx, mut rx) = mpsc::channel::<CrdtBroadcast>(100);
+        let (out_tx, out_rx) = mpsc::channel::<Result<proto::CrdtSyncResponse, Status>>(100);
+
+        let crdt_sessions = self.crdt_sessions.clone();
+        let state = self.state.clone();
+        let root_dir = self.root_dir.clone();
+        let update_sender = self.update_sender.clone();
+
+        // Clone out_tx before moving into spawn
+        let out_tx_for_handler = out_tx.clone();
+
+        // Spawn task to handle incoming messages
+        tokio::spawn(async move {
+            let out_tx = out_tx_for_handler;
+            let mut client_id: Option<String> = None;
+            let mut file_path: Option<String> = None;
+
+            while let Some(result) = in_stream.next().await {
+                let req = match result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::error!("CRDT stream error: {}", e);
+                        break;
+                    }
+                };
+
+                // Track client/file for cleanup
+                if client_id.is_none() {
+                    client_id = Some(req.client_id.clone());
+                }
+                if file_path.is_none() && !req.file_path.is_empty() {
+                    file_path = Some(req.file_path.clone());
+                }
+
+                let msg_type = match req.message_type {
+                    Some(m) => m,
+                    None => continue,
+                };
+
+                match msg_type {
+                    proto::crdt_sync_request::MessageType::Join(join) => {
+                        tracing::info!("CRDT join: client={}, file={}", req.client_id, req.file_path);
+
+                        // Get or create session, optionally loading from disk
+                        let session = if join.state_vector.is_empty() {
+                            // New client - try to load file from disk
+                            let full_path = root_dir.join(&req.file_path);
+                            let content = std::fs::read_to_string(&full_path).unwrap_or_default();
+                            crdt_sessions.get_or_create_session_with_content(&req.file_path, &content)
+                        } else {
+                            crdt_sessions.get_or_create_session(&req.file_path)
+                        };
+
+                        // Add client to session
+                        let crdt_client = CrdtClient {
+                            client_id: req.client_id.clone(),
+                            sender: tx.clone(),
+                        };
+
+                        let (doc_state, state_vector, version, client_count) = {
+                            let mut session_guard = session.write().await;
+                            session_guard.add_client(crdt_client);
+
+                            let doc = &session_guard.document;
+                            (
+                                doc.encode_state(),
+                                doc.get_state_vector(),
+                                doc.version(),
+                                session_guard.client_count() as u32,
+                            )
+                        };
+
+                        // Send welcome message
+                        let welcome = proto::CrdtSyncResponse {
+                            message_type: Some(proto::crdt_sync_response::MessageType::Welcome(
+                                proto::CrdtWelcome {
+                                    document_state: doc_state,
+                                    state_vector,
+                                    initial_vdom: None, // TODO: Include initial VDOM
+                                    version,
+                                    client_count,
+                                }
+                            )),
+                        };
+                        if out_tx.send(Ok(welcome)).await.is_err() {
+                            break;
+                        }
+                    }
+
+                    proto::crdt_sync_request::MessageType::Update(update) => {
+                        let session = match crdt_sessions.get_session(&req.file_path) {
+                            Some(s) => s,
+                            None => {
+                                tracing::warn!("CRDT update for unknown session: {}", req.file_path);
+                                continue;
+                            }
+                        };
+
+                        // Apply update to CRDT document
+                        let (text_content, version) = {
+                            let mut session_guard = session.write().await;
+                            if let Err(e) = session_guard.document.apply_update(&update.update) {
+                                tracing::error!("Failed to apply CRDT update: {}", e);
+                                continue;
+                            }
+
+                            // Broadcast to other clients
+                            session_guard.broadcast(
+                                CrdtBroadcast::RemoteUpdate {
+                                    update: update.update.clone(),
+                                    origin_client_id: req.client_id.clone(),
+                                },
+                                Some(&req.client_id),
+                            ).await;
+
+                            (
+                                session_guard.document.get_text(),
+                                session_guard.document.version(),
+                            )
+                        };
+
+                        // Process through parser/evaluator
+                        let file_path_for_state = root_dir.join(&req.file_path);
+                        let process_result = {
+                            let mut state_guard = state.lock().unwrap();
+                            state_guard.update_file(
+                                file_path_for_state.clone(),
+                                text_content.clone(),
+                                &root_dir,
+                            )
+                        };
+
+                        match process_result {
+                            Ok(patches) => {
+                                // Mark document clean
+                                {
+                                    let mut session_guard = session.write().await;
+                                    session_guard.document.mark_clean();
+                                }
+
+                                // Serialize patches
+                                let patches_json = serde_json::to_string(&patches).unwrap_or_default();
+
+                                // Broadcast VDOM patch to all clients
+                                {
+                                    let session_guard = session.read().await;
+                                    session_guard.broadcast(
+                                        CrdtBroadcast::VdomPatch {
+                                            patches_json: patches_json.clone(),
+                                            version,
+                                            origin_client_id: req.client_id.clone(),
+                                        },
+                                        None, // Send to all including origin
+                                    ).await;
+                                }
+
+                                // Also broadcast via SSE for designer iframe
+                                let _ = update_sender.send(BroadcastUpdate {
+                                    file_path: req.file_path.clone(),
+                                    patches_json,
+                                    error: None,
+                                    version,
+                                });
+                            }
+                            Err(e) => {
+                                // Parse error - broadcast to clients
+                                let error_msg = format!("{:?}", e);
+                                let (line, col) = parse_error_location(&error_msg);
+
+                                let session_guard = session.read().await;
+                                session_guard.broadcast(
+                                    CrdtBroadcast::ParseError {
+                                        error: error_msg.clone(),
+                                        line,
+                                        column: col,
+                                    },
+                                    None,
+                                ).await;
+
+                                // Also broadcast via SSE
+                                let _ = update_sender.send(BroadcastUpdate {
+                                    file_path: req.file_path.clone(),
+                                    patches_json: "[]".to_string(),
+                                    error: Some(error_msg),
+                                    version,
+                                });
+                            }
+                        }
+                    }
+
+                    proto::crdt_sync_request::MessageType::Ack(_ack) => {
+                        // Flow control acknowledgment - currently unused
+                    }
+                }
+            }
+
+            // Cleanup on disconnect
+            if let (Some(client_id), Some(file_path)) = (client_id, file_path) {
+                tracing::info!("CRDT client disconnected: {}", client_id);
+                if let Some(session) = crdt_sessions.get_session(&file_path) {
+                    let mut session_guard = session.write().await;
+                    session_guard.remove_client(&client_id);
+
+                    // Remove session if no clients left
+                    if session_guard.client_count() == 0 {
+                        drop(session_guard);
+                        crdt_sessions.remove_session(&file_path);
+                        tracing::info!("CRDT session removed: {}", file_path);
+                    }
+                }
+            }
+        });
+
+        // Spawn task to forward broadcasts to output stream
+        let out_tx_clone = out_tx.clone();
+        tokio::spawn(async move {
+            while let Some(broadcast) = rx.recv().await {
+                let response = match broadcast {
+                    CrdtBroadcast::RemoteUpdate { update, origin_client_id } => {
+                        proto::CrdtSyncResponse {
+                            message_type: Some(proto::crdt_sync_response::MessageType::RemoteUpdate(
+                                proto::CrdtUpdate {
+                                    update,
+                                    state_vector: vec![], // Not needed for remote updates
+                                    origin: origin_client_id,
+                                }
+                            )),
+                        }
+                    }
+                    CrdtBroadcast::VdomPatch { patches_json, version, origin_client_id } => {
+                        // Parse patches back from JSON for proto
+                        let patches: Vec<paperclip_evaluator::VDocPatch> =
+                            serde_json::from_str(&patches_json).unwrap_or_default();
+
+                        proto::CrdtSyncResponse {
+                            message_type: Some(proto::crdt_sync_response::MessageType::VdomPatch(
+                                proto::CrdtVdomPatch {
+                                    patches,
+                                    version,
+                                    origin_client_id,
+                                }
+                            )),
+                        }
+                    }
+                    CrdtBroadcast::ParseError { error, line, column } => {
+                        proto::CrdtSyncResponse {
+                            message_type: Some(proto::crdt_sync_response::MessageType::ParseError(
+                                proto::CrdtParseError {
+                                    error,
+                                    line,
+                                    column,
+                                }
+                            )),
+                        }
+                    }
+                };
+
+                if out_tx_clone.send(Ok(response)).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        let output_stream = ReceiverStream::new(out_rx);
+        Ok(Response::new(Box::pin(output_stream) as Self::CrdtSyncStream))
+    }
+}
+
+/// Extract line/column from parse error message (best effort)
+fn parse_error_location(error: &str) -> (u32, u32) {
+    // Try to extract line:col from error message
+    // Format varies, so this is best-effort
+    let re = regex::Regex::new(r"line (\d+)").ok();
+    if let Some(re) = re {
+        if let Some(caps) = re.captures(error) {
+            if let Some(line) = caps.get(1) {
+                return (line.as_str().parse().unwrap_or(0), 0);
+            }
+        }
+    }
+    (0, 0)
 }
 
 /// Convert byte offset span to line/column span

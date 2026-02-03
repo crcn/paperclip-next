@@ -877,6 +877,7 @@ function createBaseMutation() {
         setAttribute: undefined,
         removeNode: undefined,
         insertElement: undefined,
+        setFrameBounds: undefined,
     };
 }
 export const Mutation = {
@@ -904,6 +905,9 @@ export const Mutation = {
         }
         if (message.insertElement !== undefined) {
             InsertElement.encode(message.insertElement, writer.uint32(66).fork()).ldelim();
+        }
+        if (message.setFrameBounds !== undefined) {
+            SetFrameBounds.encode(message.setFrameBounds, writer.uint32(74).fork()).ldelim();
         }
         return writer;
     },
@@ -962,6 +966,12 @@ export const Mutation = {
                     }
                     message.insertElement = InsertElement.decode(reader, reader.uint32());
                     continue;
+                case 9:
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.setFrameBounds = SetFrameBounds.decode(reader, reader.uint32());
+                    continue;
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -980,6 +990,7 @@ export const Mutation = {
             setAttribute: isSet(object.setAttribute) ? SetAttribute.fromJSON(object.setAttribute) : undefined,
             removeNode: isSet(object.removeNode) ? RemoveNode.fromJSON(object.removeNode) : undefined,
             insertElement: isSet(object.insertElement) ? InsertElement.fromJSON(object.insertElement) : undefined,
+            setFrameBounds: isSet(object.setFrameBounds) ? SetFrameBounds.fromJSON(object.setFrameBounds) : undefined,
         };
     },
     toJSON(message) {
@@ -1008,6 +1019,9 @@ export const Mutation = {
         if (message.insertElement !== undefined) {
             obj.insertElement = InsertElement.toJSON(message.insertElement);
         }
+        if (message.setFrameBounds !== undefined) {
+            obj.setFrameBounds = SetFrameBounds.toJSON(message.setFrameBounds);
+        }
         return obj;
     },
     create(base) {
@@ -1035,6 +1049,171 @@ export const Mutation = {
         message.insertElement = (object.insertElement !== undefined && object.insertElement !== null)
             ? InsertElement.fromPartial(object.insertElement)
             : undefined;
+        message.setFrameBounds = (object.setFrameBounds !== undefined && object.setFrameBounds !== null)
+            ? SetFrameBounds.fromPartial(object.setFrameBounds)
+            : undefined;
+        return message;
+    },
+};
+function createBaseSetFrameBounds() {
+    return { frameId: "", bounds: undefined };
+}
+export const SetFrameBounds = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.frameId !== "") {
+            writer.uint32(10).string(message.frameId);
+        }
+        if (message.bounds !== undefined) {
+            Bounds.encode(message.bounds, writer.uint32(18).fork()).ldelim();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetFrameBounds();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.frameId = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.bounds = Bounds.decode(reader, reader.uint32());
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            frameId: isSet(object.frameId) ? globalThis.String(object.frameId) : "",
+            bounds: isSet(object.bounds) ? Bounds.fromJSON(object.bounds) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.frameId !== "") {
+            obj.frameId = message.frameId;
+        }
+        if (message.bounds !== undefined) {
+            obj.bounds = Bounds.toJSON(message.bounds);
+        }
+        return obj;
+    },
+    create(base) {
+        return SetFrameBounds.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetFrameBounds();
+        message.frameId = object.frameId ?? "";
+        message.bounds = (object.bounds !== undefined && object.bounds !== null)
+            ? Bounds.fromPartial(object.bounds)
+            : undefined;
+        return message;
+    },
+};
+function createBaseBounds() {
+    return { x: 0, y: 0, width: 0, height: 0 };
+}
+export const Bounds = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.x !== 0) {
+            writer.uint32(13).float(message.x);
+        }
+        if (message.y !== 0) {
+            writer.uint32(21).float(message.y);
+        }
+        if (message.width !== 0) {
+            writer.uint32(29).float(message.width);
+        }
+        if (message.height !== 0) {
+            writer.uint32(37).float(message.height);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBounds();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 13) {
+                        break;
+                    }
+                    message.x = reader.float();
+                    continue;
+                case 2:
+                    if (tag !== 21) {
+                        break;
+                    }
+                    message.y = reader.float();
+                    continue;
+                case 3:
+                    if (tag !== 29) {
+                        break;
+                    }
+                    message.width = reader.float();
+                    continue;
+                case 4:
+                    if (tag !== 37) {
+                        break;
+                    }
+                    message.height = reader.float();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            x: isSet(object.x) ? globalThis.Number(object.x) : 0,
+            y: isSet(object.y) ? globalThis.Number(object.y) : 0,
+            width: isSet(object.width) ? globalThis.Number(object.width) : 0,
+            height: isSet(object.height) ? globalThis.Number(object.height) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.x !== 0) {
+            obj.x = message.x;
+        }
+        if (message.y !== 0) {
+            obj.y = message.y;
+        }
+        if (message.width !== 0) {
+            obj.width = message.width;
+        }
+        if (message.height !== 0) {
+            obj.height = message.height;
+        }
+        return obj;
+    },
+    create(base) {
+        return Bounds.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBounds();
+        message.x = object.x ?? 0;
+        message.y = object.y ?? 0;
+        message.width = object.width ?? 0;
+        message.height = object.height ?? 0;
         return message;
     },
 };

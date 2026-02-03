@@ -250,6 +250,7 @@ mod tests {
             attributes: HashMap::new(),
             styles: HashMap::new(),
             children: vec![],
+            source_id: None,
             key: None,
         };
 

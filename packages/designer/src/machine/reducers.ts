@@ -13,7 +13,9 @@ import {
 import {
   DesignerEvent,
   DesignerState,
+  Frame,
   FrameBounds,
+  PendingMutation,
   Point,
   ResizeHandle,
 } from "./state";
@@ -206,17 +208,20 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
     }
 
     case "document/loaded": {
-      console.log("[reducer] document/loaded frames:", event.payload.frames.length, "canvasSize:", state.canvas.size, "centeredInitial:", state.centeredInitial);
+      console.log("[reducer] document/loaded frames:", event.payload.frames.length, "canvasSize:", state.canvas.size, "centeredInitial:", state.centeredInitial, "pending:", state.pendingMutations.size);
+
+      // Merge server frames with pending mutations to preserve optimistic bounds
+      const mergedFrames = mergeFramesWithPending(event.payload.frames, state.pendingMutations);
 
       let newState = {
         ...state,
         document: event.payload.document,
-        frames: event.payload.frames,
+        frames: mergedFrames,
       };
 
       // Auto-center on first load if canvas has size
       if (!state.centeredInitial && state.canvas.size.width > 0) {
-        const bounds = getFramesBounds(event.payload.frames.map((f) => f.bounds));
+        const bounds = getFramesBounds(mergedFrames.map((f) => f.bounds));
         console.log("[reducer] centering on bounds:", bounds);
         if (bounds) {
           const transform = centerTransformOnBounds(state.canvas.size, bounds, true);
@@ -238,12 +243,15 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
     case "tool/resizeStart": {
       const { handle, mouse } = event.payload;
       const frameIndex = state.selectedFrameIndex;
+      console.log("[reducer] tool/resizeStart handle:", handle, "mouse:", mouse, "frameIndex:", frameIndex);
 
       if (frameIndex === undefined || !state.frames[frameIndex]) {
+        console.log("[reducer] tool/resizeStart - no frame selected");
         return state;
       }
 
       const startBounds = state.frames[frameIndex].bounds;
+      console.log("[reducer] tool/resizeStart startBounds:", startBounds);
 
       return {
         ...state,
@@ -264,6 +272,8 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
       const drag = state.tool.drag;
       if (!drag) return state;
 
+      console.log("[reducer] tool/resizeMove currentMouse:", event.payload);
+
       return {
         ...state,
         tool: {
@@ -278,7 +288,10 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
 
     case "tool/resizeEnd": {
       const drag = state.tool.drag;
-      if (!drag) return state;
+      if (!drag) {
+        console.log("[reducer] tool/resizeEnd - no drag state");
+        return state;
+      }
 
       // Calculate the delta in canvas space
       const { transform } = state.canvas;
@@ -289,8 +302,11 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
         y: endCanvas.y - startCanvas.y,
       };
 
+      console.log("[reducer] tool/resizeEnd delta:", delta, "handle:", drag.handle);
+
       // Calculate final bounds
       const newBounds = calculateResizedBounds(drag.startBounds, drag.handle, delta);
+      console.log("[reducer] tool/resizeEnd newBounds:", newBounds, "oldBounds:", drag.startBounds);
 
       // Update the frame
       const frames = [...state.frames];
@@ -308,7 +324,79 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
       };
     }
 
+    // =========================================================================
+    // Mutation Lifecycle Events
+    // =========================================================================
+
+    case "mutation/started": {
+      const { mutation } = event.payload;
+      const newPending = new Map(state.pendingMutations);
+      newPending.set(mutation.mutationId, mutation);
+      console.log("[reducer] mutation/started:", mutation.mutationId, "pending count:", newPending.size);
+      return {
+        ...state,
+        pendingMutations: newPending,
+      };
+    }
+
+    case "mutation/acknowledged": {
+      const { mutationId, version } = event.payload;
+      const newPending = new Map(state.pendingMutations);
+      newPending.delete(mutationId);
+      console.log("[reducer] mutation/acknowledged:", mutationId, "version:", version, "pending remaining:", newPending.size);
+      return {
+        ...state,
+        pendingMutations: newPending,
+      };
+    }
+
+    case "mutation/failed": {
+      const { mutationId, error } = event.payload;
+      console.error("[reducer] mutation/failed:", mutationId, error);
+
+      // Remove the pending mutation and revert the optimistic update
+      const failedMutation = state.pendingMutations.get(mutationId);
+      const newPending = new Map(state.pendingMutations);
+      newPending.delete(mutationId);
+
+      // If we have the original mutation, we could revert here
+      // For now, we just remove from pending and let the next SSE update fix it
+      // TODO: Implement proper revert to pre-mutation state if needed
+
+      return {
+        ...state,
+        pendingMutations: newPending,
+      };
+    }
+
     default:
       return state;
   }
 };
+
+/**
+ * Merge server frames with pending mutations.
+ * Preserves optimistic bounds for frames that have in-flight mutations.
+ */
+export function mergeFramesWithPending(
+  serverFrames: Frame[],
+  pendingMutations: Map<string, PendingMutation>
+): Frame[] {
+  if (pendingMutations.size === 0) {
+    return serverFrames;
+  }
+
+  return serverFrames.map((frame) => {
+    // Check if this frame has a pending mutation
+    for (const [, mutation] of pendingMutations) {
+      if (mutation.frameId === frame.id) {
+        console.log("[mergeFramesWithPending] Preserving optimistic bounds for frame:", frame.id);
+        return {
+          ...frame,
+          bounds: mutation.optimisticBounds,
+        };
+      }
+    }
+    return frame;
+  });
+}
