@@ -395,4 +395,148 @@ mod workspace_comprehensive_tests {
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
+
+    /// Critical integration test: verifies that the source_id from the evaluator
+    /// matches the frame_id expected by the AST index for mutations.
+    /// This is the key chain that enables frame dragging in the designer.
+    #[test]
+    fn test_evaluator_source_id_matches_ast_index_frame_id() {
+        use paperclip_bundle::Bundle;
+        use paperclip_evaluator::{Evaluator, VNode};
+        use paperclip_parser::parse_with_path;
+        use crate::ast_index::{AstIndex, NodeType};
+        use yrs::{Doc, Text, Transact};
+        use std::path::PathBuf;
+
+        let source = r#"/**
+ * @frame(x: 100, y: 200, width: 400, height: 300)
+ */
+div {
+    text "Hello"
+}"#;
+        let file_path = "/test/simple.pc";
+
+        // Step 1: Parse and build AST index (what mutation handler does)
+        let ast = parse_with_path(source, file_path).expect("Failed to parse");
+        let doc = Doc::new();
+        {
+            let text = doc.get_or_insert_text("content");
+            let mut txn = doc.transact_mut();
+            text.insert(&mut txn, 0, source);
+        }
+        let index = AstIndex::build_from_ast(&ast, &doc, source);
+
+        // Get all frame IDs from the index
+        let frame_ids: Vec<_> = index.all_node_ids()
+            .filter(|id| index.get_node(id).map(|n| n.node_type == NodeType::Frame).unwrap_or(false))
+            .collect();
+
+        assert_eq!(frame_ids.len(), 1, "Should have exactly one frame indexed");
+        let expected_frame_id = frame_ids[0].clone();
+        println!("AST Index frame_id: {}", expected_frame_id);
+
+        // Step 2: Evaluate and get source_id from VDOM (what evaluator does)
+        let mut bundle = Bundle::new();
+        bundle.add_document(PathBuf::from(file_path), ast);
+        let mut evaluator = Evaluator::with_document_id(file_path);
+        let vdom = evaluator
+            .evaluate_bundle(&bundle, std::path::Path::new(file_path))
+            .expect("Failed to evaluate");
+
+        // Get source_id from the first VDOM node (the frame element)
+        let vdom_source_id = match &vdom.nodes[0] {
+            VNode::Element { source_id, .. } => source_id.clone(),
+            _ => panic!("Expected Element node"),
+        };
+
+        println!("VDOM source_id: {:?}", vdom_source_id);
+
+        // Step 3: Verify they match!
+        assert!(
+            vdom_source_id.is_some(),
+            "VDOM element should have source_id set"
+        );
+        assert_eq!(
+            vdom_source_id.as_ref().unwrap(),
+            &expected_frame_id,
+            "VDOM source_id should match AST index frame_id.\n  VDOM source_id: {:?}\n  AST frame_id: {}",
+            vdom_source_id,
+            expected_frame_id
+        );
+
+        // Step 4: Verify mutation would work by looking up the frame
+        let frame_node = index.get_node(&expected_frame_id);
+        assert!(
+            frame_node.is_some(),
+            "Should be able to find frame by ID: {}",
+            expected_frame_id
+        );
+        assert_eq!(
+            frame_node.unwrap().node_type,
+            NodeType::Frame,
+            "Node should be a Frame type"
+        );
+    }
+
+    /// Test that component frames also have matching source_id
+    #[test]
+    fn test_component_frame_source_id_matches() {
+        use paperclip_bundle::Bundle;
+        use paperclip_evaluator::{Evaluator, VNode};
+        use paperclip_parser::parse_with_path;
+        use crate::ast_index::{AstIndex, NodeType};
+        use yrs::{Doc, Text, Transact};
+        use std::path::PathBuf;
+
+        let source = r#"/**
+ * @frame(x: 0, y: 0, width: 200, height: 200)
+ */
+public component Card {
+    render div {
+        text "Card content"
+    }
+}"#;
+        let file_path = "/test/card.pc";
+
+        // Parse and build AST index
+        let ast = parse_with_path(source, file_path).expect("Failed to parse");
+        let doc = Doc::new();
+        {
+            let text = doc.get_or_insert_text("content");
+            let mut txn = doc.transact_mut();
+            text.insert(&mut txn, 0, source);
+        }
+        let index = AstIndex::build_from_ast(&ast, &doc, source);
+
+        // Get frame ID
+        let frame_ids: Vec<_> = index.all_node_ids()
+            .filter(|id| index.get_node(id).map(|n| n.node_type == NodeType::Frame).unwrap_or(false))
+            .collect();
+        assert_eq!(frame_ids.len(), 1, "Should have exactly one frame");
+        let expected_frame_id = frame_ids[0].clone();
+        println!("Component frame_id from AST index: {}", expected_frame_id);
+
+        // Evaluate VDOM
+        let mut bundle = Bundle::new();
+        bundle.add_document(PathBuf::from(file_path), ast);
+        let mut evaluator = Evaluator::with_document_id(file_path);
+        let vdom = evaluator
+            .evaluate_bundle(&bundle, std::path::Path::new(file_path))
+            .expect("Failed to evaluate");
+
+        // Get source_id
+        let vdom_source_id = match &vdom.nodes[0] {
+            VNode::Element { source_id, .. } => source_id.clone(),
+            _ => panic!("Expected Element node"),
+        };
+        println!("Component VDOM source_id: {:?}", vdom_source_id);
+
+        // Verify match
+        assert!(vdom_source_id.is_some(), "Should have source_id");
+        assert_eq!(
+            vdom_source_id.as_ref().unwrap(),
+            &expected_frame_id,
+            "Component source_id should match frame_id"
+        );
+    }
 }

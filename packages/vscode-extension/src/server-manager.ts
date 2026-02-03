@@ -22,14 +22,30 @@ export class ServerManager {
   }
 
   /**
+   * Find an available port starting from the preferred port
+   */
+  private async getAvailablePort(preferredPort: number): Promise<number> {
+    let port = preferredPort;
+    const maxAttempts = 100;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      if (!(await this.isPortInUse(port))) {
+        return port;
+      }
+      this.outputChannel.appendLine(`Port ${port} is in use, trying ${port + 1}...`);
+      port++;
+    }
+
+    throw new Error(`Could not find available port after ${maxAttempts} attempts starting from ${preferredPort}`);
+  }
+
+  /**
    * Start the server, returns when server is ready
    */
   async start(): Promise<void> {
-    // Check if already running on this port
-    if (await this.isPortInUse(this.port)) {
-      this.outputChannel.appendLine(`Server already running on port ${this.port}`);
-      return;
-    }
+    // Find available ports (starting from preferred ports)
+    this.port = await this.getAvailablePort(this.port);
+    this.httpPort = await this.getAvailablePort(this.httpPort);
 
     const serverPath = await this.findServerBinary();
     if (!serverPath) {

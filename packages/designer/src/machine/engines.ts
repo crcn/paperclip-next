@@ -370,6 +370,10 @@ function extractFramesFromDocument(doc: VDocument): Frame[] {
     if (node.element) {
       const attrs = node.element.attributes ?? {};
       const metadata = node.element.metadata as Record<string, unknown> | undefined;
+      // Debug: Log all element keys to see what's available
+      console.log(`[extractFrames] node ${index} element keys:`, Object.keys(node.element));
+      console.log(`[extractFrames] node ${index} sourceId:`, node.element.sourceId);
+      console.log(`[extractFrames] node ${index} semanticId:`, node.element.semanticId);
       // Use sourceId for mutations (maps to AST span.id), fall back to semanticId
       const frameId = node.element.sourceId ?? node.element.semanticId ?? `frame-${index}`;
       return {
@@ -536,6 +540,11 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
             console.log("[SSE] Initialized VDOM, nodes:", vdom.nodes.length);
             if (vdom.nodes[0]) {
               console.log("[SSE] First node keys:", Object.keys(vdom.nodes[0]));
+              if (vdom.nodes[0].element) {
+                console.log("[SSE] First element keys:", Object.keys(vdom.nodes[0].element));
+                console.log("[SSE] First element sourceId:", vdom.nodes[0].element.sourceId);
+                console.log("[SSE] First element semanticId:", vdom.nodes[0].element.semanticId);
+              }
             }
             changed = true;
           } else if (vdom) {
