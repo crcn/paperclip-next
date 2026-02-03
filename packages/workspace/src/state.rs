@@ -61,6 +61,10 @@ impl WorkspaceState {
         new_source: String,
         project_root: &Path,
     ) -> Result<Vec<VDocPatch>, StateError> {
+        // Canonicalize path to ensure consistent lookups
+        // (resolves symlinks like /var -> /private/var on macOS)
+        let path = path.canonicalize().unwrap_or(path);
+
         let is_cached = self.files.contains_key(&path);
         info!(is_cached, "Updating file");
 
@@ -150,17 +154,32 @@ impl WorkspaceState {
 
     // Get current state (for queries)
     pub fn get_file(&self, path: &Path) -> Option<&FileState> {
-        self.files.get(path)
+        // Try canonical path first, fall back to original
+        let canonical = path.canonicalize().ok();
+        canonical
+            .as_ref()
+            .and_then(|p| self.files.get(p.as_path()))
+            .or_else(|| self.files.get(path))
     }
 
     /// Get the parsed AST for a file (from bundle)
     pub fn get_ast(&self, path: &Path) -> Option<&Document> {
-        self.bundle.get_document(path)
+        // Try canonical path first, fall back to original
+        let canonical = path.canonicalize().ok();
+        canonical
+            .as_ref()
+            .and_then(|p| self.bundle.get_document(p.as_path()))
+            .or_else(|| self.bundle.get_document(path))
     }
 
     /// Get all assets used by a specific file (from bundle)
     pub fn get_file_assets(&self, path: &Path) -> Vec<&AssetReference> {
-        self.bundle.assets_for_file(path)
+        // Try canonical path first, fall back to original
+        let canonical = path.canonicalize().ok();
+        canonical
+            .as_ref()
+            .map(|p| self.bundle.assets_for_file(p.as_path()))
+            .unwrap_or_else(|| self.bundle.assets_for_file(path))
     }
 
     /// Get all unique assets across the workspace

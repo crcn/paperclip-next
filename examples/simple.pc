@@ -29,5 +29,9 @@ div {
         font-weight: bold
         text-decoration: underline
     }
-    text "hello wodrld"
+    text "hello woddd" {
+        style {
+            color: red
+        }
+    }
 }

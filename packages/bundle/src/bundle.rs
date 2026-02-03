@@ -181,9 +181,12 @@ impl Bundle {
 
     /// Add a document to the bundle
     pub fn add_document(&mut self, path: PathBuf, document: Document) {
-        let document_id = get_document_id(&path.to_string_lossy());
-        self.document_ids.insert(path.clone(), document_id);
-        self.documents.insert(path, document);
+        // Canonicalize the path to ensure consistent lookups
+        // (resolves symlinks like /var -> /private/var on macOS)
+        let canonical_path = path.canonicalize().unwrap_or(path);
+        let document_id = get_document_id(&canonical_path.to_string_lossy());
+        self.document_ids.insert(canonical_path.clone(), document_id);
+        self.documents.insert(canonical_path, document);
     }
 
     /// Build dependency graph from import statements

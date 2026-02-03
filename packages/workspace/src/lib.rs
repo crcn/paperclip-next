@@ -11,6 +11,10 @@ mod crdt_integration_tests;
 mod mutation_handler_tests;
 #[cfg(test)]
 mod tests_comprehensive;
+#[cfg(test)]
+mod tests_typing_simulation;
+#[cfg(test)]
+mod tests_e2e_typing;
 
 pub use ast_index::{AstIndex, ConflictError, NodePosition, NodeType};
 pub use crdt::{CrdtBroadcast, CrdtClient, CrdtDocument, CrdtError, CrdtSession, CrdtSessionManager};

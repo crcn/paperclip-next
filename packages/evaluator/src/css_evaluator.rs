@@ -8,6 +8,12 @@ use tracing::{debug, info, instrument};
 
 pub type CssResult<T> = Result<T, CssError>;
 
+/// Extract the style name from a potentially namespaced reference.
+/// "colors.primary" -> "primary", "myStyle" -> "myStyle"
+fn extract_style_name(extend_ref: &str) -> &str {
+    extend_ref.rsplit('.').next().unwrap_or(extend_ref)
+}
+
 #[derive(Error, Debug)]
 pub enum CssError {
     #[error("Style evaluation error: {message}")]
@@ -292,7 +298,9 @@ impl CssEvaluator {
 
         // Handle extends - pull in CSS variables from extended styles
         for extend_ref in &style_decl.extends {
-            if let Some(extended_style) = all_styles.iter().find(|s| &s.name == extend_ref) {
+            // Extract just the style name from potentially namespaced ref (e.g., "colors.primary" -> "primary")
+            let style_name = extract_style_name(extend_ref);
+            if let Some(extended_style) = all_styles.iter().find(|s| s.name == style_name) {
                 // Pull in the CSS variables from the extended style
                 for (property, value) in &extended_style.properties {
                     let var_name = format!(
@@ -375,8 +383,10 @@ impl CssEvaluator {
 
                         // Handle extends - pull in CSS variables from extended styles
                         for extend_ref in &style_block.extends {
+                            // Extract just the style name from potentially namespaced ref (e.g., "colors.primary" -> "primary")
+                            let style_name = extract_style_name(extend_ref);
                             if let Some(extended_style) =
-                                all_styles.iter().find(|s| &s.name == extend_ref)
+                                all_styles.iter().find(|s| s.name == style_name)
                             {
                                 // Pull in the CSS variables from the extended style
                                 for (property, value) in &extended_style.properties {

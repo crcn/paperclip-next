@@ -39,6 +39,9 @@ mod tests_slots;
 mod tests_error_recovery;
 
 #[cfg(test)]
+mod tests_frame_transitions;
+
+#[cfg(test)]
 mod tests_expressions;
 
 #[cfg(test)]

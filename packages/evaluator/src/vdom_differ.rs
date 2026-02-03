@@ -153,11 +153,10 @@ fn diff_children_by_semantic_id(
             patches.extend(diff_vnodes_same_path(old_node, new_node, path));
         } else {
             // New node - create it
-            let mut path = parent_path.clone();
-            path.push(*new_idx as u32);
+            // Note: path is the PARENT path, index is where to insert in that parent
             patches.push(VDocPatch {
                 patch_type: Some(v_doc_patch::PatchType::CreateNode(CreateNodePatch {
-                    path: path.clone(),
+                    path: parent_path.clone(),
                     node: Some(convert_vnode_to_proto(new_node)),
                     index: *new_idx as u32,
                 })),
@@ -174,11 +173,10 @@ fn diff_children_by_semantic_id(
         match (old_node, new_node) {
             (None, Some((new_idx, new_node))) => {
                 // Create new simple node
-                let mut path = parent_path.clone();
-                path.push(*new_idx as u32);
+                // Note: path is the PARENT path, index is where to insert in that parent
                 patches.push(VDocPatch {
                     patch_type: Some(v_doc_patch::PatchType::CreateNode(CreateNodePatch {
-                        path: path.clone(),
+                        path: parent_path.clone(),
                         node: Some(convert_vnode_to_proto(new_node)),
                         index: *new_idx as u32,
                     })),
@@ -481,7 +479,9 @@ mod tests {
 
         match &patches[0].patch_type {
             Some(v_doc_patch::PatchType::CreateNode(patch)) => {
-                assert_eq!(patch.path, vec![0]);
+                // path is PARENT path (root = empty), index is where to insert
+                assert_eq!(patch.path, Vec::<u32>::new());
+                assert_eq!(patch.index, 0);
             }
             _ => panic!("Expected CreateNode patch"),
         }
