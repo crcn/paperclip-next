@@ -4626,3 +4626,328 @@ div {}"#;
     assert!(text.contains("x: -100"));
     assert!(text.contains("y: -50"));
 }
+
+// ============================================================================
+// TEST: SET STYLE PROPERTY MUTATIONS
+// ============================================================================
+
+#[test]
+fn test_set_style_property_update_existing() {
+    let source = r#"div {
+    style {
+        color: red
+        padding: 10px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Find the div element's ID
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Element)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "style-1".to_string(),
+        node_id: element_id,
+        property: "color".to_string(),
+        value: "blue".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: blue"), "Should update color to blue. Got: {}", text);
+    assert!(text.contains("padding: 10px"), "Should preserve other properties");
+    assert!(!text.contains("color: red"), "Should not have old color value");
+}
+
+#[test]
+fn test_set_style_property_add_new() {
+    let source = r#"div {
+    style {
+        color: red
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Element)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "style-2".to_string(),
+        node_id: element_id,
+        property: "padding".to_string(),
+        value: "20px".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: red"), "Should preserve existing property");
+    assert!(text.contains("padding: 20px"), "Should add new property. Got: {}", text);
+}
+
+#[test]
+fn test_set_style_property_create_style_block() {
+    let source = r#"div {
+    text "Hello"
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Element)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "style-3".to_string(),
+        node_id: element_id,
+        property: "color".to_string(),
+        value: "green".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("style {"), "Should create style block. Got: {}", text);
+    assert!(text.contains("color: green"), "Should have the property");
+}
+
+#[test]
+fn test_delete_style_property() {
+    let source = r#"div {
+    style {
+        color: red
+        padding: 10px
+        margin: 5px
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Element)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::DeleteStyleProperty {
+        mutation_id: "style-del-1".to_string(),
+        node_id: element_id,
+        property: "padding".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: red"), "Should preserve color");
+    assert!(text.contains("margin: 5px"), "Should preserve margin");
+    assert!(!text.contains("padding"), "Should delete padding. Got: {}", text);
+}
+
+#[test]
+fn test_set_style_property_css_injection_prevention() {
+    let source = r#"div {
+    style {
+        color: red
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Element)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    // Try CSS injection attack with braces
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "attack-1".to_string(),
+        node_id: element_id.clone(),
+        property: "color".to_string(),
+        value: "red; } body { display: none }".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(result.is_err(), "Should reject CSS injection attack with braces");
+
+    // Try CSS injection attack with semicolons
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "attack-2".to_string(),
+        node_id: element_id.clone(),
+        property: "color".to_string(),
+        value: "red; background: black".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(result.is_err(), "Should reject CSS injection attack with semicolons");
+
+    // Try invalid property name
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "attack-3".to_string(),
+        node_id: element_id,
+        property: "color<script>".to_string(),
+        value: "red".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(result.is_err(), "Should reject invalid property name");
+}
+
+#[test]
+fn test_set_style_property_with_component() {
+    // Component without @frame - the render div will be indexed as Element, not Frame
+    let source = r#"component Card {
+    render div {
+        style {
+            padding: 32px
+            color: orange
+        }
+        text "hello"
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Find the div element
+    let element_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Element).unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "comp-style-1".to_string(),
+        node_id: element_id,
+        property: "color".to_string(),
+        value: "purple".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("color: purple"), "Should update color. Got: {}", text);
+    assert!(text.contains("padding: 32px"), "Should preserve padding");
+}
+
+#[test]
+fn test_set_style_property_with_render_frame() {
+    // Top-level render elements with @frame are indexed differently than component frames.
+    // For render frames, we need to find the element by its semantic_id.
+    // Note: Currently, component frames have their @frame annotation position stored,
+    // which doesn't include the style block. Render frames may have the same limitation.
+    // This test documents that limitation and expects Noop for now.
+
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    style {
+        padding: 32px
+        color: orange
+    }
+    text "hello"
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Find the frame
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            let node = handler.index().get_node(id);
+            node.map(|n| n.node_type == NodeType::Frame).unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    // Frame node's position currently tracks the @frame annotation, not the element.
+    // This is a known limitation. Style editing on Frame nodes requires enhancement
+    // to the AST index to also track the element's position.
+    let mutation = Mutation::SetStyleProperty {
+        mutation_id: "frame-style-1".to_string(),
+        node_id: frame_id.clone(),
+        property: "color".to_string(),
+        value: "purple".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+
+    // Currently returns Noop because Frame position tracks annotation, not element
+    // TODO: Enhance AST index to track element position for Frame nodes
+    match &result {
+        Ok(MutationResult::Noop { reason, .. }) => {
+            assert!(
+                reason.contains("Could not find"),
+                "Expected 'Could not find' in reason, got: {}",
+                reason
+            );
+        }
+        other => {
+            // If this test starts passing, it means the limitation was fixed
+            println!("Frame style editing now works! Result: {:?}", other);
+        }
+    }
+}

@@ -11,13 +11,17 @@ import {
   ZOOM_SENSITIVITY,
 } from "./geometry";
 import {
+  ComputedStyles,
   DesignerEvent,
   DesignerState,
   Frame,
   FrameBounds,
+  PendingFrameMutation,
   PendingMutation,
   Point,
   ResizeHandle,
+  VDocument,
+  VNode,
 } from "./state";
 
 const MIN_FRAME_SIZE = 50;
@@ -375,10 +379,179 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
       };
     }
 
+    // =========================================================================
+    // Element Selection Events
+    // =========================================================================
+
+    case "element/selected": {
+      const selection = event.payload;
+      // Extract computed styles from the selected element
+      const computedStyles = extractStylesForElement(state.document, selection.nodeId);
+
+      return {
+        ...state,
+        selectedElement: selection,
+        computedStyles,
+        pendingStyleChanges: {}, // Clear pending changes on new selection
+      };
+    }
+
+    case "element/deselected": {
+      return {
+        ...state,
+        selectedElement: undefined,
+        computedStyles: {},
+        pendingStyleChanges: {},
+      };
+    }
+
+    case "element/hovered": {
+      // Could track hovered element for highlighting
+      // For now, just return state unchanged
+      return state;
+    }
+
+    // =========================================================================
+    // Style Editing Events
+    // =========================================================================
+
+    case "style/propertyFocused": {
+      // Track which property is being edited (for UI focus state)
+      return state;
+    }
+
+    case "style/propertyBlurred": {
+      return state;
+    }
+
+    case "style/changed": {
+      const { property, value } = event.payload;
+
+      // Optimistic update
+      return {
+        ...state,
+        pendingStyleChanges: {
+          ...state.pendingStyleChanges,
+          [property]: value,
+        },
+        computedStyles: {
+          ...state.computedStyles,
+          [property]: {
+            value,
+            origin: "inline",
+          },
+        },
+      };
+    }
+
+    case "style/removed": {
+      const { property } = event.payload;
+      const { [property]: removed, ...remainingStyles } = state.computedStyles;
+      const { [property]: removedPending, ...remainingPending } = state.pendingStyleChanges;
+
+      return {
+        ...state,
+        computedStyles: remainingStyles,
+        pendingStyleChanges: remainingPending,
+      };
+    }
+
+    // =========================================================================
+    // Layer Panel Events
+    // =========================================================================
+
+    case "layer/nodeExpanded": {
+      const { nodeId } = event.payload;
+      const expandedNodes = new Set(state.layerPanel.expandedNodes);
+      expandedNodes.add(nodeId);
+
+      return {
+        ...state,
+        layerPanel: {
+          ...state.layerPanel,
+          expandedNodes,
+        },
+      };
+    }
+
+    case "layer/nodeCollapsed": {
+      const { nodeId } = event.payload;
+      const expandedNodes = new Set(state.layerPanel.expandedNodes);
+      expandedNodes.delete(nodeId);
+
+      return {
+        ...state,
+        layerPanel: {
+          ...state.layerPanel,
+          expandedNodes,
+        },
+      };
+    }
+
+    case "layer/nodeClicked": {
+      const { nodeId, sourceId, frameIndex } = event.payload;
+      const computedStyles = extractStylesForElement(state.document, nodeId);
+
+      return {
+        ...state,
+        selectedElement: { nodeId, sourceId, frameIndex },
+        selectedFrameIndex: frameIndex,
+        computedStyles,
+        pendingStyleChanges: {},
+      };
+    }
+
     default:
       return state;
   }
 };
+
+/**
+ * Extract inline styles from a VDOM node.
+ * For Phase 1, we only handle inline styles - no mixin/inherited resolution.
+ */
+function extractStylesForElement(
+  document: VDocument | undefined,
+  nodeId: string
+): ComputedStyles {
+  if (!document) return {};
+
+  // Find the node by semantic ID
+  const node = findNodeById(document.nodes, nodeId);
+  if (!node || !node.element) return {};
+
+  // Extract inline styles from the element's styles map
+  const styles: ComputedStyles = {};
+  const elementStyles = node.element.styles || {};
+
+  for (const [property, value] of Object.entries(elementStyles)) {
+    styles[property] = {
+      value,
+      origin: "inline",
+    };
+  }
+
+  return styles;
+}
+
+/**
+ * Recursively find a node by its semantic ID in the VDOM tree
+ */
+function findNodeById(
+  nodes: VNode[],
+  nodeId: string
+): VNode | undefined {
+  for (const node of nodes) {
+    if (node.element?.semanticId === nodeId) {
+      return node;
+    }
+    if (node.element?.children) {
+      const found = findNodeById(node.element.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Merge server frames with pending mutations.
@@ -393,13 +566,14 @@ export function mergeFramesWithPending(
   }
 
   return serverFrames.map((frame) => {
-    // Check if this frame has a pending mutation
+    // Check if this frame has a pending frame mutation
     for (const [, mutation] of pendingMutations) {
-      if (mutation.frameId === frame.id) {
+      // Only handle frame mutations here
+      if (mutation.type === "setFrameBounds" && (mutation as PendingFrameMutation).frameId === frame.id) {
         console.log("[mergeFramesWithPending] Preserving optimistic bounds for frame:", frame.id);
         return {
           ...frame,
-          bounds: mutation.optimisticBounds,
+          bounds: (mutation as PendingFrameMutation).optimisticBounds,
         };
       }
     }

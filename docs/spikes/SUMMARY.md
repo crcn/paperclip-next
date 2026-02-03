@@ -1,16 +1,18 @@
 # Paperclip Architecture Validation: Spike Summary
 
-**Date**: 2026-01-28
-**Status**: ✅ **ALL APPROVED SPIKES COMPLETED**
+**Date**: 2026-01-28 (Original) | **Updated**: 2026-02-03
+**Status**: ✅ **ALL APPROVED SPIKES COMPLETED** | 🚀 **IMPLEMENTATION IN PROGRESS**
 
 ## Overview
 
 This document summarizes the completion of Paperclip's architecture validation spikes. All approved spikes (0.2, 0.3, 0.4, 0.6, 0.7) have been implemented, tested, and validated.
 
+**Update (2026-02-03)**: Significant progress has been made on the evaluator and designer. The system now has working end-to-end preview with hot reload.
+
 ## Completed Spikes
 
 ### ✅ Spike 0.2: Live Hot Reload
-**Status**: VALIDATED
+**Status**: VALIDATED → **IMPLEMENTED**
 **Tests**: 3/3 passing
 **Documentation**: `SPIKE_0.2_HOT_RELOAD.md`
 
@@ -24,6 +26,7 @@ Validates the complete hot reload pipeline:
 - `notify` crate integration for file watching
 - End-to-end pipeline test (file change → patches)
 - Architecture validated for live preview system
+- **NEW**: SSE-based real-time preview working in designer
 
 ---
 
@@ -104,7 +107,7 @@ component Button {
 ---
 
 ### ✅ Spike 0.6: Conditional Rendering
-**Status**: VALIDATED
+**Status**: VALIDATED → **EVALUATOR IMPLEMENTED**
 **Tests**: Part of 13 control flow tests
 **Documentation**: `SPIKE_0.6_0.7_CONTROL_FLOW.md`
 
@@ -136,7 +139,7 @@ if isLoggedIn {
 ---
 
 ### ✅ Spike 0.7: Repeat/Loop Rendering
-**Status**: VALIDATED
+**Status**: VALIDATED → **EVALUATOR IMPLEMENTED**
 **Tests**: Part of 13 control flow tests
 **Documentation**: `SPIKE_0.6_0.7_CONTROL_FLOW.md`
 
@@ -226,8 +229,9 @@ if isAuthenticated {
 | Attribute Syntax | 11 passing | ✅ |
 | **Total Parser** | **121 passing, 3 ignored** | ✅ |
 | Editor (Mutations, Undo) | 33 passing | ✅ |
-| Evaluator | 143 passing | ✅ |
-| **Grand Total** | **297 passing** | ✅ |
+| Evaluator | 143+ passing | ✅ |
+| Workspace | 196+ passing | ✅ |
+| **Grand Total** | **490+ passing** | ✅ |
 
 ---
 
@@ -275,27 +279,64 @@ if isAuthenticated {
 - Allows expressions: `div(width=100 + 20)`
 - Consistent with function call syntax
 
+### 6. Proto-Based VDOM (NEW)
+**Decision**: Use protobuf-generated types for VDOM, with prost serde for JSON
+
+**Rationale**:
+- Single source of truth for types (Rust + TypeScript)
+- Efficient binary serialization available
+- JSON format for debugging/SSE
+
 ---
 
 ## Feature Completeness Matrix
 
 | Feature | Parser | Evaluator | Designer | Status |
 |---------|--------|-----------|----------|--------|
-| **Components** | ✅ | ⏳ | 🔲 | Parser ready |
-| **Slots** | ✅ | ⏳ | 🔲 | Parser ready |
-| **Conditionals** | ✅ | ⏳ | 🔲 | Parser ready |
-| **Repeats** | ✅ | ⏳ | 🔲 | Parser ready |
+| **Components** | ✅ | ✅ | ✅ | **Working** |
+| **Slots** | ✅ | ✅ | 🔲 | Evaluator done |
+| **Conditionals** | ✅ | ✅ | 🔲 | Evaluator done |
+| **Repeats** | ✅ | ✅ | 🔲 | Evaluator done |
 | **Variants** | ✅ | ⏳ | 🔲 | Parser ready |
-| **Styles** | ✅ | ⏳ | ✅ | Parser ready |
-| **Expressions** | ✅ | ✅ | 🔲 | Working |
-| **Mutations** | ✅ | ✅ | ⏳ | Working |
-| **Undo/Redo** | ✅ | ✅ | ⏳ | Working |
-| **Hot Reload** | ✅ | ⏳ | 🔲 | Pipeline ready |
+| **Styles** | ✅ | ✅ | ✅ | **Working** |
+| **Expressions** | ✅ | ✅ | 🔲 | Evaluator done |
+| **Mutations** | ✅ | ✅ | ⏳ | API works, UI partial |
+| **Undo/Redo** | ✅ | ✅ | 🔲 | Backend ready |
+| **Hot Reload** | ✅ | ✅ | ✅ | **Working** |
+| **Frame Resize** | ✅ | ✅ | ⏳ | API works, drag broken |
+| **CRDT Sync** | n/a | ✅ | ⏳ | Backend ready |
 
 Legend:
 - ✅ Complete
 - ⏳ In progress / Partial
 - 🔲 Not started
+
+---
+
+## Designer Implementation Status (NEW)
+
+### Working Features
+- ✅ Canvas rendering with pan/zoom
+- ✅ Frame display from VDOM
+- ✅ SSE-based hot reload (real-time updates)
+- ✅ Frame selection
+- ✅ Resize handles display
+- ✅ VSCode extension integration
+- ✅ CRDT-backed document sync
+
+### In Progress
+- ⏳ Frame drag to move (API works, UI interaction broken)
+- ⏳ Frame resize interaction
+- ⏳ Style editing panel
+
+### Not Started
+- 🔲 Component tree panel
+- 🔲 Variant toggling UI
+- 🔲 Slot editing UI
+- 🔲 Multi-file preview
+
+### Known Issues
+1. **Frame Dragging**: The mutation API works (verified via curl), but the designer UI frame drag doesn't persist changes. Investigation shows `source_id` chain is correct in backend; issue is in frontend event handling or frame ID extraction.
 
 ---
 
@@ -342,43 +383,35 @@ The parser now fully supports:
 
 ### Immediate Priorities
 
-1. **Evaluator Implementation**
-   - Component evaluation with slot resolution
-   - Conditional branch selection
-   - Loop iteration (repeat)
-   - Variant CSS generation
-   - Proper VDOM output
+1. **Fix Frame Dragging**
+   - Debug frontend frame ID extraction
+   - Verify `sourceId` flows through transformation
+   - Test mutation dispatch from drag events
 
-2. **Validation & Error Messages**
-   - Undefined slot references
-   - Undefined variant references
-   - Type checking for expressions
-   - Circular dependency detection
+2. **Frame Resize Implementation**
+   - Complete resize handle interaction
+   - Apply bounds mutations on resize end
 
-3. **Performance Optimization**
-   - Large list rendering (virtualization)
-   - Deep nesting warnings
-   - Memoization for pure components
-   - CSS generation caching
+3. **Style Panel**
+   - Display current element styles
+   - Allow inline style editing
+   - Generate style mutations
 
 ### Medium-Term Goals
 
-1. **Designer Integration**
-   - Visual slot editing
+1. **Designer Polish**
+   - Component tree panel
    - Variant toggling in preview
-   - Live component preview
-   - Inline style editing
+   - Better error display
 
 2. **Advanced Features**
    - `else` branches for conditionals
-   - `switch` statements
    - Scoped slots (with props)
    - Repeat with index: `repeat (item, i) in items`
-   - Repeat with keys: `repeat item in items key=item.id`
 
 3. **Developer Experience**
    - LSP (Language Server Protocol)
-   - Syntax highlighting
+   - Syntax highlighting improvements
    - Auto-completion
    - Error diagnostics
 
@@ -399,12 +432,15 @@ All spike features have been validated against the original Paperclip implementa
 | Style mixins | ✅ | ✅ | Parity |
 | AST format | Protobuf | Rust enums | Improved |
 | Serialization | Binary | Text/JSON | Improved |
+| Designer preview | ✅ | ✅ | Parity |
+| Frame mutations | ✅ | ⏳ | In progress |
 
 **Key Improvements**:
 - Cleaner Rust enum-based AST (vs protobuf)
 - Better type safety
 - More readable serialized format
 - Simplified parser structure
+- CRDT-backed collaborative editing (new)
 
 ---
 
@@ -416,12 +452,18 @@ All spike features have been validated against the original Paperclip implementa
 3. **No `switch` statements**: Not in MVP (future enhancement)
 4. **No repeat index**: `repeat (item, i) in items` not yet supported
 
-### Evaluator Limitations (Work in Progress)
-1. **VDOM output empty**: Evaluator not yet generating proper VNodes
-2. **Slot resolution**: Not yet implemented
-3. **Conditional evaluation**: Not yet selecting branches
-4. **Repeat iteration**: Not yet generating multiple VNodes
-5. **Variant CSS**: Not yet generating CSS from variants
+### ~~Evaluator Limitations~~ (RESOLVED)
+~~1. VDOM output empty~~ → ✅ Fixed, VDOM generation working
+~~2. Slot resolution~~ → ✅ Implemented
+~~3. Conditional evaluation~~ → ✅ Implemented
+~~4. Repeat iteration~~ → ✅ Implemented
+~~5. Variant CSS~~ → ⏳ Still in progress
+
+### Designer Limitations (Current)
+1. **Frame dragging**: UI interaction doesn't trigger mutations correctly
+2. **No undo/redo UI**: Backend supports it, no UI yet
+3. **No multi-file**: Single file preview only
+4. **No variant toggle**: Can't switch variants in designer yet
 
 ### Ignored Tests
 1. **Complex nested variants**: Edge case with deep nesting (spike_variants.rs)
@@ -432,21 +474,24 @@ All spike features have been validated against the original Paperclip implementa
 ## Conclusion
 
 **All approved spikes completed successfully** ✅
+**Evaluator implementation substantially complete** ✅
+**Designer preview working** ✅
 
-The Paperclip parser is now feature-complete for the MVP scope:
-- ✅ 121 parser tests passing (3 ignored edge cases)
-- ✅ Component composition working
-- ✅ Control flow (conditionals + repeats) working
-- ✅ CSS variant system working
-- ✅ Hot reload pipeline validated
-- ✅ Feature parity with original Paperclip
+The Paperclip system now has:
+- ✅ 490+ tests passing across all packages
+- ✅ Full parse → evaluate → render pipeline
+- ✅ Real-time hot reload via SSE
+- ✅ VSCode extension with preview panel
+- ✅ CRDT-backed collaborative editing foundation
+- ✅ Mutation API for programmatic changes
 
-The architecture has been thoroughly validated through comprehensive test suites. The parser provides a solid foundation for the evaluator implementation phase.
+**Current Focus**: Designer interactions (frame drag/resize) and UI polish.
 
-**Recommended Next Phase**: Evaluator implementation to generate proper VDOM from parsed AST, starting with:
-1. Component evaluation with slot resolution
-2. Conditional branch evaluation
-3. Repeat loop evaluation
-4. Variant CSS generation
+**Recommended Next Steps**:
+1. Debug and fix frame dragging in designer
+2. Complete frame resize interaction
+3. Add style editing panel
+4. Implement variant CSS generation
 
 The spike validation phase is **COMPLETE** 🎉
+The implementation phase is **IN PROGRESS** 🚀

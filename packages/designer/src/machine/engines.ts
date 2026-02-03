@@ -110,11 +110,8 @@ function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, un
  * Also converts snake_case field names to camelCase (semantic_id -> semanticId)
  */
 function transformNode(raw: RawNode): VNode {
-  console.log("[transformNode] Input keys:", Object.keys(raw));
-
   // Format 1: Already in proto format (direct field names)
   if ("element" in raw && raw.element) {
-    console.log("[transformNode] Direct 'element' field found");
     const elemData = convertKeysToCamelCase(raw.element as Record<string, unknown>);
     if (elemData.children && Array.isArray(elemData.children)) {
       elemData.children = (elemData.children as unknown[]).map((c) => transformNode(c as RawNode));
@@ -149,8 +146,6 @@ function transformNode(raw: RawNode): VNode {
     const variantName = keys[0];
     const variantData = convertKeysToCamelCase(raw.node_type[variantName] as Record<string, unknown>);
 
-    console.log("[transformNode] node_type variant:", variantName);
-
     // Convert variant name to lowercase field name (Element -> element)
     const fieldName = variantName.charAt(0).toLowerCase() + variantName.slice(1);
 
@@ -162,8 +157,6 @@ function transformNode(raw: RawNode): VNode {
     // Build the proto-format node
     const result: Record<string, unknown> = {};
     result[fieldName] = variantData;
-
-    console.log("[transformNode] Output field:", fieldName);
 
     return result as unknown as VNode;
   }
@@ -194,12 +187,9 @@ function transformDocument(raw: RawDocument): VDocument {
  * 2. Incremental (prost serde): { patch_type: { UpdateText: {...} } }
  */
 function transformPatch(raw: RawPatch): VDocPatch {
-  console.log("[transformPatch] Raw keys:", Object.keys(raw));
-
   // Format 1: Direct field names (from process_file_to_json)
   // Check for direct patch fields first
   if ("initialize" in raw && raw.initialize) {
-    console.log("[transformPatch] Found direct 'initialize' field");
     const initData = raw.initialize as Record<string, unknown>;
     if (initData.vdom) {
       initData.vdom = transformDocument(initData.vdom as RawDocument);
@@ -217,8 +207,6 @@ function transformPatch(raw: RawPatch): VDocPatch {
 
     const variantName = keys[0];
     const variantData = raw.patch_type[variantName] as Record<string, unknown>;
-
-    console.log("[transformPatch] patch_type variant:", variantName);
 
     // Convert variant name to camelCase field name (UpdateText -> updateText)
     const fieldName = variantName.charAt(0).toLowerCase() + variantName.slice(1);
@@ -370,10 +358,6 @@ function extractFramesFromDocument(doc: VDocument): Frame[] {
     if (node.element) {
       const attrs = node.element.attributes ?? {};
       const metadata = node.element.metadata as Record<string, unknown> | undefined;
-      // Debug: Log all element keys to see what's available
-      console.log(`[extractFrames] node ${index} element keys:`, Object.keys(node.element));
-      console.log(`[extractFrames] node ${index} sourceId:`, node.element.sourceId);
-      console.log(`[extractFrames] node ${index} semanticId:`, node.element.semanticId);
       // Use sourceId for mutations (maps to AST span.id), fall back to semanticId
       const frameId = node.element.sourceId ?? node.element.semanticId ?? `frame-${index}`;
       return {
@@ -461,8 +445,6 @@ async function sendMutation(
 ): Promise<MutationResponse> {
   const url = `${serverUrl}/api/mutation`;
 
-  console.log("[API] Sending mutation:", { filePath, mutation });
-
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -482,7 +464,6 @@ async function sendMutation(
       return result;
     }
 
-    console.log("[API] Mutation succeeded:", result);
     return result;
   } catch (err) {
     console.error("[API] Mutation error:", err);
@@ -513,14 +494,12 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
     eventSource = new EventSource(sseUrl);
 
     eventSource.onopen = () => {
-      console.log("[SSE] Connection opened");
+      // Connection established
     };
 
     eventSource.onmessage = (event) => {
       try {
-        console.log("[SSE] Received message");
         const update: PreviewUpdate = JSON.parse(event.data);
-        console.log("[SSE] Parsed update, patches:", update.patches?.length);
 
         if (update.error) {
           console.error("[SSE] Server error:", update.error);
@@ -531,33 +510,21 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
         for (const rawPatch of update.patches) {
           // Transform from prost serde format to proto format
           const patch = transformPatch(rawPatch);
-          console.log("[SSE] Transformed patch:", Object.keys(patch).filter(k => (patch as any)[k] !== undefined));
 
           // Simple oneof checking - check which field is set
           if (patch.initialize?.vdom) {
             // Initialize patch - use vdom directly (already transformed!)
             vdom = patch.initialize.vdom;
-            console.log("[SSE] Initialized VDOM, nodes:", vdom.nodes.length);
-            if (vdom.nodes[0]) {
-              console.log("[SSE] First node keys:", Object.keys(vdom.nodes[0]));
-              if (vdom.nodes[0].element) {
-                console.log("[SSE] First element keys:", Object.keys(vdom.nodes[0].element));
-                console.log("[SSE] First element sourceId:", vdom.nodes[0].element.sourceId);
-                console.log("[SSE] First element semanticId:", vdom.nodes[0].element.semanticId);
-              }
-            }
             changed = true;
           } else if (vdom) {
             // Apply incremental patch
             vdom = applyPatch(vdom, patch);
-            console.log("[SSE] Applied incremental patch");
             changed = true;
           }
         }
 
         if (vdom && changed) {
           const frames = extractFramesFromDocument(vdom);
-          console.log("[SSE] Extracted frames:", frames);
           machine.dispatch({
             type: "document/loaded",
             payload: { document: vdom, frames },
@@ -582,7 +549,6 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
 
   return {
     start() {
-      console.log("[SSE Engine] start() called, props:", propsRef.current);
       // Connect on start if props are available
       if (propsRef.current?.filePath) {
         connect(propsRef.current);
@@ -593,17 +559,11 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
       // Handle tool/resizeEnd - send mutation to server
       if (event.type === "tool/resizeEnd") {
         const drag = prevState.tool.drag;
-        if (!drag) {
-          console.log("[API] tool/resizeEnd - no drag state");
-          return;
-        }
+        if (!drag) return;
 
         // Get frame info
         const frame = prevState.frames[drag.frameIndex];
-        if (!frame) {
-          console.log("[API] tool/resizeEnd - no frame at index", drag.frameIndex);
-          return;
-        }
+        if (!frame) return;
 
         // Calculate the delta in canvas space (same logic as reducer)
         const { transform } = prevState.canvas;
@@ -619,12 +579,6 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
 
         // Generate client-side mutation ID for tracking
         const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        console.log("[API] Sending SetFrameBounds mutation:", {
-          mutationId,
-          frameId: frame.id,
-          bounds: newBounds,
-        });
 
         // Create pending mutation for optimistic update tracking
         const pendingMutation: PendingMutation = {
@@ -688,19 +642,10 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
       if (event.type === "frame/moveEnd") {
         const { index } = event.payload;
         const frame = prevState.frames[index];
-        if (!frame) {
-          console.log("[API] frame/moveEnd - no frame at index", index);
-          return;
-        }
+        if (!frame) return;
 
         // Generate client-side mutation ID for tracking
         const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        console.log("[API] Sending SetFrameBounds mutation (move):", {
-          mutationId,
-          frameId: frame.id,
-          bounds: frame.bounds,
-        });
 
         // Create pending mutation for optimistic update tracking
         const pendingMutation: PendingMutation = {
@@ -754,6 +699,67 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
               error: "No file path available",
             },
           });
+        }
+      }
+
+      // Handle style/changed - send SetInlineStyle mutation to server
+      if (event.type === "style/changed") {
+        const { property, value } = event.payload;
+        const selectedElement = prevState.selectedElement;
+        if (!selectedElement) {
+          console.warn("[API] style/changed but no element selected");
+          return;
+        }
+
+        const serverUrl = propsRef.current?.serverUrl || "";
+        const filePath = propsRef.current?.filePath;
+
+        if (filePath) {
+          sendMutation(serverUrl, filePath, {
+            type: "SetInlineStyle",
+            node_id: selectedElement.sourceId,
+            property,
+            value,
+          }).then((response) => {
+            if (response.success) {
+              console.log("[API] Style mutation acknowledged:", response.mutation_id);
+            } else {
+              console.error("[API] Style mutation failed:", response.error);
+              // TODO: Revert optimistic update on failure
+            }
+          });
+        } else {
+          console.error("[API] No filePath available for style mutation");
+        }
+      }
+
+      // Handle style/removed - send DeleteInlineStyle mutation to server
+      if (event.type === "style/removed") {
+        const { property } = event.payload;
+        const selectedElement = prevState.selectedElement;
+        if (!selectedElement) {
+          console.warn("[API] style/removed but no element selected");
+          return;
+        }
+
+        const serverUrl = propsRef.current?.serverUrl || "";
+        const filePath = propsRef.current?.filePath;
+
+        if (filePath) {
+          sendMutation(serverUrl, filePath, {
+            type: "DeleteInlineStyle",
+            node_id: selectedElement.sourceId,
+            property,
+          }).then((response) => {
+            if (response.success) {
+              console.log("[API] Style delete mutation acknowledged:", response.mutation_id);
+            } else {
+              console.error("[API] Style delete mutation failed:", response.error);
+              // TODO: Revert optimistic update on failure
+            }
+          });
+        } else {
+          console.error("[API] No filePath available for style mutation");
         }
       }
     },

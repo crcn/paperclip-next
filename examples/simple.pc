@@ -1,5 +1,5 @@
 /**
- * @frame(x: -620, y: -1343, width: 1519, height: 1586)
+ * @frame(x: -620, y: -1370, width: 1519, height: 1586)
  */
 component Card {
     render div {
@@ -19,7 +19,7 @@ component Card {
 }
 
 /**
- * @frame(x: 2829, y: -662, width: 1363, height: 1371)
+ * @frame(x: 2978, y: -69, width: 1308, height: 1288)
  */
 div {
     style {

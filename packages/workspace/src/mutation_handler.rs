@@ -106,6 +106,20 @@ impl Mutation {
     }
 }
 
+/// Information about a style block's location within element source
+#[derive(Debug)]
+#[allow(dead_code)]
+struct StyleBlockInfo {
+    /// Start of "style {"
+    start: usize,
+    /// End of "}"
+    end: usize,
+    /// Start of content (after opening brace)
+    content_start: usize,
+    /// End of content (before closing brace)
+    content_end: usize,
+}
+
 /// Errors that can occur during mutation handling
 #[derive(Debug, thiserror::Error)]
 pub enum MutationError {
@@ -188,21 +202,15 @@ impl MutationHandler {
             } => self.apply_delete_node(mutation_id, node_id, crdt_doc),
             Mutation::SetStyleProperty {
                 mutation_id,
-                node_id: _,
-                property: _,
-                value: _,
-            } => Ok(MutationResult::Noop {
-                mutation_id: mutation_id.clone(),
-                reason: "Style property editing not yet implemented".to_string(),
-            }),
+                node_id,
+                property,
+                value,
+            } => self.apply_set_style_property(mutation_id, node_id, property, value, crdt_doc),
             Mutation::DeleteStyleProperty {
                 mutation_id,
-                node_id: _,
-                property: _,
-            } => Ok(MutationResult::Noop {
-                mutation_id: mutation_id.clone(),
-                reason: "Style property deletion not yet implemented".to_string(),
-            }),
+                node_id,
+                property,
+            } => self.apply_delete_style_property(mutation_id, node_id, property, crdt_doc),
             Mutation::MoveNode {
                 mutation_id,
                 node_id,
@@ -791,6 +799,296 @@ impl MutationHandler {
             mutation_id: mutation_id.to_string(),
             reason: format!("Could not locate annotation '@{}' in source", annotation_name),
         })
+    }
+
+    /// Apply SetStyleProperty mutation
+    fn apply_set_style_property(
+        &mut self,
+        mutation_id: &str,
+        node_id: &str,
+        property: &str,
+        value: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Validate CSS property name (alphanumeric and hyphens only)
+        if !property.chars().all(|c| c.is_alphanumeric() || c == '-') {
+            return Err(MutationError::InvalidMutation(format!(
+                "Invalid CSS property name: {}",
+                property
+            )));
+        }
+
+        // Validate CSS value (no injection attacks)
+        if value.contains('{') || value.contains('}') || value.contains(';') {
+            return Err(MutationError::InvalidMutation(format!(
+                "Invalid CSS value (contains forbidden characters): {}",
+                value
+            )));
+        }
+
+        // Find the node
+        let node = self
+            .index
+            .get_node(node_id)
+            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+
+        // Allow both Element and Frame types (frames are elements with @frame metadata)
+        if node.node_type != NodeType::Element && node.node_type != NodeType::Frame {
+            return Err(MutationError::InvalidMutation(format!(
+                "Node {} is not an element (got {:?})",
+                node_id, node.node_type
+            )));
+        }
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Check for conflicts
+        self.index.check_conflict(node_id, doc, &text)?;
+
+        // Resolve current positions
+        let (start, end) = self
+            .index
+            .resolve_node_position(node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+
+        // Get the element source
+        let element_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            full_text[start as usize..end as usize].to_string()
+        };
+
+        // Find the style block within the element
+        // Look for "style {" pattern (without variants for Phase 1)
+        if let Some(style_info) = Self::find_style_block(&element_source) {
+            // Check if property already exists
+            if let Some((prop_start, prop_end)) =
+                Self::find_property_in_style(&element_source, &style_info, property)
+            {
+                // Replace existing property value
+                let abs_prop_start = start + prop_start as u32;
+                let abs_prop_end = start + prop_end as u32;
+
+                let new_prop_line = format!("{}: {}", property, value);
+                crdt_doc.edit_range(abs_prop_start, abs_prop_end, &new_prop_line);
+            } else {
+                // Add new property at the end of style block (before closing brace)
+                let insert_pos = start + style_info.content_end as u32;
+
+                // Determine indentation (use same as existing properties or 12 spaces)
+                let indent = Self::detect_style_indent(&element_source, &style_info);
+                let new_prop = format!("\n{}{}: {}", indent, property, value);
+                crdt_doc.insert(insert_pos, &new_prop);
+            }
+
+            // Rebuild index
+            let current_text = crdt_doc.get_text();
+            self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+            return Ok(MutationResult::Applied {
+                mutation_id: mutation_id.to_string(),
+                new_version: crdt_doc.version(),
+            });
+        }
+
+        // No style block found - need to create one
+        // Find insertion point (after tag name and attributes, before children or closing)
+        if let Some(insert_pos) = Self::find_style_insertion_point(&element_source) {
+            let abs_insert_pos = start + insert_pos as u32;
+
+            // Create new style block
+            let new_style = format!(
+                "\n        style {{\n            {}: {}\n        }}",
+                property, value
+            );
+            crdt_doc.insert(abs_insert_pos, &new_style);
+
+            // Rebuild index
+            let current_text = crdt_doc.get_text();
+            self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+            return Ok(MutationResult::Applied {
+                mutation_id: mutation_id.to_string(),
+                new_version: crdt_doc.version(),
+            });
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: "Could not find position to insert style".to_string(),
+        })
+    }
+
+    /// Apply DeleteStyleProperty mutation
+    fn apply_delete_style_property(
+        &mut self,
+        mutation_id: &str,
+        node_id: &str,
+        property: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        // Find the node
+        let node = self
+            .index
+            .get_node(node_id)
+            .ok_or_else(|| MutationError::NodeNotFound(node_id.to_string()))?;
+
+        // Allow both Element and Frame types (frames are elements with @frame metadata)
+        if node.node_type != NodeType::Element && node.node_type != NodeType::Frame {
+            return Err(MutationError::InvalidMutation(format!(
+                "Node {} is not an element (got {:?})",
+                node_id, node.node_type
+            )));
+        }
+
+        let doc = crdt_doc.doc();
+        let text = doc.get_or_insert_text("content");
+
+        // Resolve current positions
+        let (start, end) = self
+            .index
+            .resolve_node_position(node_id, doc, &text)
+            .ok_or_else(|| MutationError::PositionResolutionFailed(node_id.to_string()))?;
+
+        // Get the element source
+        let element_source = {
+            let txn = doc.transact();
+            let full_text = text.get_string(&txn);
+            full_text[start as usize..end as usize].to_string()
+        };
+
+        // Find the style block
+        if let Some(style_info) = Self::find_style_block(&element_source) {
+            if let Some((prop_start, prop_end)) =
+                Self::find_property_in_style(&element_source, &style_info, property)
+            {
+                // Delete the property line (including newline if present)
+                let abs_prop_start = start + prop_start as u32;
+                let mut abs_prop_end = start + prop_end as u32;
+
+                // Also delete the preceding newline if there is one
+                let source_before = &element_source[..prop_start];
+                if source_before.ends_with('\n') {
+                    // Adjust to delete from newline
+                    let delete_start = start + (prop_start - 1) as u32;
+                    crdt_doc.delete(delete_start, abs_prop_end - delete_start);
+                } else {
+                    crdt_doc.delete(abs_prop_start, abs_prop_end - abs_prop_start);
+                }
+
+                // Rebuild index
+                let current_text = crdt_doc.get_text();
+                self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+                return Ok(MutationResult::Applied {
+                    mutation_id: mutation_id.to_string(),
+                    new_version: crdt_doc.version(),
+                });
+            }
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: format!("Property '{}' not found in element", property),
+        })
+    }
+
+    /// Find a style block within element source
+    fn find_style_block(source: &str) -> Option<StyleBlockInfo> {
+        // Look for "style {" pattern (simplest case for Phase 1)
+        // This doesn't handle "style variant x {" or "style extends y {" - Phase 2
+        let style_keyword = "style {";
+        let style_start = source.find(style_keyword)?;
+
+        // Find the matching closing brace
+        let after_open = style_start + style_keyword.len();
+        let mut depth = 1;
+        let mut style_end = after_open;
+
+        for (i, c) in source[after_open..].chars().enumerate() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        style_end = after_open + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if depth != 0 {
+            return None; // Unbalanced braces
+        }
+
+        Some(StyleBlockInfo {
+            start: style_start,
+            end: style_end,
+            content_start: after_open,
+            content_end: style_end - 1, // Before the closing }
+        })
+    }
+
+    /// Find a property within a style block, returns (start, end) of the property line
+    fn find_property_in_style(
+        source: &str,
+        style_info: &StyleBlockInfo,
+        property: &str,
+    ) -> Option<(usize, usize)> {
+        let content = &source[style_info.content_start..style_info.content_end];
+
+        // Look for "property:" pattern
+        for (line_start, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with(property) {
+                // Check that it's followed by ":"
+                let after_prop = &trimmed[property.len()..].trim_start();
+                if after_prop.starts_with(':') {
+                    // Found it! Calculate absolute positions
+                    let line_offset = content
+                        .lines()
+                        .take(line_start)
+                        .map(|l| l.len() + 1) // +1 for newline
+                        .sum::<usize>();
+
+                    // Find the actual start (skip leading whitespace)
+                    let actual_line_start = style_info.content_start + line_offset;
+                    let ws_len = line.len() - line.trim_start().len();
+                    let prop_start = actual_line_start + ws_len;
+                    let prop_end = actual_line_start + line.len();
+
+                    return Some((prop_start, prop_end));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Detect indentation used in style block
+    fn detect_style_indent(source: &str, style_info: &StyleBlockInfo) -> String {
+        let content = &source[style_info.content_start..style_info.content_end];
+
+        // Find first non-empty line and get its indentation
+        for line in content.lines() {
+            if !line.trim().is_empty() {
+                let ws_len = line.len() - line.trim_start().len();
+                return line[..ws_len].to_string();
+            }
+        }
+
+        // Default indentation
+        "            ".to_string()
+    }
+
+    /// Find insertion point for a new style block in an element
+    fn find_style_insertion_point(source: &str) -> Option<usize> {
+        // Find first '{' (opening brace of element)
+        let open_brace = source.find('{')?;
+        Some(open_brace + 1)
     }
 
     /// Find matching closing paren, returns position of closing paren

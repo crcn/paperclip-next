@@ -1,8 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { DispatchProvider } from "@paperclip/common";
-import { DesignerMachine } from "./machine";
-import { Canvas } from "./components/Canvas";
+import { Designer } from "./components/Designer";
 
 /**
  * Root App component - wires up providers
@@ -20,13 +18,7 @@ function App() {
     );
   }
 
-  return (
-    <DispatchProvider>
-      <DesignerMachine.Provider props={{ filePath }}>
-        <Canvas style={{ width: "100%", height: "100%" }} />
-      </DesignerMachine.Provider>
-    </DispatchProvider>
-  );
+  return <Designer filePath={filePath} style={{ width: "100%", height: "100%" }} />;
 }
 
 // Mount the app
