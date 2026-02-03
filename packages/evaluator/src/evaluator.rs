@@ -90,10 +90,12 @@
 //! ```
 
 use crate::css_evaluator::CssEvaluator;
-use crate::css_optimizer::optimize_css_rules;
 use crate::css_minifier::minify_css_rules;
+use crate::css_optimizer::optimize_css_rules;
 use crate::utils::get_style_namespace;
-use crate::vdom::{CssRule, VNode, VirtualDomDocument};
+use crate::vdom::{
+    AnnotationMetadata, ComponentMetadata, CssRule, FrameMetadata, VNode, VirtualDomDocument,
+};
 use paperclip_bundle::Bundle;
 use paperclip_parser::ast::*;
 use paperclip_semantics::{SemanticID, SemanticSegment};
@@ -131,6 +133,92 @@ fn is_html_tag(name: &str) -> bool {
         "var" | "video" |
         "wbr"
     )
+}
+
+/// Extract component metadata (description, frame, annotations) for designer use
+fn extract_component_metadata(component: &Component) -> ComponentMetadata {
+    let mut description = None;
+    let mut frame = None;
+    let mut annotations = Vec::new();
+
+    if let Some(doc_comment) = &component.doc_comment {
+        // Extract description
+        if !doc_comment.description.trim().is_empty() {
+            description = Some(doc_comment.description.clone());
+        }
+
+        // Extract annotations
+        for annotation in &doc_comment.annotations {
+            if annotation.name == "frame" {
+                // Special handling for @frame annotation
+                let x = get_number_param(&annotation.params, "x").unwrap_or(0.0);
+                let y = get_number_param(&annotation.params, "y").unwrap_or(0.0);
+                let width = get_number_param(&annotation.params, "width");
+                let height = get_number_param(&annotation.params, "height");
+                frame = Some(FrameMetadata {
+                    x,
+                    y,
+                    width,
+                    height,
+                });
+            } else {
+                // Generic annotation - convert params to JSON values
+                let mut params = std::collections::HashMap::new();
+                for (key, value) in &annotation.params {
+                    params.insert(key.clone(), annotation_value_to_json(value));
+                }
+                annotations.push(AnnotationMetadata {
+                    name: annotation.name.clone(),
+                    params,
+                });
+            }
+        }
+    }
+
+    // Also check the extracted frame field (for backward compat)
+    if frame.is_none() {
+        if let Some(f) = &component.frame {
+            frame = Some(FrameMetadata {
+                x: f.x,
+                y: f.y,
+                width: f.width,
+                height: f.height,
+            });
+        }
+    }
+
+    ComponentMetadata {
+        name: component.name.clone(),
+        description,
+        frame,
+        annotations,
+        source_id: Some(component.span.id.clone()),
+    }
+}
+
+/// Get a number parameter from annotation params
+fn get_number_param(params: &[(String, AnnotationValue)], key: &str) -> Option<f64> {
+    params.iter().find(|(k, _)| k == key).and_then(|(_, v)| {
+        if let AnnotationValue::Number(n) = v {
+            Some(*n)
+        } else {
+            None
+        }
+    })
+}
+
+/// Convert annotation value to JSON for generic annotation storage
+fn annotation_value_to_json(value: &AnnotationValue) -> serde_json::Value {
+    match value {
+        AnnotationValue::Number(n) => serde_json::Value::Number(
+            serde_json::Number::from_f64(*n).unwrap_or(serde_json::Number::from(0)),
+        ),
+        AnnotationValue::String(s) => serde_json::Value::String(s.clone()),
+        AnnotationValue::Boolean(b) => serde_json::Value::Bool(*b),
+        AnnotationValue::Array(items) => {
+            serde_json::Value::Array(items.iter().map(annotation_value_to_json).collect())
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -326,14 +414,58 @@ impl Evaluator {
 
         for component in &doc.components {
             debug!(component_name = %component.name, public = component.public, "Evaluating component");
-            let vnode = self.evaluate_component(&component.name)?;
+            let mut vnode = self.evaluate_component(&component.name)?;
+
+            // Add frame attributes if component has @frame annotation
+            if let Some(frame) = &component.frame {
+                debug!(
+                    component_name = %component.name,
+                    x = frame.x,
+                    y = frame.y,
+                    width = ?frame.width,
+                    height = ?frame.height,
+                    "Adding frame attributes to component"
+                );
+                vnode = vnode
+                    .with_attr("data-frame-x", frame.x.to_string())
+                    .with_attr("data-frame-y", frame.y.to_string());
+                if let Some(w) = frame.width {
+                    vnode = vnode.with_attr("data-frame-width", w.to_string());
+                }
+                if let Some(h) = frame.height {
+                    vnode = vnode.with_attr("data-frame-height", h.to_string());
+                }
+            }
+
             vdoc.add_node(vnode);
         }
 
-        // Evaluate top-level renders
-        for render in &doc.renders {
-            debug!("Evaluating top-level render element");
-            let vnode = self.evaluate_element(render)?;
+        // Evaluate top-level renders with their frame annotations
+        for (index, render) in doc.renders.iter().enumerate() {
+            debug!("Evaluating top-level render element at index {}", index);
+            let mut vnode = self.evaluate_element(render)?;
+
+            // Add frame attributes if render has @frame annotation
+            if let Some(Some(frame)) = doc.render_frames.get(index) {
+                debug!(
+                    render_index = index,
+                    x = frame.x,
+                    y = frame.y,
+                    width = ?frame.width,
+                    height = ?frame.height,
+                    "Adding frame attributes to render"
+                );
+                vnode = vnode
+                    .with_attr("data-frame-x", frame.x.to_string())
+                    .with_attr("data-frame-y", frame.y.to_string());
+                if let Some(w) = frame.width {
+                    vnode = vnode.with_attr("data-frame-width", w.to_string());
+                }
+                if let Some(h) = frame.height {
+                    vnode = vnode.with_attr("data-frame-height", h.to_string());
+                }
+            }
+
             vdoc.add_node(vnode);
         }
 
@@ -457,7 +589,62 @@ impl Evaluator {
 
         for component in &entry_doc.components {
             debug!(component_name = %component.name, public = component.public, "Evaluating component");
-            let vnode = self.evaluate_component(&component.name)?;
+            let mut vnode = self.evaluate_component(&component.name)?;
+
+            // Add frame attributes if component has @frame annotation
+            if let Some(frame) = &component.frame {
+                debug!(
+                    component_name = %component.name,
+                    x = frame.x,
+                    y = frame.y,
+                    width = ?frame.width,
+                    height = ?frame.height,
+                    "Adding frame attributes to component"
+                );
+                vnode = vnode
+                    .with_attr("data-frame-x", frame.x.to_string())
+                    .with_attr("data-frame-y", frame.y.to_string());
+                if let Some(w) = frame.width {
+                    vnode = vnode.with_attr("data-frame-width", w.to_string());
+                }
+                if let Some(h) = frame.height {
+                    vnode = vnode.with_attr("data-frame-height", h.to_string());
+                }
+            }
+
+            // Add component metadata for designer
+            let metadata = extract_component_metadata(component);
+            vdoc.components.push(metadata);
+
+            vdoc.add_node(vnode);
+        }
+
+        // Evaluate top-level renders with their frame annotations
+        for (index, render) in entry_doc.renders.iter().enumerate() {
+            debug!("Evaluating top-level render element at index {}", index);
+            let mut vnode = self.evaluate_element(render)?;
+
+            // Add frame attributes if render has @frame annotation
+            if let Some(Some(frame)) = entry_doc.render_frames.get(index) {
+                debug!(
+                    render_index = index,
+                    x = frame.x,
+                    y = frame.y,
+                    width = ?frame.width,
+                    height = ?frame.height,
+                    "Adding frame attributes to render"
+                );
+                vnode = vnode
+                    .with_attr("data-frame-x", frame.x.to_string())
+                    .with_attr("data-frame-y", frame.y.to_string());
+                if let Some(w) = frame.width {
+                    vnode = vnode.with_attr("data-frame-width", w.to_string());
+                }
+                if let Some(h) = frame.height {
+                    vnode = vnode.with_attr("data-frame-height", h.to_string());
+                }
+            }
+
             vdoc.add_node(vnode);
         }
 
@@ -1734,6 +1921,112 @@ mod tests {
             }
         } else {
             panic!("Expected div element");
+        }
+    }
+
+    #[test]
+    fn test_frame_attributes_added_to_vdom() {
+        let source = r#"/**
+ * @frame(x: 100, y: 200, width: 300, height: 400)
+ */
+component Card {
+    render div {
+        text "hello"
+    }
+}"#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+
+        // Verify frame was parsed
+        assert!(doc.components[0].frame.is_some(), "Component should have frame annotation");
+        let frame = doc.components[0].frame.as_ref().unwrap();
+        assert_eq!(frame.x, 100.0);
+        assert_eq!(frame.y, 200.0);
+        assert_eq!(frame.width, Some(300.0));
+        assert_eq!(frame.height, Some(400.0));
+
+        // Evaluate
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        // Check VDOM has frame attributes
+        if let VNode::Element { attributes, .. } = &vdoc.nodes[0] {
+            assert_eq!(attributes.get("data-frame-x"), Some(&"100".to_string()));
+            assert_eq!(attributes.get("data-frame-y"), Some(&"200".to_string()));
+            assert_eq!(attributes.get("data-frame-width"), Some(&"300".to_string()));
+            assert_eq!(attributes.get("data-frame-height"), Some(&"400".to_string()));
+        } else {
+            panic!("Expected Element node");
+        }
+    }
+
+    #[test]
+    fn test_evaluate_bundle_with_components_and_renders() {
+        // This test ensures that evaluate_bundle handles BOTH components AND top-level renders
+        // (Regression test for bug where evaluate_bundle only handled components)
+        let source = r#"/**
+ * @frame(x: 100, y: 200, width: 300, height: 400)
+ */
+component Card {
+    render div {
+        text "component content"
+    }
+}
+
+/**
+ * @frame(x: 500, y: 600, width: 700, height: 800)
+ */
+div {
+    text "render content"
+}"#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+
+        // Verify parser extracted both component and render frames
+        assert_eq!(doc.components.len(), 1, "Should have 1 component");
+        assert!(doc.components[0].frame.is_some(), "Component should have frame");
+        assert_eq!(doc.renders.len(), 1, "Should have 1 render");
+        assert_eq!(doc.render_frames.len(), 1, "Should have 1 render frame");
+        assert!(doc.render_frames[0].is_some(), "Render should have frame");
+
+        // Evaluate using evaluate_bundle (as the server does)
+        let mut bundle = paperclip_bundle::Bundle::new();
+        bundle.add_document(std::path::PathBuf::from("/test.pc"), doc);
+
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator
+            .evaluate_bundle(&bundle, std::path::Path::new("/test.pc"))
+            .expect("Failed to evaluate");
+
+        // Should have 2 nodes: one for component, one for render
+        assert_eq!(vdoc.nodes.len(), 2, "Should have 2 nodes (component + render)");
+
+        // First node (component) should have frame attributes
+        if let VNode::Element { attributes, .. } = &vdoc.nodes[0] {
+            assert_eq!(
+                attributes.get("data-frame-x"),
+                Some(&"100".to_string()),
+                "Component should have data-frame-x"
+            );
+            assert_eq!(attributes.get("data-frame-y"), Some(&"200".to_string()));
+            assert_eq!(attributes.get("data-frame-width"), Some(&"300".to_string()));
+            assert_eq!(attributes.get("data-frame-height"), Some(&"400".to_string()));
+        } else {
+            panic!("Expected Element node for component");
+        }
+
+        // Second node (render) should have frame attributes
+        if let VNode::Element { attributes, .. } = &vdoc.nodes[1] {
+            assert_eq!(
+                attributes.get("data-frame-x"),
+                Some(&"500".to_string()),
+                "Render should have data-frame-x"
+            );
+            assert_eq!(attributes.get("data-frame-y"), Some(&"600".to_string()));
+            assert_eq!(attributes.get("data-frame-width"), Some(&"700".to_string()));
+            assert_eq!(attributes.get("data-frame-height"), Some(&"800".to_string()));
+        } else {
+            panic!("Expected Element node for render");
         }
     }
 }

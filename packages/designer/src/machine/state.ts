@@ -156,6 +156,7 @@ export type DesignerEvent =
   | BaseEvent<"frame/selected", { index: number }>
   | BaseEvent<"frame/resized", { index: number; bounds: FrameBounds }>
   | BaseEvent<"frame/moved", { index: number; position: Point }>
+  | BaseEvent<"frame/moveEnd", { index: number }>
   | BaseEvent<"document/loaded", { document: VDocument; frames: Frame[] }>
   | BaseEvent<"tool/resizeStart", { handle: ResizeHandle; mouse: Point }>
   | BaseEvent<"tool/resizeMove", Point>

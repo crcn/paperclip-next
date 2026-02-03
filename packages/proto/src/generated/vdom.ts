@@ -5,9 +5,64 @@
 // source: vdom.proto
 
 /* eslint-disable */
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 
 export const protobufPackage = "paperclip.vdom";
+
+export enum NullValue {
+  NULL_VALUE = 0,
+  UNRECOGNIZED = -1,
+}
+
+export function nullValueFromJSON(object: any): NullValue {
+  switch (object) {
+    case 0:
+    case "NULL_VALUE":
+      return NullValue.NULL_VALUE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return NullValue.UNRECOGNIZED;
+  }
+}
+
+export function nullValueToJSON(object: NullValue): string {
+  switch (object) {
+    case NullValue.NULL_VALUE:
+      return "NULL_VALUE";
+    case NullValue.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export interface Value {
+  nullValue?: NullValue | undefined;
+  numberValue?: number | undefined;
+  stringValue?: string | undefined;
+  boolValue?: boolean | undefined;
+  objectValue?: ObjectValue | undefined;
+  listValue?: ListValue | undefined;
+}
+
+export interface ObjectValue {
+  fields: { [key: string]: Value };
+}
+
+export interface ObjectValue_FieldsEntry {
+  key: string;
+  value?: Value | undefined;
+}
+
+export interface ListValue {
+  values: Value[];
+}
+
+export interface Span {
+  start: number;
+  end: number;
+  id: string;
+}
 
 /** Virtual DOM node (discriminated union) */
 export interface VNode {
@@ -19,11 +74,6 @@ export interface VNode {
     | undefined;
   /** Inline error display */
   error?: ErrorNode | undefined;
-}
-
-export interface ErrorNode {
-  message: string;
-  semanticId: string;
 }
 
 export interface ElementNode {
@@ -38,7 +88,11 @@ export interface ElementNode {
     | string
     | undefined;
   /** Maps back to AST span.id for mutations */
-  sourceId?: string | undefined;
+  sourceId?:
+    | string
+    | undefined;
+  /** Flexible metadata (frame info, annotations, etc.) */
+  metadata?: Value | undefined;
 }
 
 export interface ElementNode_AttributesEntry {
@@ -72,20 +126,511 @@ export interface ComponentNode_PropsEntry {
   value: string;
 }
 
-export interface VDocument {
-  nodes: VNode[];
-  styles: CssRule[];
+export interface ErrorNode {
+  message: string;
+  semanticId: string;
+  /** Source location for debugging */
+  span?: Span | undefined;
 }
 
 export interface CssRule {
   selector: string;
   properties: { [key: string]: string };
+  mediaQuery?:
+    | string
+    | undefined;
+  /** Flexible metadata (source info, annotations, etc.) */
+  metadata?: Value | undefined;
 }
 
 export interface CssRule_PropertiesEntry {
   key: string;
   value: string;
 }
+
+/** Virtual CSSOM for CSS-specific operations */
+export interface CssDocument {
+  rules: CssRule[];
+  /** Document-level CSS metadata (variables, tokens, etc.) */
+  metadata?: Value | undefined;
+}
+
+export interface ComponentMetadata {
+  name: string;
+  description?: string | undefined;
+  frame?: FrameMetadata | undefined;
+  annotations: AnnotationMetadata[];
+  sourceId?: string | undefined;
+}
+
+export interface FrameMetadata {
+  x: number;
+  y: number;
+  width?: number | undefined;
+  height?: number | undefined;
+}
+
+export interface AnnotationMetadata {
+  name: string;
+  params: { [key: string]: Value };
+}
+
+export interface AnnotationMetadata_ParamsEntry {
+  key: string;
+  value?: Value | undefined;
+}
+
+export interface VDocument {
+  nodes: VNode[];
+  styles: CssRule[];
+  /** Component metadata for designer */
+  components: ComponentMetadata[];
+  /** Document-level metadata */
+  metadata?: Value | undefined;
+}
+
+function createBaseValue(): Value {
+  return {
+    nullValue: undefined,
+    numberValue: undefined,
+    stringValue: undefined,
+    boolValue: undefined,
+    objectValue: undefined,
+    listValue: undefined,
+  };
+}
+
+export const Value = {
+  encode(message: Value, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.nullValue !== undefined) {
+      writer.uint32(8).int32(message.nullValue);
+    }
+    if (message.numberValue !== undefined) {
+      writer.uint32(17).double(message.numberValue);
+    }
+    if (message.stringValue !== undefined) {
+      writer.uint32(26).string(message.stringValue);
+    }
+    if (message.boolValue !== undefined) {
+      writer.uint32(32).bool(message.boolValue);
+    }
+    if (message.objectValue !== undefined) {
+      ObjectValue.encode(message.objectValue, writer.uint32(42).fork()).ldelim();
+    }
+    if (message.listValue !== undefined) {
+      ListValue.encode(message.listValue, writer.uint32(50).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): Value {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.nullValue = reader.int32() as any;
+          continue;
+        case 2:
+          if (tag !== 17) {
+            break;
+          }
+
+          message.numberValue = reader.double();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.stringValue = reader.string();
+          continue;
+        case 4:
+          if (tag !== 32) {
+            break;
+          }
+
+          message.boolValue = reader.bool();
+          continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.objectValue = ObjectValue.decode(reader, reader.uint32());
+          continue;
+        case 6:
+          if (tag !== 50) {
+            break;
+          }
+
+          message.listValue = ListValue.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Value {
+    return {
+      nullValue: isSet(object.nullValue) ? nullValueFromJSON(object.nullValue) : undefined,
+      numberValue: isSet(object.numberValue) ? globalThis.Number(object.numberValue) : undefined,
+      stringValue: isSet(object.stringValue) ? globalThis.String(object.stringValue) : undefined,
+      boolValue: isSet(object.boolValue) ? globalThis.Boolean(object.boolValue) : undefined,
+      objectValue: isSet(object.objectValue) ? ObjectValue.fromJSON(object.objectValue) : undefined,
+      listValue: isSet(object.listValue) ? ListValue.fromJSON(object.listValue) : undefined,
+    };
+  },
+
+  toJSON(message: Value): unknown {
+    const obj: any = {};
+    if (message.nullValue !== undefined) {
+      obj.nullValue = nullValueToJSON(message.nullValue);
+    }
+    if (message.numberValue !== undefined) {
+      obj.numberValue = message.numberValue;
+    }
+    if (message.stringValue !== undefined) {
+      obj.stringValue = message.stringValue;
+    }
+    if (message.boolValue !== undefined) {
+      obj.boolValue = message.boolValue;
+    }
+    if (message.objectValue !== undefined) {
+      obj.objectValue = ObjectValue.toJSON(message.objectValue);
+    }
+    if (message.listValue !== undefined) {
+      obj.listValue = ListValue.toJSON(message.listValue);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Value>, I>>(base?: I): Value {
+    return Value.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Value>, I>>(object: I): Value {
+    const message = createBaseValue();
+    message.nullValue = object.nullValue ?? undefined;
+    message.numberValue = object.numberValue ?? undefined;
+    message.stringValue = object.stringValue ?? undefined;
+    message.boolValue = object.boolValue ?? undefined;
+    message.objectValue = (object.objectValue !== undefined && object.objectValue !== null)
+      ? ObjectValue.fromPartial(object.objectValue)
+      : undefined;
+    message.listValue = (object.listValue !== undefined && object.listValue !== null)
+      ? ListValue.fromPartial(object.listValue)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseObjectValue(): ObjectValue {
+  return { fields: {} };
+}
+
+export const ObjectValue = {
+  encode(message: ObjectValue, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    Object.entries(message.fields).forEach(([key, value]) => {
+      ObjectValue_FieldsEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).ldelim();
+    });
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): ObjectValue {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseObjectValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          const entry1 = ObjectValue_FieldsEntry.decode(reader, reader.uint32());
+          if (entry1.value !== undefined) {
+            message.fields[entry1.key] = entry1.value;
+          }
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ObjectValue {
+    return {
+      fields: isObject(object.fields)
+        ? Object.entries(object.fields).reduce<{ [key: string]: Value }>((acc, [key, value]) => {
+          acc[key] = Value.fromJSON(value);
+          return acc;
+        }, {})
+        : {},
+    };
+  },
+
+  toJSON(message: ObjectValue): unknown {
+    const obj: any = {};
+    if (message.fields) {
+      const entries = Object.entries(message.fields);
+      if (entries.length > 0) {
+        obj.fields = {};
+        entries.forEach(([k, v]) => {
+          obj.fields[k] = Value.toJSON(v);
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ObjectValue>, I>>(base?: I): ObjectValue {
+    return ObjectValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ObjectValue>, I>>(object: I): ObjectValue {
+    const message = createBaseObjectValue();
+    message.fields = Object.entries(object.fields ?? {}).reduce<{ [key: string]: Value }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = Value.fromPartial(value);
+      }
+      return acc;
+    }, {});
+    return message;
+  },
+};
+
+function createBaseObjectValue_FieldsEntry(): ObjectValue_FieldsEntry {
+  return { key: "", value: undefined };
+}
+
+export const ObjectValue_FieldsEntry = {
+  encode(message: ObjectValue_FieldsEntry, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== undefined) {
+      Value.encode(message.value, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): ObjectValue_FieldsEntry {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseObjectValue_FieldsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = Value.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ObjectValue_FieldsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? Value.fromJSON(object.value) : undefined,
+    };
+  },
+
+  toJSON(message: ObjectValue_FieldsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== undefined) {
+      obj.value = Value.toJSON(message.value);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ObjectValue_FieldsEntry>, I>>(base?: I): ObjectValue_FieldsEntry {
+    return ObjectValue_FieldsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ObjectValue_FieldsEntry>, I>>(object: I): ObjectValue_FieldsEntry {
+    const message = createBaseObjectValue_FieldsEntry();
+    message.key = object.key ?? "";
+    message.value = (object.value !== undefined && object.value !== null) ? Value.fromPartial(object.value) : undefined;
+    return message;
+  },
+};
+
+function createBaseListValue(): ListValue {
+  return { values: [] };
+}
+
+export const ListValue = {
+  encode(message: ListValue, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.values) {
+      Value.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): ListValue {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.values.push(Value.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListValue {
+    return { values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => Value.fromJSON(e)) : [] };
+  },
+
+  toJSON(message: ListValue): unknown {
+    const obj: any = {};
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => Value.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListValue>, I>>(base?: I): ListValue {
+    return ListValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListValue>, I>>(object: I): ListValue {
+    const message = createBaseListValue();
+    message.values = object.values?.map((e) => Value.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSpan(): Span {
+  return { start: 0, end: 0, id: "" };
+}
+
+export const Span = {
+  encode(message: Span, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.start !== 0) {
+      writer.uint32(8).uint32(message.start);
+    }
+    if (message.end !== 0) {
+      writer.uint32(16).uint32(message.end);
+    }
+    if (message.id !== "") {
+      writer.uint32(26).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): Span {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSpan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.start = reader.uint32();
+          continue;
+        case 2:
+          if (tag !== 16) {
+            break;
+          }
+
+          message.end = reader.uint32();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Span {
+    return {
+      start: isSet(object.start) ? globalThis.Number(object.start) : 0,
+      end: isSet(object.end) ? globalThis.Number(object.end) : 0,
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+    };
+  },
+
+  toJSON(message: Span): unknown {
+    const obj: any = {};
+    if (message.start !== 0) {
+      obj.start = Math.round(message.start);
+    }
+    if (message.end !== 0) {
+      obj.end = Math.round(message.end);
+    }
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Span>, I>>(base?: I): Span {
+    return Span.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Span>, I>>(object: I): Span {
+    const message = createBaseSpan();
+    message.start = object.start ?? 0;
+    message.end = object.end ?? 0;
+    message.id = object.id ?? "";
+    return message;
+  },
+};
 
 function createBaseVNode(): VNode {
   return { element: undefined, text: undefined, comment: undefined, component: undefined, error: undefined };
@@ -214,82 +759,17 @@ export const VNode = {
   },
 };
 
-function createBaseErrorNode(): ErrorNode {
-  return { message: "", semanticId: "" };
-}
-
-export const ErrorNode = {
-  encode(message: ErrorNode, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.message !== "") {
-      writer.uint32(10).string(message.message);
-    }
-    if (message.semanticId !== "") {
-      writer.uint32(18).string(message.semanticId);
-    }
-    return writer;
-  },
-
-  decode(input: _m0.Reader | Uint8Array, length?: number): ErrorNode {
-    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
-    let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseErrorNode();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1:
-          if (tag !== 10) {
-            break;
-          }
-
-          message.message = reader.string();
-          continue;
-        case 2:
-          if (tag !== 18) {
-            break;
-          }
-
-          message.semanticId = reader.string();
-          continue;
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skipType(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ErrorNode {
-    return {
-      message: isSet(object.message) ? globalThis.String(object.message) : "",
-      semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
-    };
-  },
-
-  toJSON(message: ErrorNode): unknown {
-    const obj: any = {};
-    if (message.message !== "") {
-      obj.message = message.message;
-    }
-    if (message.semanticId !== "") {
-      obj.semanticId = message.semanticId;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ErrorNode>, I>>(base?: I): ErrorNode {
-    return ErrorNode.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ErrorNode>, I>>(object: I): ErrorNode {
-    const message = createBaseErrorNode();
-    message.message = object.message ?? "";
-    message.semanticId = object.semanticId ?? "";
-    return message;
-  },
-};
-
 function createBaseElementNode(): ElementNode {
-  return { tag: "", attributes: {}, styles: {}, children: [], semanticId: "", key: undefined, sourceId: undefined };
+  return {
+    tag: "",
+    attributes: {},
+    styles: {},
+    children: [],
+    semanticId: "",
+    key: undefined,
+    sourceId: undefined,
+    metadata: undefined,
+  };
 }
 
 export const ElementNode = {
@@ -314,6 +794,9 @@ export const ElementNode = {
     }
     if (message.sourceId !== undefined) {
       writer.uint32(58).string(message.sourceId);
+    }
+    if (message.metadata !== undefined) {
+      Value.encode(message.metadata, writer.uint32(66).fork()).ldelim();
     }
     return writer;
   },
@@ -380,6 +863,13 @@ export const ElementNode = {
 
           message.sourceId = reader.string();
           continue;
+        case 8:
+          if (tag !== 66) {
+            break;
+          }
+
+          message.metadata = Value.decode(reader, reader.uint32());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -408,6 +898,7 @@ export const ElementNode = {
       semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
       key: isSet(object.key) ? globalThis.String(object.key) : undefined,
       sourceId: isSet(object.sourceId) ? globalThis.String(object.sourceId) : undefined,
+      metadata: isSet(object.metadata) ? Value.fromJSON(object.metadata) : undefined,
     };
   },
 
@@ -446,6 +937,9 @@ export const ElementNode = {
     if (message.sourceId !== undefined) {
       obj.sourceId = message.sourceId;
     }
+    if (message.metadata !== undefined) {
+      obj.metadata = Value.toJSON(message.metadata);
+    }
     return obj;
   },
 
@@ -474,6 +968,9 @@ export const ElementNode = {
     message.semanticId = object.semanticId ?? "";
     message.key = object.key ?? undefined;
     message.sourceId = object.sourceId ?? undefined;
+    message.metadata = (object.metadata !== undefined && object.metadata !== null)
+      ? Value.fromPartial(object.metadata)
+      : undefined;
     return message;
   },
 };
@@ -937,25 +1434,28 @@ export const ComponentNode_PropsEntry = {
   },
 };
 
-function createBaseVDocument(): VDocument {
-  return { nodes: [], styles: [] };
+function createBaseErrorNode(): ErrorNode {
+  return { message: "", semanticId: "", span: undefined };
 }
 
-export const VDocument = {
-  encode(message: VDocument, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    for (const v of message.nodes) {
-      VNode.encode(v!, writer.uint32(10).fork()).ldelim();
+export const ErrorNode = {
+  encode(message: ErrorNode, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.message !== "") {
+      writer.uint32(10).string(message.message);
     }
-    for (const v of message.styles) {
-      CssRule.encode(v!, writer.uint32(18).fork()).ldelim();
+    if (message.semanticId !== "") {
+      writer.uint32(18).string(message.semanticId);
+    }
+    if (message.span !== undefined) {
+      Span.encode(message.span, writer.uint32(26).fork()).ldelim();
     }
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): VDocument {
+  decode(input: _m0.Reader | Uint8Array, length?: number): ErrorNode {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseVDocument();
+    const message = createBaseErrorNode();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -964,14 +1464,21 @@ export const VDocument = {
             break;
           }
 
-          message.nodes.push(VNode.decode(reader, reader.uint32()));
+          message.message = reader.string();
           continue;
         case 2:
           if (tag !== 18) {
             break;
           }
 
-          message.styles.push(CssRule.decode(reader, reader.uint32()));
+          message.semanticId = reader.string();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.span = Span.decode(reader, reader.uint32());
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -982,37 +1489,42 @@ export const VDocument = {
     return message;
   },
 
-  fromJSON(object: any): VDocument {
+  fromJSON(object: any): ErrorNode {
     return {
-      nodes: globalThis.Array.isArray(object?.nodes) ? object.nodes.map((e: any) => VNode.fromJSON(e)) : [],
-      styles: globalThis.Array.isArray(object?.styles) ? object.styles.map((e: any) => CssRule.fromJSON(e)) : [],
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      semanticId: isSet(object.semanticId) ? globalThis.String(object.semanticId) : "",
+      span: isSet(object.span) ? Span.fromJSON(object.span) : undefined,
     };
   },
 
-  toJSON(message: VDocument): unknown {
+  toJSON(message: ErrorNode): unknown {
     const obj: any = {};
-    if (message.nodes?.length) {
-      obj.nodes = message.nodes.map((e) => VNode.toJSON(e));
+    if (message.message !== "") {
+      obj.message = message.message;
     }
-    if (message.styles?.length) {
-      obj.styles = message.styles.map((e) => CssRule.toJSON(e));
+    if (message.semanticId !== "") {
+      obj.semanticId = message.semanticId;
+    }
+    if (message.span !== undefined) {
+      obj.span = Span.toJSON(message.span);
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<VDocument>, I>>(base?: I): VDocument {
-    return VDocument.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<ErrorNode>, I>>(base?: I): ErrorNode {
+    return ErrorNode.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<VDocument>, I>>(object: I): VDocument {
-    const message = createBaseVDocument();
-    message.nodes = object.nodes?.map((e) => VNode.fromPartial(e)) || [];
-    message.styles = object.styles?.map((e) => CssRule.fromPartial(e)) || [];
+  fromPartial<I extends Exact<DeepPartial<ErrorNode>, I>>(object: I): ErrorNode {
+    const message = createBaseErrorNode();
+    message.message = object.message ?? "";
+    message.semanticId = object.semanticId ?? "";
+    message.span = (object.span !== undefined && object.span !== null) ? Span.fromPartial(object.span) : undefined;
     return message;
   },
 };
 
 function createBaseCssRule(): CssRule {
-  return { selector: "", properties: {} };
+  return { selector: "", properties: {}, mediaQuery: undefined, metadata: undefined };
 }
 
 export const CssRule = {
@@ -1023,6 +1535,12 @@ export const CssRule = {
     Object.entries(message.properties).forEach(([key, value]) => {
       CssRule_PropertiesEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).ldelim();
     });
+    if (message.mediaQuery !== undefined) {
+      writer.uint32(26).string(message.mediaQuery);
+    }
+    if (message.metadata !== undefined) {
+      Value.encode(message.metadata, writer.uint32(34).fork()).ldelim();
+    }
     return writer;
   },
 
@@ -1050,6 +1568,20 @@ export const CssRule = {
             message.properties[entry2.key] = entry2.value;
           }
           continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.mediaQuery = reader.string();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.metadata = Value.decode(reader, reader.uint32());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1068,6 +1600,8 @@ export const CssRule = {
           return acc;
         }, {})
         : {},
+      mediaQuery: isSet(object.mediaQuery) ? globalThis.String(object.mediaQuery) : undefined,
+      metadata: isSet(object.metadata) ? Value.fromJSON(object.metadata) : undefined,
     };
   },
 
@@ -1084,6 +1618,12 @@ export const CssRule = {
           obj.properties[k] = v;
         });
       }
+    }
+    if (message.mediaQuery !== undefined) {
+      obj.mediaQuery = message.mediaQuery;
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = Value.toJSON(message.metadata);
     }
     return obj;
   },
@@ -1103,6 +1643,10 @@ export const CssRule = {
       },
       {},
     );
+    message.mediaQuery = object.mediaQuery ?? undefined;
+    message.metadata = (object.metadata !== undefined && object.metadata !== null)
+      ? Value.fromPartial(object.metadata)
+      : undefined;
     return message;
   },
 };
@@ -1177,6 +1721,586 @@ export const CssRule_PropertiesEntry = {
     const message = createBaseCssRule_PropertiesEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseCssDocument(): CssDocument {
+  return { rules: [], metadata: undefined };
+}
+
+export const CssDocument = {
+  encode(message: CssDocument, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.rules) {
+      CssRule.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.metadata !== undefined) {
+      Value.encode(message.metadata, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): CssDocument {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCssDocument();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.rules.push(CssRule.decode(reader, reader.uint32()));
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.metadata = Value.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CssDocument {
+    return {
+      rules: globalThis.Array.isArray(object?.rules) ? object.rules.map((e: any) => CssRule.fromJSON(e)) : [],
+      metadata: isSet(object.metadata) ? Value.fromJSON(object.metadata) : undefined,
+    };
+  },
+
+  toJSON(message: CssDocument): unknown {
+    const obj: any = {};
+    if (message.rules?.length) {
+      obj.rules = message.rules.map((e) => CssRule.toJSON(e));
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = Value.toJSON(message.metadata);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CssDocument>, I>>(base?: I): CssDocument {
+    return CssDocument.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CssDocument>, I>>(object: I): CssDocument {
+    const message = createBaseCssDocument();
+    message.rules = object.rules?.map((e) => CssRule.fromPartial(e)) || [];
+    message.metadata = (object.metadata !== undefined && object.metadata !== null)
+      ? Value.fromPartial(object.metadata)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseComponentMetadata(): ComponentMetadata {
+  return { name: "", description: undefined, frame: undefined, annotations: [], sourceId: undefined };
+}
+
+export const ComponentMetadata = {
+  encode(message: ComponentMetadata, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.description !== undefined) {
+      writer.uint32(18).string(message.description);
+    }
+    if (message.frame !== undefined) {
+      FrameMetadata.encode(message.frame, writer.uint32(26).fork()).ldelim();
+    }
+    for (const v of message.annotations) {
+      AnnotationMetadata.encode(v!, writer.uint32(34).fork()).ldelim();
+    }
+    if (message.sourceId !== undefined) {
+      writer.uint32(42).string(message.sourceId);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): ComponentMetadata {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseComponentMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.frame = FrameMetadata.decode(reader, reader.uint32());
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.annotations.push(AnnotationMetadata.decode(reader, reader.uint32()));
+          continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ComponentMetadata {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : undefined,
+      frame: isSet(object.frame) ? FrameMetadata.fromJSON(object.frame) : undefined,
+      annotations: globalThis.Array.isArray(object?.annotations)
+        ? object.annotations.map((e: any) => AnnotationMetadata.fromJSON(e))
+        : [],
+      sourceId: isSet(object.sourceId) ? globalThis.String(object.sourceId) : undefined,
+    };
+  },
+
+  toJSON(message: ComponentMetadata): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== undefined) {
+      obj.description = message.description;
+    }
+    if (message.frame !== undefined) {
+      obj.frame = FrameMetadata.toJSON(message.frame);
+    }
+    if (message.annotations?.length) {
+      obj.annotations = message.annotations.map((e) => AnnotationMetadata.toJSON(e));
+    }
+    if (message.sourceId !== undefined) {
+      obj.sourceId = message.sourceId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ComponentMetadata>, I>>(base?: I): ComponentMetadata {
+    return ComponentMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ComponentMetadata>, I>>(object: I): ComponentMetadata {
+    const message = createBaseComponentMetadata();
+    message.name = object.name ?? "";
+    message.description = object.description ?? undefined;
+    message.frame = (object.frame !== undefined && object.frame !== null)
+      ? FrameMetadata.fromPartial(object.frame)
+      : undefined;
+    message.annotations = object.annotations?.map((e) => AnnotationMetadata.fromPartial(e)) || [];
+    message.sourceId = object.sourceId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseFrameMetadata(): FrameMetadata {
+  return { x: 0, y: 0, width: undefined, height: undefined };
+}
+
+export const FrameMetadata = {
+  encode(message: FrameMetadata, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.x !== 0) {
+      writer.uint32(9).double(message.x);
+    }
+    if (message.y !== 0) {
+      writer.uint32(17).double(message.y);
+    }
+    if (message.width !== undefined) {
+      writer.uint32(25).double(message.width);
+    }
+    if (message.height !== undefined) {
+      writer.uint32(33).double(message.height);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): FrameMetadata {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFrameMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 9) {
+            break;
+          }
+
+          message.x = reader.double();
+          continue;
+        case 2:
+          if (tag !== 17) {
+            break;
+          }
+
+          message.y = reader.double();
+          continue;
+        case 3:
+          if (tag !== 25) {
+            break;
+          }
+
+          message.width = reader.double();
+          continue;
+        case 4:
+          if (tag !== 33) {
+            break;
+          }
+
+          message.height = reader.double();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FrameMetadata {
+    return {
+      x: isSet(object.x) ? globalThis.Number(object.x) : 0,
+      y: isSet(object.y) ? globalThis.Number(object.y) : 0,
+      width: isSet(object.width) ? globalThis.Number(object.width) : undefined,
+      height: isSet(object.height) ? globalThis.Number(object.height) : undefined,
+    };
+  },
+
+  toJSON(message: FrameMetadata): unknown {
+    const obj: any = {};
+    if (message.x !== 0) {
+      obj.x = message.x;
+    }
+    if (message.y !== 0) {
+      obj.y = message.y;
+    }
+    if (message.width !== undefined) {
+      obj.width = message.width;
+    }
+    if (message.height !== undefined) {
+      obj.height = message.height;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FrameMetadata>, I>>(base?: I): FrameMetadata {
+    return FrameMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FrameMetadata>, I>>(object: I): FrameMetadata {
+    const message = createBaseFrameMetadata();
+    message.x = object.x ?? 0;
+    message.y = object.y ?? 0;
+    message.width = object.width ?? undefined;
+    message.height = object.height ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAnnotationMetadata(): AnnotationMetadata {
+  return { name: "", params: {} };
+}
+
+export const AnnotationMetadata = {
+  encode(message: AnnotationMetadata, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    Object.entries(message.params).forEach(([key, value]) => {
+      AnnotationMetadata_ParamsEntry.encode({ key: key as any, value }, writer.uint32(18).fork()).ldelim();
+    });
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): AnnotationMetadata {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAnnotationMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          const entry2 = AnnotationMetadata_ParamsEntry.decode(reader, reader.uint32());
+          if (entry2.value !== undefined) {
+            message.params[entry2.key] = entry2.value;
+          }
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AnnotationMetadata {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      params: isObject(object.params)
+        ? Object.entries(object.params).reduce<{ [key: string]: Value }>((acc, [key, value]) => {
+          acc[key] = Value.fromJSON(value);
+          return acc;
+        }, {})
+        : {},
+    };
+  },
+
+  toJSON(message: AnnotationMetadata): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.params) {
+      const entries = Object.entries(message.params);
+      if (entries.length > 0) {
+        obj.params = {};
+        entries.forEach(([k, v]) => {
+          obj.params[k] = Value.toJSON(v);
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AnnotationMetadata>, I>>(base?: I): AnnotationMetadata {
+    return AnnotationMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AnnotationMetadata>, I>>(object: I): AnnotationMetadata {
+    const message = createBaseAnnotationMetadata();
+    message.name = object.name ?? "";
+    message.params = Object.entries(object.params ?? {}).reduce<{ [key: string]: Value }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = Value.fromPartial(value);
+      }
+      return acc;
+    }, {});
+    return message;
+  },
+};
+
+function createBaseAnnotationMetadata_ParamsEntry(): AnnotationMetadata_ParamsEntry {
+  return { key: "", value: undefined };
+}
+
+export const AnnotationMetadata_ParamsEntry = {
+  encode(message: AnnotationMetadata_ParamsEntry, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== undefined) {
+      Value.encode(message.value, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): AnnotationMetadata_ParamsEntry {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAnnotationMetadata_ParamsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = Value.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AnnotationMetadata_ParamsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? Value.fromJSON(object.value) : undefined,
+    };
+  },
+
+  toJSON(message: AnnotationMetadata_ParamsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== undefined) {
+      obj.value = Value.toJSON(message.value);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AnnotationMetadata_ParamsEntry>, I>>(base?: I): AnnotationMetadata_ParamsEntry {
+    return AnnotationMetadata_ParamsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AnnotationMetadata_ParamsEntry>, I>>(
+    object: I,
+  ): AnnotationMetadata_ParamsEntry {
+    const message = createBaseAnnotationMetadata_ParamsEntry();
+    message.key = object.key ?? "";
+    message.value = (object.value !== undefined && object.value !== null) ? Value.fromPartial(object.value) : undefined;
+    return message;
+  },
+};
+
+function createBaseVDocument(): VDocument {
+  return { nodes: [], styles: [], components: [], metadata: undefined };
+}
+
+export const VDocument = {
+  encode(message: VDocument, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.nodes) {
+      VNode.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    for (const v of message.styles) {
+      CssRule.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
+    for (const v of message.components) {
+      ComponentMetadata.encode(v!, writer.uint32(26).fork()).ldelim();
+    }
+    if (message.metadata !== undefined) {
+      Value.encode(message.metadata, writer.uint32(34).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): VDocument {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseVDocument();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.nodes.push(VNode.decode(reader, reader.uint32()));
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.styles.push(CssRule.decode(reader, reader.uint32()));
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.components.push(ComponentMetadata.decode(reader, reader.uint32()));
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.metadata = Value.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): VDocument {
+    return {
+      nodes: globalThis.Array.isArray(object?.nodes) ? object.nodes.map((e: any) => VNode.fromJSON(e)) : [],
+      styles: globalThis.Array.isArray(object?.styles) ? object.styles.map((e: any) => CssRule.fromJSON(e)) : [],
+      components: globalThis.Array.isArray(object?.components)
+        ? object.components.map((e: any) => ComponentMetadata.fromJSON(e))
+        : [],
+      metadata: isSet(object.metadata) ? Value.fromJSON(object.metadata) : undefined,
+    };
+  },
+
+  toJSON(message: VDocument): unknown {
+    const obj: any = {};
+    if (message.nodes?.length) {
+      obj.nodes = message.nodes.map((e) => VNode.toJSON(e));
+    }
+    if (message.styles?.length) {
+      obj.styles = message.styles.map((e) => CssRule.toJSON(e));
+    }
+    if (message.components?.length) {
+      obj.components = message.components.map((e) => ComponentMetadata.toJSON(e));
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = Value.toJSON(message.metadata);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<VDocument>, I>>(base?: I): VDocument {
+    return VDocument.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<VDocument>, I>>(object: I): VDocument {
+    const message = createBaseVDocument();
+    message.nodes = object.nodes?.map((e) => VNode.fromPartial(e)) || [];
+    message.styles = object.styles?.map((e) => CssRule.fromPartial(e)) || [];
+    message.components = object.components?.map((e) => ComponentMetadata.fromPartial(e)) || [];
+    message.metadata = (object.metadata !== undefined && object.metadata !== null)
+      ? Value.fromPartial(object.metadata)
+      : undefined;
     return message;
   },
 };

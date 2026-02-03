@@ -73,6 +73,20 @@ pub enum Mutation {
         name: String,
         value: String,
     },
+    /// Set or update a component annotation (e.g., @frame, @meta, @custom)
+    SetComponentAnnotation {
+        mutation_id: String,
+        component_name: String,
+        annotation_name: String,
+        /// Key-value pairs serialized as "key: value, key2: value2"
+        params_str: String,
+    },
+    /// Remove a component annotation
+    RemoveComponentAnnotation {
+        mutation_id: String,
+        component_name: String,
+        annotation_name: String,
+    },
 }
 
 impl Mutation {
@@ -86,6 +100,8 @@ impl Mutation {
             Mutation::MoveNode { mutation_id, .. } => mutation_id,
             Mutation::InsertNode { mutation_id, .. } => mutation_id,
             Mutation::SetAttribute { mutation_id, .. } => mutation_id,
+            Mutation::SetComponentAnnotation { mutation_id, .. } => mutation_id,
+            Mutation::RemoveComponentAnnotation { mutation_id, .. } => mutation_id,
         }
     }
 }
@@ -208,6 +224,30 @@ impl MutationHandler {
                 mutation_id: mutation_id.clone(),
                 reason: "Attribute editing not yet implemented".to_string(),
             }),
+
+            Mutation::SetComponentAnnotation {
+                mutation_id,
+                component_name,
+                annotation_name,
+                params_str,
+            } => self.apply_set_component_annotation(
+                mutation_id,
+                component_name,
+                annotation_name,
+                params_str,
+                crdt_doc,
+            ),
+
+            Mutation::RemoveComponentAnnotation {
+                mutation_id,
+                component_name,
+                annotation_name,
+            } => self.apply_remove_component_annotation(
+                mutation_id,
+                component_name,
+                annotation_name,
+                crdt_doc,
+            ),
         }
     }
 
@@ -520,6 +560,270 @@ impl MutationHandler {
             mutation_id: mutation_id.to_string(),
             reason: "Could not find insertion point in parent".to_string(),
         })
+    }
+
+    /// Apply SetComponentAnnotation mutation
+    fn apply_set_component_annotation(
+        &mut self,
+        mutation_id: &str,
+        component_name: &str,
+        annotation_name: &str,
+        params_str: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        let current_source = crdt_doc.get_text();
+
+        // Parse the document to find the component
+        let ast = paperclip_parser::parse_with_path(&current_source, &self.file_path)
+            .map_err(|e| MutationError::ParseError(e.to_string()))?;
+
+        let component = ast
+            .components
+            .iter()
+            .find(|c| c.name == component_name)
+            .ok_or_else(|| {
+                MutationError::InvalidMutation(format!("Component '{}' not found", component_name))
+            })?;
+
+        // Generate the new annotation text
+        let new_annotation = if params_str.is_empty() {
+            format!("@{}", annotation_name)
+        } else {
+            format!("@{}({})", annotation_name, params_str)
+        };
+
+        // Check if component has a doc comment
+        if let Some(doc_comment) = &component.doc_comment {
+            // Find existing annotation of same name
+            if let Some(existing_ann) = doc_comment
+                .annotations
+                .iter()
+                .find(|a| a.name == annotation_name)
+            {
+                // Replace existing annotation
+                // Find the @annotation_name(...) pattern in source
+                let doc_start = doc_comment.span.start;
+                let doc_end = doc_comment.span.end;
+                let doc_source = &current_source[doc_start..doc_end];
+
+                // Find the annotation in the doc comment
+                if let Some(ann_start) = doc_source.find(&format!("@{}", annotation_name)) {
+                    let abs_ann_start = doc_start + ann_start;
+
+                    // Find the end of the annotation (either closing paren or next whitespace/newline)
+                    let after_name = abs_ann_start + annotation_name.len() + 1; // +1 for @
+                    let rest = &current_source[after_name..doc_end];
+
+                    let ann_end = if rest.starts_with('(') {
+                        // Find matching paren
+                        if let Some(close_pos) = Self::find_matching_paren(rest) {
+                            after_name + close_pos + 1 // +1 to include the )
+                        } else {
+                            after_name
+                        }
+                    } else {
+                        after_name
+                    };
+
+                    // Replace the annotation
+                    crdt_doc.edit_range(abs_ann_start as u32, ann_end as u32, &new_annotation);
+
+                    // Rebuild index
+                    let current_text = crdt_doc.get_text();
+                    self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+                    return Ok(MutationResult::Applied {
+                        mutation_id: mutation_id.to_string(),
+                        new_version: crdt_doc.version(),
+                    });
+                }
+            }
+
+            // No existing annotation, add new one before the closing */
+            let doc_end = doc_comment.span.end;
+            let doc_source = &current_source[doc_comment.span.start..doc_end];
+
+            if let Some(close_pos) = doc_source.rfind("*/") {
+                let insert_pos = doc_comment.span.start + close_pos;
+                let insert_text = format!(" * {}\n ", new_annotation);
+
+                crdt_doc.insert(insert_pos as u32, &insert_text);
+
+                // Rebuild index
+                let current_text = crdt_doc.get_text();
+                self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+                return Ok(MutationResult::Applied {
+                    mutation_id: mutation_id.to_string(),
+                    new_version: crdt_doc.version(),
+                });
+            }
+        } else {
+            // No doc comment exists, create one before the component
+            // Note: component.span.start may incorrectly include preceding content,
+            // so we need to find the actual "component" or "public" keyword
+            let span_start = component.span.start;
+            let span_slice = &current_source[span_start..];
+
+            // Find where the actual component keyword starts
+            // Try "public component" first, then just "component"
+            let keyword_offset = span_slice.find("public component")
+                .or_else(|| span_slice.find("public\ncomponent"))
+                .or_else(|| span_slice.find("component"))
+                .unwrap_or(0);
+
+            let actual_comp_start = span_start + keyword_offset;
+
+            // Find the start of the line containing the component keyword
+            let before_comp = &current_source[..actual_comp_start];
+            let line_start = before_comp.rfind('\n').map(|p| p + 1).unwrap_or(0);
+
+            let doc_comment = format!("/**\n * {}\n */\n", new_annotation);
+
+            crdt_doc.insert(line_start as u32, &doc_comment);
+
+            // Rebuild index
+            let current_text = crdt_doc.get_text();
+            self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+            return Ok(MutationResult::Applied {
+                mutation_id: mutation_id.to_string(),
+                new_version: crdt_doc.version(),
+            });
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: "Could not find position to insert annotation".to_string(),
+        })
+    }
+
+    /// Apply RemoveComponentAnnotation mutation
+    fn apply_remove_component_annotation(
+        &mut self,
+        mutation_id: &str,
+        component_name: &str,
+        annotation_name: &str,
+        crdt_doc: &mut CrdtDocument,
+    ) -> Result<MutationResult, MutationError> {
+        let current_source = crdt_doc.get_text();
+
+        // Parse the document to find the component
+        let ast = paperclip_parser::parse_with_path(&current_source, &self.file_path)
+            .map_err(|e| MutationError::ParseError(e.to_string()))?;
+
+        let component = ast
+            .components
+            .iter()
+            .find(|c| c.name == component_name)
+            .ok_or_else(|| {
+                MutationError::InvalidMutation(format!("Component '{}' not found", component_name))
+            })?;
+
+        // Must have doc comment with the annotation
+        let doc_comment = component.doc_comment.as_ref().ok_or_else(|| {
+            MutationError::InvalidMutation(format!(
+                "Component '{}' has no doc comment",
+                component_name
+            ))
+        })?;
+
+        let _ann = doc_comment
+            .annotations
+            .iter()
+            .find(|a| a.name == annotation_name)
+            .ok_or_else(|| {
+                MutationError::InvalidMutation(format!(
+                    "Annotation '@{}' not found on component '{}'",
+                    annotation_name, component_name
+                ))
+            })?;
+
+        // Find and remove the annotation from source
+        let doc_start = doc_comment.span.start;
+        let doc_end = doc_comment.span.end;
+        let doc_source = &current_source[doc_start..doc_end];
+
+        // Find the annotation pattern (including the * prefix if on its own line)
+        let search_patterns = [
+            format!(" * @{}", annotation_name),
+            format!("@{}", annotation_name),
+        ];
+
+        for pattern in &search_patterns {
+            if let Some(ann_start_in_doc) = doc_source.find(pattern.as_str()) {
+                let abs_ann_start = doc_start + ann_start_in_doc;
+
+                // Find the end of the annotation
+                let after_pattern = abs_ann_start + pattern.len();
+                let rest = &current_source[after_pattern..doc_end];
+
+                let mut ann_end = if rest.starts_with('(') {
+                    if let Some(close_pos) = Self::find_matching_paren(rest) {
+                        after_pattern + close_pos + 1
+                    } else {
+                        after_pattern
+                    }
+                } else {
+                    after_pattern
+                };
+
+                // Also remove trailing newline if present
+                if ann_end < current_source.len() && current_source.as_bytes()[ann_end] == b'\n' {
+                    ann_end += 1;
+                }
+
+                // Delete the annotation
+                crdt_doc.delete(abs_ann_start as u32, (ann_end - abs_ann_start) as u32);
+
+                // Rebuild index
+                let current_text = crdt_doc.get_text();
+                self.rebuild_index(crdt_doc.doc(), &current_text)?;
+
+                return Ok(MutationResult::Applied {
+                    mutation_id: mutation_id.to_string(),
+                    new_version: crdt_doc.version(),
+                });
+            }
+        }
+
+        Ok(MutationResult::Noop {
+            mutation_id: mutation_id.to_string(),
+            reason: format!("Could not locate annotation '@{}' in source", annotation_name),
+        })
+    }
+
+    /// Find matching closing paren, returns position of closing paren
+    fn find_matching_paren(s: &str) -> Option<usize> {
+        if !s.starts_with('(') {
+            return None;
+        }
+
+        let mut depth = 0;
+        let mut in_string = false;
+        let mut string_char = '"';
+
+        for (i, c) in s.chars().enumerate() {
+            if !in_string && (c == '"' || c == '\'') {
+                in_string = true;
+                string_char = c;
+            } else if in_string && c == string_char {
+                in_string = false;
+            } else if !in_string {
+                match c {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some(i);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        None
     }
 
     /// Get the current index for inspection

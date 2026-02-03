@@ -1,3 +1,4 @@
+pub mod annotation_parser;
 pub mod ast;
 mod debug_test;
 pub mod error;

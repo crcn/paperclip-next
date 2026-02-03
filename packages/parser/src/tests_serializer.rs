@@ -384,3 +384,159 @@ div {
     assert_eq!(doc.renders.len(), reparsed.renders.len());
     assert_eq!(doc.renders.len(), 2);
 }
+
+// ==================== Annotation Roundtrip Tests ====================
+
+#[test]
+fn test_roundtrip_doc_comment_with_frame() {
+    let source = r#"/**
+ * @frame(x: 100, y: 200, width: 300, height: 400)
+ */
+component Card {
+    render div {
+        text "Card"
+    }
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    assert_eq!(doc.components.len(), reparsed.components.len());
+    assert!(reparsed.components[0].doc_comment.is_some());
+    assert!(reparsed.components[0].frame.is_some());
+
+    let frame = reparsed.components[0].frame.as_ref().unwrap();
+    assert_eq!(frame.x, 100.0);
+    assert_eq!(frame.y, 200.0);
+    assert_eq!(frame.width, Some(300.0));
+    assert_eq!(frame.height, Some(400.0));
+}
+
+#[test]
+fn test_roundtrip_doc_comment_with_description() {
+    let source = r#"/**
+ * This is a card component for displaying content.
+ * @frame(x: 50, y: 100)
+ */
+component Card {
+    render div {
+        text "Card"
+    }
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    let doc_comment = reparsed.components[0].doc_comment.as_ref().unwrap();
+    assert!(doc_comment.description.contains("card component"));
+    assert_eq!(doc_comment.annotations.len(), 1);
+    assert_eq!(doc_comment.annotations[0].name, "frame");
+}
+
+#[test]
+fn test_roundtrip_multiple_annotations() {
+    let source = r#"/**
+ * @frame(x: 100, y: 200)
+ * @meta(category: ui, priority: 5)
+ * @deprecated
+ */
+component Button {
+    render button {
+        text "Click"
+    }
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    let doc_comment = reparsed.components[0].doc_comment.as_ref().unwrap();
+    assert_eq!(doc_comment.annotations.len(), 3);
+
+    let annotation_names: Vec<_> = doc_comment
+        .annotations
+        .iter()
+        .map(|a| a.name.as_str())
+        .collect();
+    assert!(annotation_names.contains(&"frame"));
+    assert!(annotation_names.contains(&"meta"));
+    assert!(annotation_names.contains(&"deprecated"));
+}
+
+#[test]
+fn test_roundtrip_annotation_with_array() {
+    let source = r#"/**
+ * @config(items: [1, 2, 3], tags: [foo, bar])
+ */
+component List {
+    render ul {
+        text "List"
+    }
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    let doc_comment = reparsed.components[0].doc_comment.as_ref().unwrap();
+    assert_eq!(doc_comment.annotations.len(), 1);
+    assert_eq!(doc_comment.annotations[0].name, "config");
+
+    let items = doc_comment.annotations[0]
+        .params
+        .iter()
+        .find(|(k, _)| k == "items");
+    assert!(items.is_some());
+}
+
+#[test]
+fn test_roundtrip_annotation_with_boolean() {
+    let source = r#"/**
+ * @config(locked: true, visible: false)
+ */
+component Panel {
+    render div {
+        text "Panel"
+    }
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).expect(&format!("Failed to reparse: {}", serialized));
+
+    let doc_comment = reparsed.components[0].doc_comment.as_ref().unwrap();
+    let config = &doc_comment.annotations[0];
+
+    let locked = config.params.iter().find(|(k, _)| k == "locked").unwrap();
+    assert_eq!(locked.1, crate::ast::AnnotationValue::Boolean(true));
+
+    let visible = config.params.iter().find(|(k, _)| k == "visible").unwrap();
+    assert_eq!(visible.1, crate::ast::AnnotationValue::Boolean(false));
+}
+
+#[test]
+fn test_roundtrip_annotation_preserves_frame_backward_compat() {
+    let source = r#"/**
+ * @frame(x: -50, y: 100.5)
+ */
+component Card {
+    render div {}
+}"#;
+
+    let doc = parse(source).expect("Failed to parse");
+
+    // Verify frame field is populated for backward compatibility
+    let frame = doc.components[0].frame.as_ref().unwrap();
+    assert_eq!(frame.x, -50.0);
+    assert_eq!(frame.y, 100.5);
+
+    let serialized = serialize(&doc);
+    let reparsed = parse(&serialized).unwrap();
+
+    // Frame should still be accessible after roundtrip
+    let frame2 = reparsed.components[0].frame.as_ref().unwrap();
+    assert_eq!(frame2.x, -50.0);
+    assert_eq!(frame2.y, 100.5);
+}

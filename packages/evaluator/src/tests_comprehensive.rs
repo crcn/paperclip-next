@@ -718,4 +718,147 @@ mod evaluator_comprehensive_tests {
         assert!(tags.contains(&"div"), "PrivateCard (div) should render");
         assert!(tags.contains(&"span"), "AnotherPrivate (span) should render");
     }
+
+    /// Test that top-level render elements with @frame annotations get data-frame-* attributes
+    #[test]
+    fn test_render_frame_attributes_injected() {
+        let source = r#"/**
+ * @frame(x: 100, y: 200, width: 400, height: 300)
+ */
+div {
+    text "hello world"
+}"#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+
+        // Verify parser captured the frame
+        assert_eq!(doc.renders.len(), 1, "Should have 1 render");
+        assert_eq!(doc.render_frames.len(), 1, "Should have 1 render frame");
+        assert!(
+            doc.render_frames.get(0).unwrap().is_some(),
+            "Frame should be Some"
+        );
+
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        assert_eq!(vdoc.nodes.len(), 1, "Should have 1 node");
+
+        match &vdoc.nodes[0] {
+            VNode::Element { tag, attributes, .. } => {
+                assert_eq!(tag, "div");
+
+                // Check for data-frame-* attributes
+                assert_eq!(
+                    attributes.get("data-frame-x").map(|s| s.as_str()),
+                    Some("100"),
+                    "Should have data-frame-x attribute"
+                );
+                assert_eq!(
+                    attributes.get("data-frame-y").map(|s| s.as_str()),
+                    Some("200"),
+                    "Should have data-frame-y attribute"
+                );
+                assert_eq!(
+                    attributes.get("data-frame-width").map(|s| s.as_str()),
+                    Some("400"),
+                    "Should have data-frame-width attribute"
+                );
+                assert_eq!(
+                    attributes.get("data-frame-height").map(|s| s.as_str()),
+                    Some("300"),
+                    "Should have data-frame-height attribute"
+                );
+            }
+            _ => panic!("Expected element node"),
+        }
+    }
+
+    /// Test render without @frame annotation has no data-frame-* attributes
+    #[test]
+    fn test_render_without_frame_no_frame_attributes() {
+        let source = r#"div {
+    text "no frame"
+}"#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        assert_eq!(vdoc.nodes.len(), 1);
+
+        match &vdoc.nodes[0] {
+            VNode::Element { tag, attributes, .. } => {
+                assert_eq!(tag, "div");
+
+                // Check NO data-frame-* attributes
+                let has_frame_attrs = attributes.keys().any(|k| k.starts_with("data-frame-"));
+                assert!(
+                    !has_frame_attrs,
+                    "Should NOT have any data-frame-* attributes, got: {:?}",
+                    attributes
+                );
+            }
+            _ => panic!("Expected element node"),
+        }
+    }
+
+    /// Test multiple renders - some with frames, some without
+    #[test]
+    fn test_multiple_renders_frame_attributes() {
+        let source = r#"/**
+ * @frame(x: 0, y: 0)
+ */
+div {
+    text "first"
+}
+
+div {
+    text "second - no frame"
+}
+
+/**
+ * @frame(x: 500, y: 0, width: 300)
+ */
+div {
+    text "third"
+}"#;
+
+        let doc = parse_with_path(source, "/test.pc").expect("Failed to parse");
+        let mut evaluator = Evaluator::with_document_id("/test.pc");
+        let vdoc = evaluator.evaluate(&doc).expect("Failed to evaluate");
+
+        assert_eq!(vdoc.nodes.len(), 3, "Should have 3 nodes");
+
+        // First node should have frame attributes (x, y only)
+        match &vdoc.nodes[0] {
+            VNode::Element { attributes, .. } => {
+                assert_eq!(attributes.get("data-frame-x").map(|s| s.as_str()), Some("0"));
+                assert_eq!(attributes.get("data-frame-y").map(|s| s.as_str()), Some("0"));
+                assert_eq!(attributes.get("data-frame-width"), None);
+                assert_eq!(attributes.get("data-frame-height"), None);
+            }
+            _ => panic!("Expected element node"),
+        }
+
+        // Second node should NOT have frame attributes
+        match &vdoc.nodes[1] {
+            VNode::Element { attributes, .. } => {
+                let has_frame_attrs = attributes.keys().any(|k| k.starts_with("data-frame-"));
+                assert!(!has_frame_attrs, "Second node should not have frame attrs");
+            }
+            _ => panic!("Expected element node"),
+        }
+
+        // Third node should have frame attributes (x, y, width only)
+        match &vdoc.nodes[2] {
+            VNode::Element { attributes, .. } => {
+                assert_eq!(attributes.get("data-frame-x").map(|s| s.as_str()), Some("500"));
+                assert_eq!(attributes.get("data-frame-y").map(|s| s.as_str()), Some("0"));
+                assert_eq!(attributes.get("data-frame-width").map(|s| s.as_str()), Some("300"));
+                assert_eq!(attributes.get("data-frame-height"), None);
+            }
+            _ => panic!("Expected element node"),
+        }
+    }
 }

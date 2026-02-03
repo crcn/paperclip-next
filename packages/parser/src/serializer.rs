@@ -1,4 +1,7 @@
-use crate::ast::*;
+use crate::ast::{
+    AnnotationValue, BinaryOp, Component, DocComment, Document, Element, Expression, Import, Slot,
+    StyleBlock, StyleDecl, TemplatePart, TokenDecl, TriggerDecl,
+};
 use std::fmt::Write;
 
 /// Serializer converts AST back to source code
@@ -166,6 +169,11 @@ impl Serializer {
     }
 
     fn serialize_component(&mut self, component: &Component, output: &mut String) {
+        // Serialize doc comment with annotations if present
+        if let Some(doc_comment) = &component.doc_comment {
+            self.serialize_doc_comment(doc_comment, output);
+        }
+
         if component.public {
             output.push_str("public ");
         }
@@ -687,6 +695,93 @@ impl Serializer {
     fn write_indent(&self, output: &mut String) {
         for _ in 0..self.indent_level {
             output.push_str(&self.indent_string);
+        }
+    }
+
+    /// Serialize a doc comment with its description and annotations
+    fn serialize_doc_comment(&self, doc_comment: &DocComment, output: &mut String) {
+        output.push_str("/**\n");
+
+        // Write description lines (if any)
+        let description = doc_comment.description.trim();
+        if !description.is_empty() {
+            for line in description.lines() {
+                output.push_str(" * ");
+                output.push_str(line.trim());
+                output.push('\n');
+            }
+        }
+
+        // Write annotations
+        for annotation in &doc_comment.annotations {
+            output.push_str(" * @");
+            output.push_str(&annotation.name);
+            if !annotation.params.is_empty() {
+                output.push('(');
+                self.serialize_annotation_params(&annotation.params, output);
+                output.push(')');
+            }
+            output.push('\n');
+        }
+
+        output.push_str(" */\n");
+    }
+
+    /// Serialize annotation parameters
+    fn serialize_annotation_params(
+        &self,
+        params: &[(String, AnnotationValue)],
+        output: &mut String,
+    ) {
+        for (i, (key, value)) in params.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ");
+            }
+            output.push_str(key);
+            output.push_str(": ");
+            self.serialize_annotation_value(value, output);
+        }
+    }
+
+    /// Serialize an annotation value
+    fn serialize_annotation_value(&self, value: &AnnotationValue, output: &mut String) {
+        match value {
+            AnnotationValue::Number(n) => {
+                // Format without trailing .0 for whole numbers
+                if n.fract() == 0.0 {
+                    write!(output, "{}", *n as i64).unwrap();
+                } else {
+                    write!(output, "{}", n).unwrap();
+                }
+            }
+            AnnotationValue::String(s) => {
+                // Check if it needs quotes (contains spaces or special chars)
+                if s.contains(' ')
+                    || s.contains(',')
+                    || s.contains(':')
+                    || s.contains('(')
+                    || s.contains(')')
+                {
+                    output.push('"');
+                    output.push_str(s);
+                    output.push('"');
+                } else {
+                    output.push_str(s);
+                }
+            }
+            AnnotationValue::Boolean(b) => {
+                output.push_str(if *b { "true" } else { "false" });
+            }
+            AnnotationValue::Array(items) => {
+                output.push('[');
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    self.serialize_annotation_value(item, output);
+                }
+                output.push(']');
+            }
         }
     }
 }

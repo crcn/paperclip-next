@@ -1,5 +1,36 @@
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 export declare const protobufPackage = "paperclip.vdom";
+export declare enum NullValue {
+    NULL_VALUE = 0,
+    UNRECOGNIZED = -1
+}
+export declare function nullValueFromJSON(object: any): NullValue;
+export declare function nullValueToJSON(object: NullValue): string;
+export interface Value {
+    nullValue?: NullValue | undefined;
+    numberValue?: number | undefined;
+    stringValue?: string | undefined;
+    boolValue?: boolean | undefined;
+    objectValue?: ObjectValue | undefined;
+    listValue?: ListValue | undefined;
+}
+export interface ObjectValue {
+    fields: {
+        [key: string]: Value;
+    };
+}
+export interface ObjectValue_FieldsEntry {
+    key: string;
+    value?: Value | undefined;
+}
+export interface ListValue {
+    values: Value[];
+}
+export interface Span {
+    start: number;
+    end: number;
+    id: string;
+}
 /** Virtual DOM node (discriminated union) */
 export interface VNode {
     element?: ElementNode | undefined;
@@ -8,10 +39,6 @@ export interface VNode {
     component?: ComponentNode | undefined;
     /** Inline error display */
     error?: ErrorNode | undefined;
-}
-export interface ErrorNode {
-    message: string;
-    semanticId: string;
 }
 export interface ElementNode {
     tag: string;
@@ -28,6 +55,8 @@ export interface ElementNode {
     key?: string | undefined;
     /** Maps back to AST span.id for mutations */
     sourceId?: string | undefined;
+    /** Flexible metadata (frame info, annotations, etc.) */
+    metadata?: Value | undefined;
 }
 export interface ElementNode_AttributesEntry {
     key: string;
@@ -56,20 +85,102 @@ export interface ComponentNode_PropsEntry {
     key: string;
     value: string;
 }
-export interface VDocument {
-    nodes: VNode[];
-    styles: CssRule[];
+export interface ErrorNode {
+    message: string;
+    semanticId: string;
+    /** Source location for debugging */
+    span?: Span | undefined;
 }
 export interface CssRule {
     selector: string;
     properties: {
         [key: string]: string;
     };
+    mediaQuery?: string | undefined;
+    /** Flexible metadata (source info, annotations, etc.) */
+    metadata?: Value | undefined;
 }
 export interface CssRule_PropertiesEntry {
     key: string;
     value: string;
 }
+/** Virtual CSSOM for CSS-specific operations */
+export interface CssDocument {
+    rules: CssRule[];
+    /** Document-level CSS metadata (variables, tokens, etc.) */
+    metadata?: Value | undefined;
+}
+export interface ComponentMetadata {
+    name: string;
+    description?: string | undefined;
+    frame?: FrameMetadata | undefined;
+    annotations: AnnotationMetadata[];
+    sourceId?: string | undefined;
+}
+export interface FrameMetadata {
+    x: number;
+    y: number;
+    width?: number | undefined;
+    height?: number | undefined;
+}
+export interface AnnotationMetadata {
+    name: string;
+    params: {
+        [key: string]: Value;
+    };
+}
+export interface AnnotationMetadata_ParamsEntry {
+    key: string;
+    value?: Value | undefined;
+}
+export interface VDocument {
+    nodes: VNode[];
+    styles: CssRule[];
+    /** Component metadata for designer */
+    components: ComponentMetadata[];
+    /** Document-level metadata */
+    metadata?: Value | undefined;
+}
+export declare const Value: {
+    encode(message: Value, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): Value;
+    fromJSON(object: any): Value;
+    toJSON(message: Value): unknown;
+    create<I extends Exact<DeepPartial<Value>, I>>(base?: I): Value;
+    fromPartial<I extends Exact<DeepPartial<Value>, I>>(object: I): Value;
+};
+export declare const ObjectValue: {
+    encode(message: ObjectValue, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ObjectValue;
+    fromJSON(object: any): ObjectValue;
+    toJSON(message: ObjectValue): unknown;
+    create<I extends Exact<DeepPartial<ObjectValue>, I>>(base?: I): ObjectValue;
+    fromPartial<I extends Exact<DeepPartial<ObjectValue>, I>>(object: I): ObjectValue;
+};
+export declare const ObjectValue_FieldsEntry: {
+    encode(message: ObjectValue_FieldsEntry, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ObjectValue_FieldsEntry;
+    fromJSON(object: any): ObjectValue_FieldsEntry;
+    toJSON(message: ObjectValue_FieldsEntry): unknown;
+    create<I extends Exact<DeepPartial<ObjectValue_FieldsEntry>, I>>(base?: I): ObjectValue_FieldsEntry;
+    fromPartial<I extends Exact<DeepPartial<ObjectValue_FieldsEntry>, I>>(object: I): ObjectValue_FieldsEntry;
+};
+export declare const ListValue: {
+    encode(message: ListValue, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ListValue;
+    fromJSON(object: any): ListValue;
+    toJSON(message: ListValue): unknown;
+    create<I extends Exact<DeepPartial<ListValue>, I>>(base?: I): ListValue;
+    fromPartial<I extends Exact<DeepPartial<ListValue>, I>>(object: I): ListValue;
+};
+export declare const Span: {
+    encode(message: Span, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): Span;
+    fromJSON(object: any): Span;
+    toJSON(message: Span): unknown;
+    create<I extends Exact<DeepPartial<Span>, I>>(base?: I): Span;
+    fromPartial<I extends Exact<DeepPartial<Span>, I>>(object: I): Span;
+};
 export declare const VNode: {
     encode(message: VNode, writer?: _m0.Writer): _m0.Writer;
     decode(input: _m0.Reader | Uint8Array, length?: number): VNode;
@@ -77,14 +188,6 @@ export declare const VNode: {
     toJSON(message: VNode): unknown;
     create<I extends Exact<DeepPartial<VNode>, I>>(base?: I): VNode;
     fromPartial<I extends Exact<DeepPartial<VNode>, I>>(object: I): VNode;
-};
-export declare const ErrorNode: {
-    encode(message: ErrorNode, writer?: _m0.Writer): _m0.Writer;
-    decode(input: _m0.Reader | Uint8Array, length?: number): ErrorNode;
-    fromJSON(object: any): ErrorNode;
-    toJSON(message: ErrorNode): unknown;
-    create<I extends Exact<DeepPartial<ErrorNode>, I>>(base?: I): ErrorNode;
-    fromPartial<I extends Exact<DeepPartial<ErrorNode>, I>>(object: I): ErrorNode;
 };
 export declare const ElementNode: {
     encode(message: ElementNode, writer?: _m0.Writer): _m0.Writer;
@@ -142,13 +245,13 @@ export declare const ComponentNode_PropsEntry: {
     create<I extends Exact<DeepPartial<ComponentNode_PropsEntry>, I>>(base?: I): ComponentNode_PropsEntry;
     fromPartial<I extends Exact<DeepPartial<ComponentNode_PropsEntry>, I>>(object: I): ComponentNode_PropsEntry;
 };
-export declare const VDocument: {
-    encode(message: VDocument, writer?: _m0.Writer): _m0.Writer;
-    decode(input: _m0.Reader | Uint8Array, length?: number): VDocument;
-    fromJSON(object: any): VDocument;
-    toJSON(message: VDocument): unknown;
-    create<I extends Exact<DeepPartial<VDocument>, I>>(base?: I): VDocument;
-    fromPartial<I extends Exact<DeepPartial<VDocument>, I>>(object: I): VDocument;
+export declare const ErrorNode: {
+    encode(message: ErrorNode, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ErrorNode;
+    fromJSON(object: any): ErrorNode;
+    toJSON(message: ErrorNode): unknown;
+    create<I extends Exact<DeepPartial<ErrorNode>, I>>(base?: I): ErrorNode;
+    fromPartial<I extends Exact<DeepPartial<ErrorNode>, I>>(object: I): ErrorNode;
 };
 export declare const CssRule: {
     encode(message: CssRule, writer?: _m0.Writer): _m0.Writer;
@@ -165,6 +268,54 @@ export declare const CssRule_PropertiesEntry: {
     toJSON(message: CssRule_PropertiesEntry): unknown;
     create<I extends Exact<DeepPartial<CssRule_PropertiesEntry>, I>>(base?: I): CssRule_PropertiesEntry;
     fromPartial<I extends Exact<DeepPartial<CssRule_PropertiesEntry>, I>>(object: I): CssRule_PropertiesEntry;
+};
+export declare const CssDocument: {
+    encode(message: CssDocument, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CssDocument;
+    fromJSON(object: any): CssDocument;
+    toJSON(message: CssDocument): unknown;
+    create<I extends Exact<DeepPartial<CssDocument>, I>>(base?: I): CssDocument;
+    fromPartial<I extends Exact<DeepPartial<CssDocument>, I>>(object: I): CssDocument;
+};
+export declare const ComponentMetadata: {
+    encode(message: ComponentMetadata, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): ComponentMetadata;
+    fromJSON(object: any): ComponentMetadata;
+    toJSON(message: ComponentMetadata): unknown;
+    create<I extends Exact<DeepPartial<ComponentMetadata>, I>>(base?: I): ComponentMetadata;
+    fromPartial<I extends Exact<DeepPartial<ComponentMetadata>, I>>(object: I): ComponentMetadata;
+};
+export declare const FrameMetadata: {
+    encode(message: FrameMetadata, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): FrameMetadata;
+    fromJSON(object: any): FrameMetadata;
+    toJSON(message: FrameMetadata): unknown;
+    create<I extends Exact<DeepPartial<FrameMetadata>, I>>(base?: I): FrameMetadata;
+    fromPartial<I extends Exact<DeepPartial<FrameMetadata>, I>>(object: I): FrameMetadata;
+};
+export declare const AnnotationMetadata: {
+    encode(message: AnnotationMetadata, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): AnnotationMetadata;
+    fromJSON(object: any): AnnotationMetadata;
+    toJSON(message: AnnotationMetadata): unknown;
+    create<I extends Exact<DeepPartial<AnnotationMetadata>, I>>(base?: I): AnnotationMetadata;
+    fromPartial<I extends Exact<DeepPartial<AnnotationMetadata>, I>>(object: I): AnnotationMetadata;
+};
+export declare const AnnotationMetadata_ParamsEntry: {
+    encode(message: AnnotationMetadata_ParamsEntry, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): AnnotationMetadata_ParamsEntry;
+    fromJSON(object: any): AnnotationMetadata_ParamsEntry;
+    toJSON(message: AnnotationMetadata_ParamsEntry): unknown;
+    create<I extends Exact<DeepPartial<AnnotationMetadata_ParamsEntry>, I>>(base?: I): AnnotationMetadata_ParamsEntry;
+    fromPartial<I extends Exact<DeepPartial<AnnotationMetadata_ParamsEntry>, I>>(object: I): AnnotationMetadata_ParamsEntry;
+};
+export declare const VDocument: {
+    encode(message: VDocument, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): VDocument;
+    fromJSON(object: any): VDocument;
+    toJSON(message: VDocument): unknown;
+    create<I extends Exact<DeepPartial<VDocument>, I>>(base?: I): VDocument;
+    fromPartial<I extends Exact<DeepPartial<VDocument>, I>>(object: I): VDocument;
 };
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 export type DeepPartial<T> = T extends Builtin ? T : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>> : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>> : T extends {} ? {

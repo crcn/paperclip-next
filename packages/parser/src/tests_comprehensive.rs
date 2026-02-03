@@ -505,4 +505,117 @@ mod parser_comprehensive_tests {
         assert!(span1.start <= source1.len());
         assert!(span2.start <= source2.len());
     }
+
+    #[test]
+    fn test_render_frame_annotation_parsing() {
+        // Test that top-level render elements with @frame annotations are parsed correctly
+        let source = r#"/**
+ * @frame(x: 0, y: 0, width: 1344, height: 1209)
+ */
+div {
+    text "hello world"
+}"#;
+
+        let doc = parse(source).expect("Failed to parse");
+
+        // Should have 1 render element
+        assert_eq!(doc.renders.len(), 1, "Should have 1 render");
+
+        // Should have 1 render doc comment
+        assert_eq!(doc.render_doc_comments.len(), 1, "Should have 1 render doc comment");
+
+        // Should have 1 render frame
+        assert_eq!(doc.render_frames.len(), 1, "Should have 1 render frame");
+
+        // The frame should be Some, not None
+        let frame = doc.render_frames.get(0).expect("Should have frame at index 0");
+        assert!(frame.is_some(), "Frame should be Some, not None");
+
+        let frame = frame.as_ref().unwrap();
+        assert_eq!(frame.x, 0.0);
+        assert_eq!(frame.y, 0.0);
+        assert_eq!(frame.width, Some(1344.0));
+        assert_eq!(frame.height, Some(1209.0));
+    }
+
+    #[test]
+    fn test_render_frame_annotation_without_dimensions() {
+        // Test that top-level render elements with @frame annotations without width/height are parsed
+        let source = r#"/**
+ * @frame(x: 100, y: 200)
+ */
+div {
+    text "positioned without size"
+}"#;
+
+        let doc = parse(source).expect("Failed to parse");
+
+        assert_eq!(doc.renders.len(), 1);
+        assert_eq!(doc.render_frames.len(), 1);
+
+        let frame = doc.render_frames.get(0).unwrap().as_ref().unwrap();
+        assert_eq!(frame.x, 100.0);
+        assert_eq!(frame.y, 200.0);
+        assert_eq!(frame.width, None);
+        assert_eq!(frame.height, None);
+    }
+
+    #[test]
+    fn test_render_without_doc_comment() {
+        // Test that top-level render elements without doc comments still work
+        let source = r#"div {
+    text "no doc comment"
+}"#;
+
+        let doc = parse(source).expect("Failed to parse");
+
+        assert_eq!(doc.renders.len(), 1);
+        assert_eq!(doc.render_doc_comments.len(), 1, "Should have 1 slot for render doc comment");
+        assert_eq!(doc.render_frames.len(), 1, "Should have 1 slot for render frame");
+
+        // Both should be None since there's no doc comment
+        assert!(doc.render_doc_comments.get(0).unwrap().is_none(), "Doc comment should be None");
+        assert!(doc.render_frames.get(0).unwrap().is_none(), "Frame should be None");
+    }
+
+    #[test]
+    fn test_multiple_renders_with_frames() {
+        // Test multiple top-level render elements, some with frames, some without
+        let source = r#"/**
+ * @frame(x: 0, y: 0, width: 400, height: 300)
+ */
+div {
+    text "first"
+}
+
+div {
+    text "second without frame"
+}
+
+/**
+ * @frame(x: 500, y: 0, width: 400, height: 300)
+ */
+div {
+    text "third"
+}"#;
+
+        let doc = parse(source).expect("Failed to parse");
+
+        assert_eq!(doc.renders.len(), 3);
+        assert_eq!(doc.render_doc_comments.len(), 3);
+        assert_eq!(doc.render_frames.len(), 3);
+
+        // First should have frame
+        assert!(doc.render_frames.get(0).unwrap().is_some(), "First render should have frame");
+        let frame1 = doc.render_frames.get(0).unwrap().as_ref().unwrap();
+        assert_eq!(frame1.x, 0.0);
+
+        // Second should NOT have frame
+        assert!(doc.render_frames.get(1).unwrap().is_none(), "Second render should not have frame");
+
+        // Third should have frame
+        assert!(doc.render_frames.get(2).unwrap().is_some(), "Third render should have frame");
+        let frame3 = doc.render_frames.get(2).unwrap().as_ref().unwrap();
+        assert_eq!(frame3.x, 500.0);
+    }
 }

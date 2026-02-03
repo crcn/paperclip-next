@@ -3855,3 +3855,774 @@ component Responsive {
     assert!(text.contains("@media (prefers-color-scheme: dark)"));
     assert!(text.contains("variant isDark trigger"));
 }
+
+// ============================================================================
+// SECTION 14: ANNOTATION MUTATIONS - SetComponentAnnotation & RemoveComponentAnnotation
+// ============================================================================
+
+#[test]
+fn test_set_annotation_new_doc_comment() {
+    // Add annotation to component without existing doc comment
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "add-frame".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 100, y: 200, width: 300, height: 400".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("/**"));
+    assert!(text.contains("@frame(x: 100, y: 200, width: 300, height: 400)"));
+    assert!(text.contains("*/"));
+    assert!(text.contains("component Test"));
+}
+
+#[test]
+fn test_set_annotation_update_existing() {
+    // Update existing @frame annotation
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "update-frame".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 500, y: 600, width: 700, height: 800".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 500"));
+    assert!(text.contains("y: 600"));
+    assert!(text.contains("width: 700"));
+    assert!(text.contains("height: 800"));
+    // Old values should be gone
+    assert!(!text.contains("x: 0"));
+}
+
+#[test]
+fn test_set_annotation_add_to_existing_doc_comment() {
+    // Add new annotation to doc comment that already has other annotations
+    let source = r#"/**
+ * A test component
+ * @frame(x: 100, y: 100)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "add-meta".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "meta".to_string(),
+        params_str: "category: ui".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("@frame(x: 100, y: 100)"));
+    assert!(text.contains("@meta(category: ui)"));
+    assert!(text.contains("A test component"));
+}
+
+#[test]
+fn test_remove_annotation_basic() {
+    let source = r#"/**
+ * @frame(x: 100, y: 200, width: 300, height: 400)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::RemoveComponentAnnotation {
+        mutation_id: "remove-frame".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(!text.contains("@frame"));
+}
+
+#[test]
+fn test_remove_annotation_preserves_others() {
+    let source = r#"/**
+ * A description
+ * @frame(x: 100, y: 200)
+ * @meta(category: ui)
+ * @deprecated
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::RemoveComponentAnnotation {
+        mutation_id: "remove-meta".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "meta".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("@frame"));
+    assert!(text.contains("@deprecated"));
+    assert!(!text.contains("@meta"));
+}
+
+#[test]
+fn test_annotation_with_negative_values() {
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "negative".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: -100, y: -200, width: 50, height: 50".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: -100"));
+    assert!(text.contains("y: -200"));
+}
+
+#[test]
+fn test_annotation_with_decimal_values() {
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "decimal".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 100.5, y: 200.75".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 100.5"));
+    assert!(text.contains("y: 200.75"));
+}
+
+#[test]
+fn test_annotation_without_params() {
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "deprecated".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "deprecated".to_string(),
+        params_str: "".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("@deprecated"));
+}
+
+#[test]
+fn test_annotation_on_nonexistent_component() {
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "fail".to_string(),
+        component_name: "NotExist".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 100".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_remove_nonexistent_annotation() {
+    let source = r#"/**
+ * @frame(x: 100, y: 200)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::RemoveComponentAnnotation {
+        mutation_id: "fail".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "nonexistent".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_rapid_annotation_updates() {
+    // Rapidly update the same annotation multiple times
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    for i in 0..50 {
+        let mutation = Mutation::SetComponentAnnotation {
+            mutation_id: format!("rapid-{}", i),
+            component_name: "Test".to_string(),
+            annotation_name: "frame".to_string(),
+            params_str: format!("x: {}, y: {}, width: {}, height: {}", i * 10, i * 5, 100 + i, 100 + i),
+        };
+
+        handler.rebuild_index(crdt_doc.doc(), &get_text(&crdt_doc)).unwrap();
+        let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+        assert!(
+            matches!(result, Ok(MutationResult::Applied { .. })),
+            "Failed at iteration {}: {:?}",
+            i,
+            result
+        );
+    }
+
+    let text = get_text(&crdt_doc);
+    // Should have final values
+    assert!(text.contains("x: 490"));
+    assert!(text.contains("y: 245"));
+}
+
+#[test]
+fn test_annotation_with_special_string_values() {
+    let source = r#"component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "special".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "meta".to_string(),
+        params_str: r#"path: "/foo/bar", name: "Test Component""#.to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("/foo/bar"));
+    assert!(text.contains("Test Component"));
+}
+
+#[test]
+fn test_annotation_multi_component_document() {
+    let source = r#"/**
+ * @frame(x: 0, y: 0)
+ */
+component A {
+    render div {}
+}
+
+/**
+ * @frame(x: 100, y: 0)
+ */
+component B {
+    render div {}
+}
+
+component C {
+    render div {}
+}"#;
+
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Add annotation to C
+    let mutation1 = Mutation::SetComponentAnnotation {
+        mutation_id: "add-c".to_string(),
+        component_name: "C".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 200, y: 0".to_string(),
+    };
+
+    handler.rebuild_index(crdt_doc.doc(), &get_text(&crdt_doc)).unwrap();
+    let result = handler.apply_mutation(&mutation1, &mut crdt_doc);
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. })),
+        "First mutation failed: {:?}\nText: {}",
+        result,
+        get_text(&crdt_doc)
+    );
+
+    // Update A
+    let mutation2 = Mutation::SetComponentAnnotation {
+        mutation_id: "update-a".to_string(),
+        component_name: "A".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 500, y: 500".to_string(),
+    };
+
+    handler.rebuild_index(crdt_doc.doc(), &get_text(&crdt_doc)).unwrap();
+    let result = handler.apply_mutation(&mutation2, &mut crdt_doc);
+    assert!(
+        matches!(result, Ok(MutationResult::Applied { .. })),
+        "Second mutation failed: {:?}\nText: {}",
+        result,
+        get_text(&crdt_doc)
+    );
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 500")); // A's new value
+    assert!(text.contains("x: 100")); // B unchanged
+    assert!(text.contains("x: 200")); // C's new frame
+}
+
+#[test]
+fn test_annotation_after_concurrent_edit() {
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+component Test {
+    render div {
+        text "Hello"
+    }
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Insert content at beginning (simulating concurrent edit)
+    crdt_doc.insert(0, "// Comment added\n");
+    handler.rebuild_index(crdt_doc.doc(), &get_text(&crdt_doc)).unwrap();
+
+    // Now update annotation
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "after-edit".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 999, y: 888".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.starts_with("// Comment added"));
+    assert!(text.contains("x: 999"));
+}
+
+#[test]
+fn test_annotation_preserves_doc_comment_description() {
+    let source = r#"/**
+ * This is a very important component.
+ * It has multiple lines of description.
+ * @frame(x: 0, y: 0)
+ */
+component Test {
+    render div {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "preserve".to_string(),
+        component_name: "Test".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 100, y: 200".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    // Description should still be there
+    assert!(text.contains("This is a very important component"));
+    assert!(text.contains("multiple lines"));
+    assert!(text.contains("x: 100"));
+}
+
+#[test]
+fn test_annotation_on_public_component() {
+    let source = r#"public component Button {
+    render button {}
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let mutation = Mutation::SetComponentAnnotation {
+        mutation_id: "public".to_string(),
+        component_name: "Button".to_string(),
+        annotation_name: "frame".to_string(),
+        params_str: "x: 50, y: 50".to_string(),
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("@frame"));
+    assert!(text.contains("public component Button"));
+}
+
+// ==================== Render Frame Mutation Tests ====================
+
+#[test]
+fn test_set_frame_bounds_on_render() {
+    // Test SetFrameBounds mutation on a top-level render element
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {
+    text "Hello"
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Find the frame ID
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Frame)
+                .unwrap_or(false)
+        })
+        .expect("Should find a frame")
+        .clone();
+
+    let mutation = Mutation::SetFrameBounds {
+        mutation_id: "render-frame-1".to_string(),
+        frame_id,
+        x: 200.0,
+        y: 150.0,
+        width: 400.0,
+        height: 300.0,
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 200"));
+    assert!(text.contains("y: 150"));
+    assert!(text.contains("width: 400"));
+    assert!(text.contains("height: 300"));
+    assert!(text.contains("div {"));
+}
+
+#[test]
+fn test_set_frame_bounds_on_render_text() {
+    // Test SetFrameBounds mutation on a top-level text render
+    let source = r#"/**
+ * @frame(x: 10, y: 20, width: 50, height: 30)
+ */
+text "Hello world""#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Frame)
+                .unwrap_or(false)
+        })
+        .expect("Should find a frame")
+        .clone();
+
+    let mutation = Mutation::SetFrameBounds {
+        mutation_id: "render-text-1".to_string(),
+        frame_id,
+        x: 100.0,
+        y: 200.0,
+        width: 300.0,
+        height: 150.0,
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 100"));
+    assert!(text.contains("y: 200"));
+    assert!(text.contains("text \"Hello world\""));
+}
+
+#[test]
+fn test_set_frame_bounds_mixed_components_and_renders() {
+    // Test mutations on both component and render frames in same document
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+component Card {
+    render div { text "Card" }
+}
+
+/**
+ * @frame(x: 200, y: 0, width: 100, height: 100)
+ */
+div {
+    text "Standalone"
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Get all frame IDs
+    let frame_ids: Vec<_> = handler
+        .index()
+        .all_node_ids()
+        .filter(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Frame)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+
+    assert_eq!(frame_ids.len(), 2, "Should have 2 frames");
+
+    // Mutate first frame
+    let mutation1 = Mutation::SetFrameBounds {
+        mutation_id: "mixed-1".to_string(),
+        frame_id: frame_ids[0].clone(),
+        x: 10.0,
+        y: 20.0,
+        width: 110.0,
+        height: 120.0,
+    };
+    let result = handler.apply_mutation(&mutation1, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    // Mutate second frame
+    let mutation2 = Mutation::SetFrameBounds {
+        mutation_id: "mixed-2".to_string(),
+        frame_id: frame_ids[1].clone(),
+        x: 300.0,
+        y: 400.0,
+        width: 500.0,
+        height: 600.0,
+    };
+    let result = handler.apply_mutation(&mutation2, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    // Both frames should be updated
+    assert!(text.contains("x: 10") || text.contains("x: 300"));
+    assert!(text.contains("component Card"));
+    assert!(text.contains("text \"Standalone\""));
+}
+
+#[test]
+fn test_render_frame_rapid_updates() {
+    // Test rapid sequential updates to a render frame
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    // Perform 10 rapid updates
+    for i in 0..10 {
+        let frame_id = handler
+            .index()
+            .all_node_ids()
+            .find(|id| {
+                handler
+                    .index()
+                    .get_node(id)
+                    .map(|n| n.node_type == NodeType::Frame)
+                    .unwrap_or(false)
+            })
+            .unwrap()
+            .clone();
+
+        let mutation = Mutation::SetFrameBounds {
+            mutation_id: format!("rapid-{}", i),
+            frame_id,
+            x: (i * 10) as f32,
+            y: (i * 20) as f32,
+            width: 100.0 + i as f32,
+            height: 100.0 + i as f32,
+        };
+
+        let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+        assert!(
+            matches!(result, Ok(MutationResult::Applied { .. })),
+            "Mutation {} should succeed",
+            i
+        );
+    }
+
+    // Final state should have last values
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: 90"));
+    assert!(text.contains("y: 180"));
+}
+
+#[test]
+fn test_render_frame_preserves_description() {
+    // Test that updating a render frame preserves the doc comment description
+    let source = r#"/**
+ * This is a hero section for the landing page.
+ * It should be prominent and eye-catching.
+ * @frame(x: 0, y: 0, width: 1200, height: 600)
+ */
+div {
+    text "Hero"
+}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Frame)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetFrameBounds {
+        mutation_id: "preserve-desc".to_string(),
+        frame_id,
+        x: 100.0,
+        y: 50.0,
+        width: 1000.0,
+        height: 500.0,
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    // Description should be preserved
+    assert!(text.contains("hero section"));
+    assert!(text.contains("eye-catching"));
+    // Frame should be updated
+    assert!(text.contains("x: 100"));
+    assert!(text.contains("y: 50"));
+}
+
+#[test]
+fn test_render_frame_negative_coordinates() {
+    let source = r#"/**
+ * @frame(x: 0, y: 0, width: 100, height: 100)
+ */
+div {}"#;
+    let mut crdt_doc = create_crdt_doc(source);
+    let mut handler = MutationHandler::new();
+    handler.rebuild_index(crdt_doc.doc(), source).unwrap();
+
+    let frame_id = handler
+        .index()
+        .all_node_ids()
+        .find(|id| {
+            handler
+                .index()
+                .get_node(id)
+                .map(|n| n.node_type == NodeType::Frame)
+                .unwrap_or(false)
+        })
+        .unwrap()
+        .clone();
+
+    let mutation = Mutation::SetFrameBounds {
+        mutation_id: "negative".to_string(),
+        frame_id,
+        x: -100.0,
+        y: -50.0,
+        width: 200.0,
+        height: 150.0,
+    };
+
+    let result = handler.apply_mutation(&mutation, &mut crdt_doc);
+    assert!(matches!(result, Ok(MutationResult::Applied { .. })));
+
+    let text = get_text(&crdt_doc);
+    assert!(text.contains("x: -100"));
+    assert!(text.contains("y: -50"));
+}

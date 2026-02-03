@@ -207,6 +207,12 @@ export const reducer: Reducer<DesignerEvent, DesignerState> = (event, state) => 
       return { ...state, frames };
     }
 
+    case "frame/moveEnd": {
+      // No state change needed - position already updated by frame/moved events
+      // Engine handles sending mutation to server
+      return state;
+    }
+
     case "document/loaded": {
       console.log("[reducer] document/loaded frames:", event.payload.frames.length, "canvasSize:", state.canvas.size, "centeredInitial:", state.centeredInitial, "pending:", state.pendingMutations.size);
 

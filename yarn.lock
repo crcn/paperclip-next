@@ -970,22 +970,22 @@ __metadata:
 
 "@paperclip-lang/wasm@file:../wasm/pkg-node::locator=%40paperclip-lang%2Fwebpack-loader%40workspace%3Apackages%2Floader-webpack":
   version: 0.1.0
-  resolution: "@paperclip-lang/wasm@file:../wasm/pkg-node#../wasm/pkg-node::hash=7d1a40&locator=%40paperclip-lang%2Fwebpack-loader%40workspace%3Apackages%2Floader-webpack"
-  checksum: 10c0/9e8be461550636c6fd46e9b4ef6cd6552b557cf3a387bffb2369cbb39dc8495dae4c951db226d5aa1b47c237e76bd51e523baaaa25257fd75eee43231de92aae
+  resolution: "@paperclip-lang/wasm@file:../wasm/pkg-node#../wasm/pkg-node::hash=b6d575&locator=%40paperclip-lang%2Fwebpack-loader%40workspace%3Apackages%2Floader-webpack"
+  checksum: 10c0/daf225dc83ee2a653371de99b81883cd370ee1b3791eee01da4da84bb7a9cea5d370202b2d8077356f88e9398af64e73de96f898eaa654a056f70a7faae1052d
   languageName: node
   linkType: hard
 
 "@paperclip-lang/wasm@file:../wasm/pkg::locator=%40paperclip-lang%2Frollup-plugin%40workspace%3Apackages%2Fplugin-rollup":
   version: 0.1.0
-  resolution: "@paperclip-lang/wasm@file:../wasm/pkg#../wasm/pkg::hash=0e8fea&locator=%40paperclip-lang%2Frollup-plugin%40workspace%3Apackages%2Fplugin-rollup"
-  checksum: 10c0/3dc9fdabd5bd7b072efbd9117b275c883a0421f84265e0098cffac78fab7cd886628de0520b82cdc5384b8bee54670d0b857a6a30fd19545c81a2a22e425a363
+  resolution: "@paperclip-lang/wasm@file:../wasm/pkg#../wasm/pkg::hash=e1d2a8&locator=%40paperclip-lang%2Frollup-plugin%40workspace%3Apackages%2Fplugin-rollup"
+  checksum: 10c0/75947e68634936bf52acc17af144aa6b1b5523e56f2961f180d53b5ce881005686de85b7c865b06d3fea8e4b2936c7266af730a42eb836f236ce06f8224c0781
   languageName: node
   linkType: hard
 
 "@paperclip-lang/wasm@file:../wasm/pkg::locator=%40paperclip-lang%2Fvite-plugin%40workspace%3Apackages%2Fplugin-vite":
   version: 0.1.0
-  resolution: "@paperclip-lang/wasm@file:../wasm/pkg#../wasm/pkg::hash=0e8fea&locator=%40paperclip-lang%2Fvite-plugin%40workspace%3Apackages%2Fplugin-vite"
-  checksum: 10c0/3dc9fdabd5bd7b072efbd9117b275c883a0421f84265e0098cffac78fab7cd886628de0520b82cdc5384b8bee54670d0b857a6a30fd19545c81a2a22e425a363
+  resolution: "@paperclip-lang/wasm@file:../wasm/pkg#../wasm/pkg::hash=e1d2a8&locator=%40paperclip-lang%2Fvite-plugin%40workspace%3Apackages%2Fplugin-vite"
+  checksum: 10c0/75947e68634936bf52acc17af144aa6b1b5523e56f2961f180d53b5ce881005686de85b7c865b06d3fea8e4b2936c7266af730a42eb836f236ce06f8224c0781
   languageName: node
   linkType: hard
 

@@ -1,4 +1,4 @@
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 import { VDocPatch } from "./patches";
 export declare const protobufPackage = "paperclip.workspace";
 /** Node type enum */
@@ -163,6 +163,92 @@ export interface SourceSpan {
     startCol: number;
     endLine: number;
     endCol: number;
+}
+/**
+ * Bidirectional CRDT sync stream
+ * Client sends updates, server broadcasts to other clients and sends VDOM patches
+ */
+export interface CrdtSyncRequest {
+    clientId: string;
+    filePath: string;
+    /** Initial sync - join session and get current state */
+    join?: CrdtJoin | undefined;
+    /** Send local CRDT update */
+    update?: CrdtUpdate | undefined;
+    /** Acknowledge received update (for flow control) */
+    ack?: CrdtAck | undefined;
+}
+/** Join a CRDT editing session */
+export interface CrdtJoin {
+    /** Client's current state vector (empty for new session) */
+    stateVector: Uint8Array;
+}
+/** CRDT update (Yjs-compatible binary format) */
+export interface CrdtUpdate {
+    /** Delta update (encoded via Y.encodeStateAsUpdate) */
+    update: Uint8Array;
+    /** Client's state vector after this update */
+    stateVector: Uint8Array;
+    /** Origin of the change (for filtering) */
+    origin: string;
+}
+/** Acknowledge receipt of an update */
+export interface CrdtAck {
+    sequence: number;
+}
+/** Server response in CRDT sync stream */
+export interface CrdtSyncResponse {
+    /** Welcome message with current document state */
+    welcome?: CrdtWelcome | undefined;
+    /** Remote CRDT update from another client */
+    remoteUpdate?: CrdtUpdate | undefined;
+    /** VDOM patch after successful parse */
+    vdomPatch?: CrdtVdomPatch | undefined;
+    /** CSSOM update after successful parse */
+    cssomPatch?: CrdtCssomPatch | undefined;
+    /** Parse error (document still synced, just invalid) */
+    parseError?: CrdtParseError | undefined;
+}
+/** Welcome message when joining a session */
+export interface CrdtWelcome {
+    /** Full document state (for new clients) */
+    documentState: Uint8Array;
+    /** Current state vector */
+    stateVector: Uint8Array;
+    /** Current VDOM (if document is valid) */
+    initialVdom?: VDocPatch | undefined;
+    /** Session info */
+    version: number;
+    clientCount: number;
+}
+/** VDOM patch from server after parse */
+export interface CrdtVdomPatch {
+    patches: VDocPatch[];
+    version: number;
+    /** Which client triggered this update (for origin filtering) */
+    originClientId: string;
+}
+/** CSSOM update from server */
+export interface CrdtCssomPatch {
+    rules: CssRule[];
+    version: number;
+}
+/** CSS rule for CSSOM */
+export interface CssRule {
+    selector: string;
+    properties: {
+        [key: string]: string;
+    };
+}
+export interface CssRule_PropertiesEntry {
+    key: string;
+    value: string;
+}
+/** Parse error (document synced but invalid) */
+export interface CrdtParseError {
+    error: string;
+    line: number;
+    column: number;
 }
 /** Request to stream buffer content directly (no file I/O) */
 export interface BufferRequest {
@@ -365,6 +451,94 @@ export declare const SourceSpan: {
     toJSON(message: SourceSpan): unknown;
     create<I extends Exact<DeepPartial<SourceSpan>, I>>(base?: I): SourceSpan;
     fromPartial<I extends Exact<DeepPartial<SourceSpan>, I>>(object: I): SourceSpan;
+};
+export declare const CrdtSyncRequest: {
+    encode(message: CrdtSyncRequest, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtSyncRequest;
+    fromJSON(object: any): CrdtSyncRequest;
+    toJSON(message: CrdtSyncRequest): unknown;
+    create<I extends Exact<DeepPartial<CrdtSyncRequest>, I>>(base?: I): CrdtSyncRequest;
+    fromPartial<I extends Exact<DeepPartial<CrdtSyncRequest>, I>>(object: I): CrdtSyncRequest;
+};
+export declare const CrdtJoin: {
+    encode(message: CrdtJoin, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtJoin;
+    fromJSON(object: any): CrdtJoin;
+    toJSON(message: CrdtJoin): unknown;
+    create<I extends Exact<DeepPartial<CrdtJoin>, I>>(base?: I): CrdtJoin;
+    fromPartial<I extends Exact<DeepPartial<CrdtJoin>, I>>(object: I): CrdtJoin;
+};
+export declare const CrdtUpdate: {
+    encode(message: CrdtUpdate, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtUpdate;
+    fromJSON(object: any): CrdtUpdate;
+    toJSON(message: CrdtUpdate): unknown;
+    create<I extends Exact<DeepPartial<CrdtUpdate>, I>>(base?: I): CrdtUpdate;
+    fromPartial<I extends Exact<DeepPartial<CrdtUpdate>, I>>(object: I): CrdtUpdate;
+};
+export declare const CrdtAck: {
+    encode(message: CrdtAck, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtAck;
+    fromJSON(object: any): CrdtAck;
+    toJSON(message: CrdtAck): unknown;
+    create<I extends Exact<DeepPartial<CrdtAck>, I>>(base?: I): CrdtAck;
+    fromPartial<I extends Exact<DeepPartial<CrdtAck>, I>>(object: I): CrdtAck;
+};
+export declare const CrdtSyncResponse: {
+    encode(message: CrdtSyncResponse, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtSyncResponse;
+    fromJSON(object: any): CrdtSyncResponse;
+    toJSON(message: CrdtSyncResponse): unknown;
+    create<I extends Exact<DeepPartial<CrdtSyncResponse>, I>>(base?: I): CrdtSyncResponse;
+    fromPartial<I extends Exact<DeepPartial<CrdtSyncResponse>, I>>(object: I): CrdtSyncResponse;
+};
+export declare const CrdtWelcome: {
+    encode(message: CrdtWelcome, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtWelcome;
+    fromJSON(object: any): CrdtWelcome;
+    toJSON(message: CrdtWelcome): unknown;
+    create<I extends Exact<DeepPartial<CrdtWelcome>, I>>(base?: I): CrdtWelcome;
+    fromPartial<I extends Exact<DeepPartial<CrdtWelcome>, I>>(object: I): CrdtWelcome;
+};
+export declare const CrdtVdomPatch: {
+    encode(message: CrdtVdomPatch, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtVdomPatch;
+    fromJSON(object: any): CrdtVdomPatch;
+    toJSON(message: CrdtVdomPatch): unknown;
+    create<I extends Exact<DeepPartial<CrdtVdomPatch>, I>>(base?: I): CrdtVdomPatch;
+    fromPartial<I extends Exact<DeepPartial<CrdtVdomPatch>, I>>(object: I): CrdtVdomPatch;
+};
+export declare const CrdtCssomPatch: {
+    encode(message: CrdtCssomPatch, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtCssomPatch;
+    fromJSON(object: any): CrdtCssomPatch;
+    toJSON(message: CrdtCssomPatch): unknown;
+    create<I extends Exact<DeepPartial<CrdtCssomPatch>, I>>(base?: I): CrdtCssomPatch;
+    fromPartial<I extends Exact<DeepPartial<CrdtCssomPatch>, I>>(object: I): CrdtCssomPatch;
+};
+export declare const CssRule: {
+    encode(message: CssRule, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CssRule;
+    fromJSON(object: any): CssRule;
+    toJSON(message: CssRule): unknown;
+    create<I extends Exact<DeepPartial<CssRule>, I>>(base?: I): CssRule;
+    fromPartial<I extends Exact<DeepPartial<CssRule>, I>>(object: I): CssRule;
+};
+export declare const CssRule_PropertiesEntry: {
+    encode(message: CssRule_PropertiesEntry, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CssRule_PropertiesEntry;
+    fromJSON(object: any): CssRule_PropertiesEntry;
+    toJSON(message: CssRule_PropertiesEntry): unknown;
+    create<I extends Exact<DeepPartial<CssRule_PropertiesEntry>, I>>(base?: I): CssRule_PropertiesEntry;
+    fromPartial<I extends Exact<DeepPartial<CssRule_PropertiesEntry>, I>>(object: I): CssRule_PropertiesEntry;
+};
+export declare const CrdtParseError: {
+    encode(message: CrdtParseError, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number): CrdtParseError;
+    fromJSON(object: any): CrdtParseError;
+    toJSON(message: CrdtParseError): unknown;
+    create<I extends Exact<DeepPartial<CrdtParseError>, I>>(base?: I): CrdtParseError;
+    fromPartial<I extends Exact<DeepPartial<CrdtParseError>, I>>(object: I): CrdtParseError;
 };
 export declare const BufferRequest: {
     encode(message: BufferRequest, writer?: _m0.Writer): _m0.Writer;

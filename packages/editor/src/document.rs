@@ -147,6 +147,7 @@ impl Document {
         Ok(VirtualDomDocument {
             nodes: vec![],
             styles: vec![],
+            components: vec![],
         })
     }
 

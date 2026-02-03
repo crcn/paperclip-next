@@ -1,6 +1,47 @@
 syntax = "proto3";
 package paperclip.vdom;
 
+// ============================================================================
+// Generic Value Type (JSON-like, for flexible metadata)
+// ============================================================================
+
+message Value {
+  oneof kind {
+    NullValue null_value = 1;
+    double number_value = 2;
+    string string_value = 3;
+    bool bool_value = 4;
+    ObjectValue object_value = 5;
+    ListValue list_value = 6;
+  }
+}
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+message ObjectValue {
+  map<string, Value> fields = 1;
+}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+// ============================================================================
+// Source Location
+// ============================================================================
+
+message Span {
+  uint32 start = 1;
+  uint32 end = 2;
+  string id = 3;
+}
+
+// ============================================================================
+// VDOM Node Types
+// ============================================================================
+
 // Virtual DOM node (discriminated union)
 message VNode {
   oneof node_type {
@@ -12,11 +53,6 @@ message VNode {
   }
 }
 
-message ErrorNode {
-  string message = 1;
-  string semantic_id = 2;
-}
-
 message ElementNode {
   string tag = 1;
   map<string, string> attributes = 2;
@@ -25,6 +61,7 @@ message ElementNode {
   string semantic_id = 5;  // Stable identity for diffing
   optional string key = 6;  // Explicit key for repeat items
   optional string source_id = 7;  // Maps back to AST span.id for mutations
+  optional Value metadata = 8;  // Flexible metadata (frame info, annotations, etc.)
 }
 
 message TextNode {
@@ -42,12 +79,60 @@ message ComponentNode {
   string semantic_id = 4;  // Stable identity for diffing
 }
 
-message VDocument {
-  repeated VNode nodes = 1;
-  repeated CssRule styles = 2;
+message ErrorNode {
+  string message = 1;
+  string semantic_id = 2;
+  optional Span span = 3;  // Source location for debugging
 }
+
+// ============================================================================
+// CSS Rules
+// ============================================================================
 
 message CssRule {
   string selector = 1;
   map<string, string> properties = 2;
+  optional string media_query = 3;
+  optional Value metadata = 4;  // Flexible metadata (source info, annotations, etc.)
+}
+
+// Virtual CSSOM for CSS-specific operations
+message CssDocument {
+  repeated CssRule rules = 1;
+  optional Value metadata = 2;  // Document-level CSS metadata (variables, tokens, etc.)
+}
+
+// ============================================================================
+// Component Metadata
+// ============================================================================
+
+message ComponentMetadata {
+  string name = 1;
+  optional string description = 2;
+  optional FrameMetadata frame = 3;
+  repeated AnnotationMetadata annotations = 4;
+  optional string source_id = 5;
+}
+
+message FrameMetadata {
+  double x = 1;
+  double y = 2;
+  optional double width = 3;
+  optional double height = 4;
+}
+
+message AnnotationMetadata {
+  string name = 1;
+  map<string, Value> params = 2;
+}
+
+// ============================================================================
+// Document
+// ============================================================================
+
+message VDocument {
+  repeated VNode nodes = 1;
+  repeated CssRule styles = 2;
+  repeated ComponentMetadata components = 3;  // Component metadata for designer
+  optional Value metadata = 4;  // Document-level metadata
 }

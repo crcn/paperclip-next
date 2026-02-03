@@ -16,7 +16,7 @@ export interface CanvasProps {
 }
 
 export function Canvas({ className, style }: CanvasProps) {
-  const { ref, transform, onMouseMove } = useCanvas();
+  const { ref, transform, isPanning, isSpaceHeld, onMouseMove, onMouseDown } = useCanvas();
 
   const innerStyle: React.CSSProperties = {
     transform: `translateX(${transform.x}px) translateY(${transform.y}px) scale(${transform.z}) translateZ(0)`,
@@ -26,6 +26,9 @@ export function Canvas({ className, style }: CanvasProps) {
     left: 0,
     willChange: "transform",
   };
+
+  // Show grab cursor when space held, grabbing when actively panning
+  const cursor = isPanning ? "grabbing" : isSpaceHeld ? "grab" : undefined;
 
   return (
     <div
@@ -37,9 +40,11 @@ export function Canvas({ className, style }: CanvasProps) {
         width: "100%",
         height: "100%",
         backgroundColor: "#1a1a1a",
+        cursor,
         ...style,
       }}
       onMouseMove={onMouseMove}
+      onMouseDown={onMouseDown}
     >
       <div style={innerStyle}>
         <Frames />
@@ -72,13 +77,80 @@ function normalizeWheel(event: WheelEvent): { pixelX: number; pixelY: number } {
 interface UseCanvasResult {
   ref: React.RefObject<HTMLDivElement>;
   transform: Transform;
+  isPanning: boolean;
+  isSpaceHeld: boolean;
   onMouseMove: (event: React.MouseEvent) => void;
+  onMouseDown: (event: React.MouseEvent) => void;
 }
 
 function useCanvas(): UseCanvasResult {
   const dispatch = useDispatch<DesignerEvent>();
   const ref = useRef<HTMLDivElement>(null);
   const transform = DesignerMachine.useSelector((s) => s.canvas.transform);
+
+  // Pan drag state
+  const [isPanning, setIsPanning] = useState(false);
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Track space key for pan mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        setIsSpaceHeld(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        setIsSpaceHeld(false);
+        setIsPanning(false);
+        panStartRef.current = null;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Handle pan drag (space+drag or middle mouse)
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!panStartRef.current) return;
+
+      const deltaX = panStartRef.current.x - e.clientX;
+      const deltaY = panStartRef.current.y - e.clientY;
+
+      dispatch({
+        type: "canvas/panned",
+        payload: {
+          delta: { x: deltaX, y: deltaY },
+          metaKey: false,
+          ctrlKey: false,
+        },
+      });
+
+      panStartRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseUp = () => {
+      setIsPanning(false);
+      panStartRef.current = null;
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isPanning, dispatch]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -132,6 +204,18 @@ function useCanvas(): UseCanvasResult {
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, [dispatch]);
 
+  const onMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      // Start pan on space+click or middle mouse button
+      if (isSpaceHeld || event.button === 1) {
+        event.preventDefault();
+        setIsPanning(true);
+        panStartRef.current = { x: event.clientX, y: event.clientY };
+      }
+    },
+    [isSpaceHeld]
+  );
+
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
       const rect = ref.current?.getBoundingClientRect();
@@ -148,5 +232,5 @@ function useCanvas(): UseCanvasResult {
     [dispatch]
   );
 
-  return { ref, transform, onMouseMove };
+  return { ref, transform, isPanning, isSpaceHeld, onMouseMove, onMouseDown };
 }

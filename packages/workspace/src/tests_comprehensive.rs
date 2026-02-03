@@ -7,8 +7,8 @@ use std::fs;
 mod workspace_comprehensive_tests {
     use super::*;
 
-    #[test]
-    fn test_workspace_server_creation() {
+    #[tokio::test]
+    async fn test_workspace_server_creation() {
         let temp_dir = std::env::temp_dir().join("paperclip_workspace_test");
         fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
@@ -112,8 +112,8 @@ mod workspace_comprehensive_tests {
         fs::remove_dir_all(&temp_dir).ok();
     }
 
-    #[test]
-    fn test_process_valid_pc_file() {
+    #[tokio::test]
+    async fn test_process_valid_pc_file() {
         let temp_dir = std::env::temp_dir().join("paperclip_process_valid");
         fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 

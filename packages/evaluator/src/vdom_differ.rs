@@ -370,6 +370,8 @@ fn diff_style_rules(old: &[crate::vdom::CssRule], new: &[crate::vdom::CssRule]) 
                         rule: Some(proto_vdom::CssRule {
                             selector: new_rule.selector.clone(),
                             properties: new_rule.properties.clone(),
+                            media_query: new_rule.media_query.clone(),
+                            metadata: None,
                         }),
                     })),
                 });
@@ -382,6 +384,8 @@ fn diff_style_rules(old: &[crate::vdom::CssRule], new: &[crate::vdom::CssRule]) 
                     rule: Some(proto_vdom::CssRule {
                         selector: new_rule.selector.clone(),
                         properties: new_rule.properties.clone(),
+                        media_query: new_rule.media_query.clone(),
+                        metadata: None,
                     }),
                 })),
             });
@@ -412,6 +416,7 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                     semantic_id: semantic_id.to_selector(),
                     source_id: source_id.clone(),
                     key: key.clone(),
+                    metadata: None,
                 },
             )),
         },
@@ -427,13 +432,18 @@ fn convert_vnode_to_proto(vnode: &VNode) -> proto_vdom::VNode {
                 },
             )),
         },
-        VNode::Error { message, semantic_id, .. } => {
+        VNode::Error { message, semantic_id, span } => {
             // Render errors using ErrorNode type
             proto_vdom::VNode {
                 node_type: Some(proto_vdom::v_node::NodeType::Error(
                     proto_vdom::ErrorNode {
                         message: message.clone(),
                         semantic_id: semantic_id.to_selector(),
+                        span: span.as_ref().map(|s| proto_vdom::Span {
+                            start: s.start as u32,
+                            end: s.end as u32,
+                            id: s.id.clone(),
+                        }),
                     },
                 )),
             }
@@ -448,12 +458,12 @@ mod tests {
 
     #[test]
     fn test_diff_create_node() {
-        let old = VirtualDomDocument {
+        let old = VirtualDomDocument { components: vec![],
             nodes: vec![],
             styles: vec![],
         };
 
-        let new = VirtualDomDocument {
+        let new = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: HashMap::new(),
@@ -479,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_diff_remove_node() {
-        let old = VirtualDomDocument {
+        let old = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: HashMap::new(),
@@ -492,7 +502,7 @@ mod tests {
             styles: vec![],
         };
 
-        let new = VirtualDomDocument {
+        let new = VirtualDomDocument { components: vec![],
             nodes: vec![],
             styles: vec![],
         };
@@ -510,14 +520,14 @@ mod tests {
 
     #[test]
     fn test_diff_update_text() {
-        let old = VirtualDomDocument {
+        let old = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Text {
                 content: "old".to_string(),
             }],
             styles: vec![],
         };
 
-        let new = VirtualDomDocument {
+        let new = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Text {
                 content: "new".to_string(),
             }],
@@ -554,7 +564,7 @@ mod tests {
         }]);
 
         // Old: [elem1, elem2]
-        let old = VirtualDomDocument {
+        let old = VirtualDomDocument { components: vec![],
             nodes: vec![
                 VNode::Element {
                     tag: "div".to_string(),
@@ -587,7 +597,7 @@ mod tests {
         };
 
         // New: [elem2, elem1] - reordered!
-        let new = VirtualDomDocument {
+        let new = VirtualDomDocument { components: vec![],
             nodes: vec![
                 VNode::Element {
                     tag: "div".to_string(),
@@ -638,7 +648,7 @@ mod tests {
         let mut new_attrs = HashMap::new();
         new_attrs.insert("class".to_string(), "new-class".to_string());
 
-        let old = VirtualDomDocument {
+        let old = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: old_attrs,
@@ -651,7 +661,7 @@ mod tests {
             styles: vec![],
         };
 
-        let new = VirtualDomDocument {
+        let new = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: new_attrs,

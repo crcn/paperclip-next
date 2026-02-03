@@ -27,7 +27,7 @@
 //! - Concurrent moves to deleted nodes fail
 //! - Concurrent edits of deleted nodes are no-ops
 
-use paperclip_parser::ast::{Document, Element};
+use paperclip_parser::ast::{Annotation, AnnotationValue, Document, DocComment, Element, Span};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -73,6 +73,25 @@ pub enum Mutation {
 
     /// Remove an attribute (for undo)
     RemoveAttribute { node_id: String, name: String },
+
+    /// Set or update a component annotation (e.g., @frame, @meta, @custom)
+    SetComponentAnnotation {
+        component_name: String,
+        annotation_name: String,
+        params: Vec<(String, AnnotationValue)>,
+    },
+
+    /// Remove a component annotation
+    RemoveComponentAnnotation {
+        component_name: String,
+        annotation_name: String,
+    },
+
+    /// Set the component description (text portion of doc comment)
+    SetComponentDescription {
+        component_name: String,
+        description: String,
+    },
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -97,6 +116,12 @@ pub enum MutationError {
 
     #[error("Node is not text")]
     NotText,
+
+    #[error("Component not found: {0}")]
+    ComponentNotFound(String),
+
+    #[error("Annotation not found: {0}")]
+    AnnotationNotFound(String),
 }
 
 impl Mutation {
@@ -144,6 +169,22 @@ impl Mutation {
             Mutation::RemoveAttribute { node_id, name } => {
                 Self::apply_remove_attribute(doc, node_id, name)
             }
+
+            Mutation::SetComponentAnnotation {
+                component_name,
+                annotation_name,
+                params,
+            } => Self::apply_set_component_annotation(doc, component_name, annotation_name, params),
+
+            Mutation::RemoveComponentAnnotation {
+                component_name,
+                annotation_name,
+            } => Self::apply_remove_component_annotation(doc, component_name, annotation_name),
+
+            Mutation::SetComponentDescription {
+                component_name,
+                description,
+            } => Self::apply_set_component_description(doc, component_name, description),
         }
     }
 
@@ -330,6 +371,141 @@ impl Mutation {
             }
             _ => Err(MutationError::NotAnElement),
         }
+    }
+
+    /// Set or update a component annotation
+    fn apply_set_component_annotation(
+        doc: &mut Document,
+        component_name: &str,
+        annotation_name: &str,
+        params: &[(String, AnnotationValue)],
+    ) -> Result<(), MutationError> {
+        let component = doc
+            .components
+            .iter_mut()
+            .find(|c| c.name == component_name)
+            .ok_or_else(|| MutationError::ComponentNotFound(component_name.to_string()))?;
+
+        // Ensure doc_comment exists
+        if component.doc_comment.is_none() {
+            component.doc_comment = Some(DocComment {
+                description: String::new(),
+                annotations: Vec::new(),
+                span: component.span.clone(),
+            });
+        }
+
+        let doc_comment = component.doc_comment.as_mut().unwrap();
+
+        // Find existing annotation or create new one
+        if let Some(existing) = doc_comment
+            .annotations
+            .iter_mut()
+            .find(|a| a.name == annotation_name)
+        {
+            existing.params = params.to_vec();
+        } else {
+            doc_comment.annotations.push(Annotation {
+                name: annotation_name.to_string(),
+                params: params.to_vec(),
+                span: component.span.clone(),
+            });
+        }
+
+        // Update frame field for backward compat if this is a @frame annotation
+        if annotation_name == "frame" {
+            component.frame = Self::extract_frame_from_params(params, &component.span);
+        }
+
+        Ok(())
+    }
+
+    /// Remove a component annotation
+    fn apply_remove_component_annotation(
+        doc: &mut Document,
+        component_name: &str,
+        annotation_name: &str,
+    ) -> Result<(), MutationError> {
+        let component = doc
+            .components
+            .iter_mut()
+            .find(|c| c.name == component_name)
+            .ok_or_else(|| MutationError::ComponentNotFound(component_name.to_string()))?;
+
+        if let Some(doc_comment) = &mut component.doc_comment {
+            let original_len = doc_comment.annotations.len();
+            doc_comment
+                .annotations
+                .retain(|a| a.name != annotation_name);
+
+            if doc_comment.annotations.len() == original_len {
+                return Err(MutationError::AnnotationNotFound(annotation_name.to_string()));
+            }
+
+            // Clear frame field for backward compat if this was @frame
+            if annotation_name == "frame" {
+                component.frame = None;
+            }
+        } else {
+            return Err(MutationError::AnnotationNotFound(annotation_name.to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Set the component description
+    fn apply_set_component_description(
+        doc: &mut Document,
+        component_name: &str,
+        description: &str,
+    ) -> Result<(), MutationError> {
+        let component = doc
+            .components
+            .iter_mut()
+            .find(|c| c.name == component_name)
+            .ok_or_else(|| MutationError::ComponentNotFound(component_name.to_string()))?;
+
+        // Ensure doc_comment exists
+        if component.doc_comment.is_none() {
+            component.doc_comment = Some(DocComment {
+                description: String::new(),
+                annotations: Vec::new(),
+                span: component.span.clone(),
+            });
+        }
+
+        component.doc_comment.as_mut().unwrap().description = description.to_string();
+
+        Ok(())
+    }
+
+    /// Extract frame annotation from params
+    fn extract_frame_from_params(
+        params: &[(String, AnnotationValue)],
+        span: &Span,
+    ) -> Option<paperclip_parser::ast::FrameAnnotation> {
+        let get_num = |key: &str| -> Option<f64> {
+            params.iter().find(|(k, _)| k == key).and_then(|(_, v)| {
+                if let AnnotationValue::Number(n) = v {
+                    Some(*n)
+                } else {
+                    None
+                }
+            })
+        };
+
+        let x = get_num("x")?;
+        let y = get_num("y")?;
+        let width = get_num("width");
+        let height = get_num("height");
+
+        Some(paperclip_parser::ast::FrameAnnotation {
+            x,
+            y,
+            width,
+            height,
+            span: span.clone(),
+        })
     }
 
     /// Remove an element from its parent and return it
@@ -597,6 +773,91 @@ impl Mutation {
                     name: name.clone(),
                 })
             }
+
+            Mutation::SetComponentAnnotation {
+                component_name,
+                annotation_name,
+                params,
+            } => {
+                // Find component and check if annotation exists
+                let component = doc
+                    .components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+
+                if let Some(doc_comment) = &component.doc_comment {
+                    if let Some(existing) = doc_comment
+                        .annotations
+                        .iter()
+                        .find(|a| a.name == *annotation_name)
+                    {
+                        // Annotation exists, restore old params
+                        return Ok(Mutation::SetComponentAnnotation {
+                            component_name: component_name.clone(),
+                            annotation_name: annotation_name.clone(),
+                            params: existing.params.clone(),
+                        });
+                    }
+                }
+
+                // Annotation doesn't exist, inverse is remove
+                Ok(Mutation::RemoveComponentAnnotation {
+                    component_name: component_name.clone(),
+                    annotation_name: annotation_name.clone(),
+                })
+            }
+
+            Mutation::RemoveComponentAnnotation {
+                component_name,
+                annotation_name,
+            } => {
+                // Capture current annotation params
+                let component = doc
+                    .components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+
+                if let Some(doc_comment) = &component.doc_comment {
+                    if let Some(annotation) = doc_comment
+                        .annotations
+                        .iter()
+                        .find(|a| a.name == *annotation_name)
+                    {
+                        return Ok(Mutation::SetComponentAnnotation {
+                            component_name: component_name.clone(),
+                            annotation_name: annotation_name.clone(),
+                            params: annotation.params.clone(),
+                        });
+                    }
+                }
+
+                Err(MutationError::AnnotationNotFound(annotation_name.clone()))
+            }
+
+            Mutation::SetComponentDescription {
+                component_name,
+                description,
+            } => {
+                // Capture current description
+                let component = doc
+                    .components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+
+                let old_description = component
+                    .doc_comment
+                    .as_ref()
+                    .map(|dc| dc.description.clone())
+                    .unwrap_or_default();
+
+                Ok(Mutation::SetComponentDescription {
+                    component_name: component_name.clone(),
+                    description: old_description,
+                })
+            }
         }
     }
 
@@ -796,6 +1057,43 @@ impl Mutation {
                     _ => Err(MutationError::NotAnElement),
                 }
             }
+
+            Mutation::SetComponentAnnotation { component_name, .. } => {
+                doc.components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+                Ok(())
+            }
+
+            Mutation::RemoveComponentAnnotation {
+                component_name,
+                annotation_name,
+            } => {
+                let component = doc
+                    .components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+
+                // Check annotation exists
+                if let Some(doc_comment) = &component.doc_comment {
+                    if !doc_comment.annotations.iter().any(|a| a.name == *annotation_name) {
+                        return Err(MutationError::AnnotationNotFound(annotation_name.clone()));
+                    }
+                } else {
+                    return Err(MutationError::AnnotationNotFound(annotation_name.clone()));
+                }
+                Ok(())
+            }
+
+            Mutation::SetComponentDescription { component_name, .. } => {
+                doc.components
+                    .iter()
+                    .find(|c| c.name == *component_name)
+                    .ok_or_else(|| MutationError::ComponentNotFound(component_name.clone()))?;
+                Ok(())
+            }
         }
     }
 }
@@ -838,5 +1136,383 @@ mod tests {
         };
 
         assert!(mutation.validate(&doc).is_err());
+    }
+
+    // ==================== Annotation Mutation Tests ====================
+
+    #[test]
+    fn test_set_component_annotation_creates_new() {
+        let source = "component Card { render div {} }";
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![
+                ("x".to_string(), AnnotationValue::Number(100.0)),
+                ("y".to_string(), AnnotationValue::Number(200.0)),
+            ],
+        };
+
+        assert!(mutation.validate(&doc).is_ok());
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        // Verify annotation was added
+        let component = doc.components.iter().find(|c| c.name == "Card").unwrap();
+        assert!(component.doc_comment.is_some());
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        assert_eq!(doc_comment.annotations.len(), 1);
+        assert_eq!(doc_comment.annotations[0].name, "frame");
+
+        // Verify frame field was also set for backward compat
+        assert!(component.frame.is_some());
+        let frame = component.frame.as_ref().unwrap();
+        assert_eq!(frame.x, 100.0);
+        assert_eq!(frame.y, 200.0);
+    }
+
+    #[test]
+    fn test_set_component_annotation_updates_existing() {
+        let source = r#"/**
+ * @frame(x: 100, y: 200)
+ */
+component Card { render div {} }"#;
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        // Update frame annotation
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![
+                ("x".to_string(), AnnotationValue::Number(300.0)),
+                ("y".to_string(), AnnotationValue::Number(400.0)),
+                ("width".to_string(), AnnotationValue::Number(500.0)),
+            ],
+        };
+
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "Card").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+
+        // Should still have 1 annotation (updated, not duplicated)
+        assert_eq!(doc_comment.annotations.len(), 1);
+
+        // Verify params were updated
+        let frame_ann = &doc_comment.annotations[0];
+        assert_eq!(frame_ann.params.len(), 3);
+
+        let x = frame_ann.params.iter().find(|(k, _)| k == "x").unwrap();
+        assert_eq!(x.1, AnnotationValue::Number(300.0));
+    }
+
+    #[test]
+    fn test_set_custom_annotation() {
+        let source = "component Button { render button {} }";
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Button".to_string(),
+            annotation_name: "meta".to_string(),
+            params: vec![
+                ("category".to_string(), AnnotationValue::String("interactive".to_string())),
+                ("deprecated".to_string(), AnnotationValue::Boolean(false)),
+                ("priority".to_string(), AnnotationValue::Number(5.0)),
+            ],
+        };
+
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "Button").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        let meta_ann = doc_comment.annotations.iter().find(|a| a.name == "meta").unwrap();
+
+        let category = meta_ann.params.iter().find(|(k, _)| k == "category").unwrap();
+        assert_eq!(category.1, AnnotationValue::String("interactive".to_string()));
+
+        let deprecated = meta_ann.params.iter().find(|(k, _)| k == "deprecated").unwrap();
+        assert_eq!(deprecated.1, AnnotationValue::Boolean(false));
+    }
+
+    #[test]
+    fn test_remove_component_annotation() {
+        let source = r#"/**
+ * A card component
+ * @frame(x: 100, y: 200)
+ * @meta(category: cards)
+ */
+component Card { render div {} }"#;
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::RemoveComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+        };
+
+        assert!(mutation.validate(&doc).is_ok());
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "Card").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+
+        // Should have 1 annotation remaining
+        assert_eq!(doc_comment.annotations.len(), 1);
+        assert_eq!(doc_comment.annotations[0].name, "meta");
+
+        // frame field should be cleared
+        assert!(component.frame.is_none());
+    }
+
+    #[test]
+    fn test_remove_annotation_not_found() {
+        let source = "component Card { render div {} }";
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::RemoveComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "nonexistent".to_string(),
+        };
+
+        assert!(matches!(
+            mutation.validate(&doc),
+            Err(MutationError::AnnotationNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_set_component_description() {
+        let source = "component Card { render div {} }";
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentDescription {
+            component_name: "Card".to_string(),
+            description: "A beautiful card component for displaying content".to_string(),
+        };
+
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "Card").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        assert_eq!(
+            doc_comment.description,
+            "A beautiful card component for displaying content"
+        );
+    }
+
+    #[test]
+    fn test_annotation_mutation_serialization() {
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![
+                ("x".to_string(), AnnotationValue::Number(100.0)),
+                ("y".to_string(), AnnotationValue::Number(200.0)),
+                ("tags".to_string(), AnnotationValue::Array(vec![
+                    AnnotationValue::String("ui".to_string()),
+                    AnnotationValue::String("card".to_string()),
+                ])),
+            ],
+        };
+
+        let json = serde_json::to_string(&mutation).unwrap();
+        let deserialized: Mutation = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(mutation, deserialized);
+    }
+
+    #[test]
+    fn test_annotation_inverse_existing() {
+        let source = r#"/**
+ * @frame(x: 100, y: 200)
+ */
+component Card { render div {} }"#;
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![
+                ("x".to_string(), AnnotationValue::Number(500.0)),
+                ("y".to_string(), AnnotationValue::Number(600.0)),
+            ],
+        };
+
+        let inverse = mutation.to_inverse(&doc).unwrap();
+
+        // Inverse should restore old params
+        if let Mutation::SetComponentAnnotation { params, .. } = inverse {
+            let x = params.iter().find(|(k, _)| k == "x").unwrap();
+            assert_eq!(x.1, AnnotationValue::Number(100.0));
+            let y = params.iter().find(|(k, _)| k == "y").unwrap();
+            assert_eq!(y.1, AnnotationValue::Number(200.0));
+        } else {
+            panic!("Expected SetComponentAnnotation inverse");
+        }
+    }
+
+    #[test]
+    fn test_annotation_inverse_new() {
+        let source = "component Card { render div {} }";
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![("x".to_string(), AnnotationValue::Number(100.0))],
+        };
+
+        let inverse = mutation.to_inverse(&doc).unwrap();
+
+        // Inverse should be RemoveComponentAnnotation since annotation didn't exist
+        assert!(matches!(
+            inverse,
+            Mutation::RemoveComponentAnnotation {
+                annotation_name,
+                ..
+            } if annotation_name == "frame"
+        ));
+    }
+
+    #[test]
+    fn test_remove_annotation_inverse() {
+        let source = r#"/**
+ * @meta(priority: 5)
+ */
+component Card { render div {} }"#;
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::RemoveComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "meta".to_string(),
+        };
+
+        let inverse = mutation.to_inverse(&doc).unwrap();
+
+        // Inverse should restore the annotation
+        if let Mutation::SetComponentAnnotation {
+            annotation_name,
+            params,
+            ..
+        } = inverse
+        {
+            assert_eq!(annotation_name, "meta");
+            let priority = params.iter().find(|(k, _)| k == "priority").unwrap();
+            assert_eq!(priority.1, AnnotationValue::Number(5.0));
+        } else {
+            panic!("Expected SetComponentAnnotation inverse");
+        }
+    }
+
+    #[test]
+    fn test_description_inverse() {
+        let source = r#"/**
+ * Original description
+ */
+component Card { render div {} }"#;
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentDescription {
+            component_name: "Card".to_string(),
+            description: "New description".to_string(),
+        };
+
+        let inverse = mutation.to_inverse(&doc).unwrap();
+
+        if let Mutation::SetComponentDescription { description, .. } = inverse {
+            assert!(description.contains("Original description"));
+        } else {
+            panic!("Expected SetComponentDescription inverse");
+        }
+    }
+
+    #[test]
+    fn test_annotation_mutation_component_not_found() {
+        let source = "component Card { render div {} }";
+        let doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "NonExistent".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![],
+        };
+
+        assert!(matches!(
+            mutation.validate(&doc),
+            Err(MutationError::ComponentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_multiple_annotations_preserved() {
+        let source = r#"/**
+ * @frame(x: 100, y: 200)
+ * @meta(priority: 1)
+ * @custom(data: test)
+ */
+component Card { render div {} }"#;
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        // Update just the frame annotation
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "Card".to_string(),
+            annotation_name: "frame".to_string(),
+            params: vec![
+                ("x".to_string(), AnnotationValue::Number(999.0)),
+                ("y".to_string(), AnnotationValue::Number(888.0)),
+            ],
+        };
+
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "Card").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+
+        // All 3 annotations should still be present
+        assert_eq!(doc_comment.annotations.len(), 3);
+
+        // meta and custom should be unchanged
+        let meta = doc_comment.annotations.iter().find(|a| a.name == "meta").unwrap();
+        let priority = meta.params.iter().find(|(k, _)| k == "priority").unwrap();
+        assert_eq!(priority.1, AnnotationValue::Number(1.0));
+
+        let custom = doc_comment.annotations.iter().find(|a| a.name == "custom").unwrap();
+        let data = custom.params.iter().find(|(k, _)| k == "data").unwrap();
+        assert_eq!(data.1, AnnotationValue::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_annotation_with_array_values() {
+        let source = "component List { render ul {} }";
+        let mut doc = paperclip_parser::parse(source).unwrap();
+
+        let mutation = Mutation::SetComponentAnnotation {
+            component_name: "List".to_string(),
+            annotation_name: "config".to_string(),
+            params: vec![
+                ("items".to_string(), AnnotationValue::Array(vec![
+                    AnnotationValue::Number(1.0),
+                    AnnotationValue::Number(2.0),
+                    AnnotationValue::Number(3.0),
+                ])),
+                ("tags".to_string(), AnnotationValue::Array(vec![
+                    AnnotationValue::String("a".to_string()),
+                    AnnotationValue::String("b".to_string()),
+                ])),
+            ],
+        };
+
+        assert!(mutation.apply(&mut doc).is_ok());
+
+        let component = doc.components.iter().find(|c| c.name == "List").unwrap();
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        let config = doc_comment.annotations.iter().find(|a| a.name == "config").unwrap();
+
+        let items = config.params.iter().find(|(k, _)| k == "items").unwrap();
+        if let AnnotationValue::Array(arr) = &items.1 {
+            assert_eq!(arr.len(), 3);
+            assert_eq!(arr[0], AnnotationValue::Number(1.0));
+        } else {
+            panic!("Expected array");
+        }
     }
 }

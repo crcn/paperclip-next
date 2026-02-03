@@ -25,6 +25,13 @@ pub struct Document {
     pub components: Vec<Component>,
     /// Top-level render elements (text, div, etc.)
     pub renders: Vec<Element>,
+    /// Doc comments for top-level renders (indices match renders Vec)
+    /// This stores frame annotations and other metadata for render elements
+    #[serde(default)]
+    pub render_doc_comments: Vec<Option<DocComment>>,
+    /// Frame annotations extracted from render doc comments (indices match renders Vec)
+    #[serde(default)]
+    pub render_frames: Vec<Option<FrameAnnotation>>,
 }
 
 /// Import statement
@@ -68,8 +75,9 @@ pub struct StyleDecl {
 pub struct Component {
     pub public: bool,
     pub name: String,
+    pub doc_comment: Option<DocComment>, // Full doc comment with all annotations
     pub script: Option<ScriptDirective>,
-    pub frame: Option<FrameAnnotation>,
+    pub frame: Option<FrameAnnotation>, // Extracted from doc_comment for backward compat
     pub variants: Vec<Variant>,
     pub slots: Vec<Slot>,
     pub overrides: Vec<Override>,
@@ -93,6 +101,31 @@ pub struct FrameAnnotation {
     pub y: f64,
     pub width: Option<f64>,
     pub height: Option<f64>,
+    pub span: Span,
+}
+
+/// A parsed annotation from a doc comment (e.g., @frame, @meta)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Annotation {
+    pub name: String, // "frame", "meta", etc.
+    pub params: Vec<(String, AnnotationValue)>,
+    pub span: Span,
+}
+
+/// Values that can appear in annotations
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AnnotationValue {
+    Number(f64),
+    String(String),
+    Boolean(bool),
+    Array(Vec<AnnotationValue>),
+}
+
+/// Full parsed doc comment with description and all annotations
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocComment {
+    pub description: String,
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 
@@ -271,6 +304,8 @@ impl Document {
             styles: Vec::new(),
             components: Vec::new(),
             renders: Vec::new(),
+            render_doc_comments: Vec::new(),
+            render_frames: Vec::new(),
         }
     }
 

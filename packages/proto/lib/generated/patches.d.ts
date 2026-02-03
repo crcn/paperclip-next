@@ -1,4 +1,4 @@
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 import { CssRule, VDocument, VNode } from "./vdom";
 export declare const protobufPackage = "paperclip.patches";
 /** VDocument patch operations */

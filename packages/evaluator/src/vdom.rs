@@ -178,11 +178,51 @@ impl VNode {
     }
 }
 
+/// Component metadata for designer use (frames, annotations, descriptions)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ComponentMetadata {
+    /// Component name
+    pub name: String,
+    /// Description from doc comment
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Frame positioning for designer
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<FrameMetadata>,
+    /// All annotations from doc comment (for extensibility)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<AnnotationMetadata>,
+    /// Source span ID for mutations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+}
+
+/// Frame metadata from @frame annotation
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FrameMetadata {
+    pub x: f64,
+    pub y: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<f64>,
+}
+
+/// Generic annotation metadata
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnnotationMetadata {
+    pub name: String,
+    pub params: std::collections::HashMap<String, serde_json::Value>,
+}
+
 /// Virtual Document (collection of root nodes with metadata)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VirtualDomDocument {
     pub nodes: Vec<VNode>,
     pub styles: Vec<CssRule>,
+    /// Component metadata for designer (frames, descriptions, annotations)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<ComponentMetadata>,
 }
 
 /// CSS Rule
@@ -199,6 +239,7 @@ impl VirtualDomDocument {
         Self {
             nodes: Vec::new(),
             styles: Vec::new(),
+            components: Vec::new(),
         }
     }
 

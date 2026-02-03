@@ -1,5 +1,5 @@
 /**
- * @frame(x: 87, y: -168, width: 937, height: 936)
+ * @frame(x: -294, y: -213, width: 966, height: 1058)
  */
 component Card {
     render div {
@@ -18,4 +18,16 @@ component Card {
     }
 }
 
-
+/**
+ * @frame(x: 1184, y: 80, width: 1260, height: 1129)
+ */
+div {
+    style {
+        padding: 32px
+        color: orange
+        font-size: 32px
+        font-weight: bold
+        text-decoration: underline
+    }
+    text "hello wodrld"
+}

@@ -5,8 +5,18 @@ use std::fmt;
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\n\r]+")]
 #[logos(skip r"//[^\n]*")]
-#[logos(skip r"/\*([^*]|\*[^/])*\*/")]
+// Note: Block comments are handled manually - doc comments (/**) become tokens,
+// regular block comments (/*) are skipped via BlockComment token with skip priority
 pub enum Token<'src> {
+    /// Doc comment (/** ... */) - captured as token for parsing annotations
+    #[regex(r"/\*\*([^*]|\*+[^*/])*\*+/", |lex| lex.slice())]
+    DocComment(&'src str),
+
+    /// Regular block comment (/* ... */) - skipped via priority
+    /// Uses lower priority than DocComment so /** is captured as DocComment
+    #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)]
+    BlockComment,
+
     // Keywords
     #[token("component")]
     Component,
@@ -246,6 +256,8 @@ impl<'src> fmt::Display for Token<'src> {
             Token::Dollar => write!(f, "$"),
             Token::Ampersand => write!(f, "&"),
             Token::Pipe => write!(f, "|"),
+            Token::DocComment(s) => write!(f, "{}", s),
+            Token::BlockComment => write!(f, "/* ... */"),
         }
     }
 }
@@ -358,5 +370,30 @@ mod tests {
             .iter()
             .any(|(t, _)| matches!(t, Token::Slash)
                 && matches!(tokens.get(1), Some((Token::Slash, _)))));
+    }
+
+    #[test]
+    fn test_doc_comment_captured() {
+        let source = "/** This is a doc comment */ component Button";
+        let tokens = tokenize(source);
+
+        // Should have DocComment and Component tokens
+        assert!(tokens.iter().any(|(t, _)| matches!(t, Token::DocComment(_))));
+        assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Component)));
+    }
+
+    #[test]
+    fn test_block_comment_at_eof() {
+        let source = r#"component Button {}
+/* trailing comment */
+"#;
+        let tokens = tokenize(source);
+
+        // Should NOT have a Slash token - comment should be skipped
+        assert!(
+            !tokens.iter().any(|(t, _)| matches!(t, Token::Slash)),
+            "Block comment should be skipped, found tokens: {:?}",
+            tokens
+        );
     }
 }

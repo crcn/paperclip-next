@@ -267,7 +267,7 @@ mod tests {
             },
         ]);
 
-        let vdom = VirtualDomDocument {
+        let vdom = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: HashMap::new(),
@@ -295,7 +295,7 @@ mod tests {
             ast_id: "same-id".to_string(),
         }]);
 
-        let vdom = VirtualDomDocument {
+        let vdom = VirtualDomDocument { components: vec![],
             nodes: vec![
                 VNode::Element {
                     tag: "div".to_string(),
@@ -333,7 +333,7 @@ mod tests {
             key: "item-0".to_string(),
         }]);
 
-        let vdom = VirtualDomDocument {
+        let vdom = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "div".to_string(),
                 attributes: HashMap::new(),
@@ -379,7 +379,7 @@ mod tests {
             },
         ]);
 
-        let vdom = VirtualDomDocument {
+        let vdom = VirtualDomDocument { components: vec![],
             nodes: vec![VNode::Element {
                 tag: "ul".to_string(),
                 attributes: HashMap::new(),
@@ -445,7 +445,7 @@ mod tests {
             key: "item-0".to_string(),         // Same key is OK
         }]);
 
-        let vdom = VirtualDomDocument {
+        let vdom = VirtualDomDocument { components: vec![],
             nodes: vec![
                 VNode::Element {
                     tag: "li".to_string(),

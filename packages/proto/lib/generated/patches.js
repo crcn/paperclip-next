@@ -4,7 +4,7 @@
 //   protoc               v6.33.4
 // source: patches.proto
 /* eslint-disable */
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 import { CssRule, VDocument, VNode } from "./vdom";
 export const protobufPackage = "paperclip.patches";
 function createBaseVDocPatch() {

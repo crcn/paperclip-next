@@ -44,11 +44,27 @@ interface PreviewUpdate {
 interface RawPatch {
   patch_type?: Record<string, unknown>;
   patchType?: string;
+  initialize?: unknown;
+  replaceNode?: unknown;
+  addNode?: unknown;
+  removeNode?: unknown;
+  setAttribute?: unknown;
+  setStyle?: unknown;
+  [key: string]: unknown;  // Allow additional properties
 }
 
 // Raw node from server (prost serde format)
+// Can be either:
+// 1. Prost serde format: { node_type: { Element: {...} } }
+// 2. Proto JSON format: { element: {...} } or { text: {...} } etc.
 interface RawNode {
   node_type?: Record<string, unknown>;
+  element?: Record<string, unknown>;
+  text?: Record<string, unknown>;
+  comment?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+  component?: Record<string, unknown>;
+  [key: string]: unknown;  // Allow additional properties
 }
 
 // Raw document from server
@@ -93,7 +109,7 @@ function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, un
  *
  * Also converts snake_case field names to camelCase (semantic_id -> semanticId)
  */
-function transformNode(raw: RawNode & Record<string, unknown>): VNode {
+function transformNode(raw: RawNode): VNode {
   console.log("[transformNode] Input keys:", Object.keys(raw));
 
   // Format 1: Already in proto format (direct field names)
@@ -103,23 +119,23 @@ function transformNode(raw: RawNode & Record<string, unknown>): VNode {
     if (elemData.children && Array.isArray(elemData.children)) {
       elemData.children = (elemData.children as unknown[]).map((c) => transformNode(c as RawNode));
     }
-    return { element: elemData } as VNode;
+    return { element: elemData } as unknown as VNode;
   }
   if ("text" in raw && raw.text) {
-    return { text: convertKeysToCamelCase(raw.text as Record<string, unknown>) } as VNode;
+    return { text: convertKeysToCamelCase(raw.text as Record<string, unknown>) } as unknown as VNode;
   }
   if ("comment" in raw && raw.comment) {
-    return { comment: convertKeysToCamelCase(raw.comment as Record<string, unknown>) } as VNode;
+    return { comment: convertKeysToCamelCase(raw.comment as Record<string, unknown>) } as unknown as VNode;
   }
   if ("error" in raw && raw.error) {
-    return { error: convertKeysToCamelCase(raw.error as Record<string, unknown>) } as VNode;
+    return { error: convertKeysToCamelCase(raw.error as Record<string, unknown>) } as unknown as VNode;
   }
   if ("component" in raw && raw.component) {
     const compData = convertKeysToCamelCase(raw.component as Record<string, unknown>);
     if (compData.children && Array.isArray(compData.children)) {
       compData.children = (compData.children as unknown[]).map((c) => transformNode(c as RawNode));
     }
-    return { component: compData } as VNode;
+    return { component: compData } as unknown as VNode;
   }
 
   // Format 2: Prost serde format with node_type wrapper
@@ -127,7 +143,7 @@ function transformNode(raw: RawNode & Record<string, unknown>): VNode {
     const keys = Object.keys(raw.node_type);
     if (keys.length === 0) {
       console.warn("[transformNode] Empty node_type:", raw);
-      return {};
+      return {} as VNode;
     }
 
     const variantName = keys[0];
@@ -149,11 +165,11 @@ function transformNode(raw: RawNode & Record<string, unknown>): VNode {
 
     console.log("[transformNode] Output field:", fieldName);
 
-    return result as VNode;
+    return result as unknown as VNode;
   }
 
   console.warn("[transformNode] Unknown format, keys:", Object.keys(raw));
-  return {};
+  return {} as VNode;
 }
 
 /**
@@ -166,6 +182,7 @@ function transformDocument(raw: RawDocument): VDocument {
       selector: s.selector,
       properties: s.properties || {},
     })),
+    components: [],  // Component metadata is not included in raw server responses
   };
 }
 
@@ -176,7 +193,7 @@ function transformDocument(raw: RawDocument): VDocument {
  * 1. Initial load (manual JSON): { initialize: { vdom: {...} } }
  * 2. Incremental (prost serde): { patch_type: { UpdateText: {...} } }
  */
-function transformPatch(raw: RawPatch & Record<string, unknown>): VDocPatch {
+function transformPatch(raw: RawPatch): VDocPatch {
   console.log("[transformPatch] Raw keys:", Object.keys(raw));
 
   // Format 1: Direct field names (from process_file_to_json)
@@ -316,21 +333,48 @@ function applyPatch(doc: VDocument, patch: VDocPatch): VDocument {
   return newDoc;
 }
 
+/**
+ * Extract frame bounds from element metadata or fallback to data-frame-* attributes
+ */
+function extractFrameFromMetadata(
+  metadata: { objectValue?: { fields?: Record<string, { objectValue?: { fields?: Record<string, { numberValue?: number }> } }> } } | undefined,
+  attrs: Record<string, string>,
+  defaultX: number
+): FrameBounds {
+  // Try to extract from metadata.objectValue.fields.frame.objectValue.fields
+  // Proto Value format: { objectValue: { fields: { x: { numberValue: 100 }, ... } } }
+  if (metadata?.objectValue?.fields) {
+    const frame = metadata.objectValue.fields.frame?.objectValue?.fields;
+    if (frame) {
+      return {
+        x: frame.x?.numberValue ?? defaultX,
+        y: frame.y?.numberValue ?? 0,
+        width: frame.width?.numberValue ?? 1024,
+        height: frame.height?.numberValue ?? 768,
+      };
+    }
+  }
+
+  // Fallback to data-frame-* attributes for backwards compatibility
+  return {
+    x: parseFloat(attrs["data-frame-x"] ?? "0") || defaultX,
+    y: parseFloat(attrs["data-frame-y"] ?? "0") || 0,
+    width: parseFloat(attrs["data-frame-width"] ?? "1024") || 1024,
+    height: parseFloat(attrs["data-frame-height"] ?? "768") || 768,
+  };
+}
+
 function extractFramesFromDocument(doc: VDocument): Frame[] {
   return doc.nodes.map((node, index) => {
     // Oneof check: if it's an element, extract frame data
     if (node.element) {
-      const attrs = node.element.attributes;
+      const attrs = node.element.attributes ?? {};
+      const metadata = node.element.metadata as Record<string, unknown> | undefined;
       // Use sourceId for mutations (maps to AST span.id), fall back to semanticId
       const frameId = node.element.sourceId ?? node.element.semanticId ?? `frame-${index}`;
       return {
         id: frameId,
-        bounds: {
-          x: parseFloat(attrs["data-frame-x"] ?? "0") || index * 1100,
-          y: parseFloat(attrs["data-frame-y"] ?? "0") || 0,
-          width: parseFloat(attrs["data-frame-width"] ?? "1024") || 1024,
-          height: parseFloat(attrs["data-frame-height"] ?? "768") || 768,
-        },
+        bounds: extractFrameFromMetadata(metadata, attrs, index * 1100),
       };
     }
 
@@ -621,6 +665,79 @@ export const createSSEEngine: EngineFactory<DesignerEvent, DesignerState, SSEEng
         } else {
           console.error("[API] No filePath available for mutation");
           // Immediately fail if no file path
+          machine.dispatch({
+            type: "mutation/failed",
+            payload: {
+              mutationId: pendingMutation.mutationId,
+              error: "No file path available",
+            },
+          });
+        }
+      }
+
+      // Handle frame/moveEnd - send mutation to server for frame move
+      if (event.type === "frame/moveEnd") {
+        const { index } = event.payload;
+        const frame = prevState.frames[index];
+        if (!frame) {
+          console.log("[API] frame/moveEnd - no frame at index", index);
+          return;
+        }
+
+        // Generate client-side mutation ID for tracking
+        const mutationId = `mut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        console.log("[API] Sending SetFrameBounds mutation (move):", {
+          mutationId,
+          frameId: frame.id,
+          bounds: frame.bounds,
+        });
+
+        // Create pending mutation for optimistic update tracking
+        const pendingMutation: PendingMutation = {
+          mutationId,
+          type: "setFrameBounds",
+          frameId: frame.id,
+          optimisticBounds: frame.bounds,
+          createdAt: Date.now(),
+        };
+
+        // Dispatch mutation/started to track the pending mutation
+        machine.dispatch({
+          type: "mutation/started",
+          payload: { mutation: pendingMutation },
+        });
+
+        // Send mutation to server
+        const serverUrl = propsRef.current?.serverUrl || "";
+        const filePath = propsRef.current?.filePath;
+
+        if (filePath) {
+          sendMutation(serverUrl, filePath, {
+            type: "setFrameBounds",
+            frame_id: frame.id,
+            bounds: frame.bounds,
+          }).then((response) => {
+            if (response.success) {
+              machine.dispatch({
+                type: "mutation/acknowledged",
+                payload: {
+                  mutationId: pendingMutation.mutationId,
+                  version: response.version,
+                },
+              });
+            } else {
+              machine.dispatch({
+                type: "mutation/failed",
+                payload: {
+                  mutationId: pendingMutation.mutationId,
+                  error: response.error || "Unknown error",
+                },
+              });
+            }
+          });
+        } else {
+          console.error("[API] No filePath available for mutation");
           machine.dispatch({
             type: "mutation/failed",
             payload: {

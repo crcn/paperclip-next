@@ -5,7 +5,7 @@
 // source: workspace.proto
 /* eslint-disable */
 import Long from "long";
-import _m0 from "protobufjs/minimal";
+import * as _m0 from "protobufjs/minimal";
 import { VDocPatch } from "./patches";
 export const protobufPackage = "paperclip.workspace";
 /** Node type enum */
@@ -1987,6 +1987,913 @@ export const SourceSpan = {
         return message;
     },
 };
+function createBaseCrdtSyncRequest() {
+    return { clientId: "", filePath: "", join: undefined, update: undefined, ack: undefined };
+}
+export const CrdtSyncRequest = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.clientId !== "") {
+            writer.uint32(10).string(message.clientId);
+        }
+        if (message.filePath !== "") {
+            writer.uint32(18).string(message.filePath);
+        }
+        if (message.join !== undefined) {
+            CrdtJoin.encode(message.join, writer.uint32(26).fork()).ldelim();
+        }
+        if (message.update !== undefined) {
+            CrdtUpdate.encode(message.update, writer.uint32(34).fork()).ldelim();
+        }
+        if (message.ack !== undefined) {
+            CrdtAck.encode(message.ack, writer.uint32(42).fork()).ldelim();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtSyncRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.filePath = reader.string();
+                    continue;
+                case 3:
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.join = CrdtJoin.decode(reader, reader.uint32());
+                    continue;
+                case 4:
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.update = CrdtUpdate.decode(reader, reader.uint32());
+                    continue;
+                case 5:
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.ack = CrdtAck.decode(reader, reader.uint32());
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            clientId: isSet(object.clientId) ? globalThis.String(object.clientId) : "",
+            filePath: isSet(object.filePath) ? globalThis.String(object.filePath) : "",
+            join: isSet(object.join) ? CrdtJoin.fromJSON(object.join) : undefined,
+            update: isSet(object.update) ? CrdtUpdate.fromJSON(object.update) : undefined,
+            ack: isSet(object.ack) ? CrdtAck.fromJSON(object.ack) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        if (message.filePath !== "") {
+            obj.filePath = message.filePath;
+        }
+        if (message.join !== undefined) {
+            obj.join = CrdtJoin.toJSON(message.join);
+        }
+        if (message.update !== undefined) {
+            obj.update = CrdtUpdate.toJSON(message.update);
+        }
+        if (message.ack !== undefined) {
+            obj.ack = CrdtAck.toJSON(message.ack);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtSyncRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtSyncRequest();
+        message.clientId = object.clientId ?? "";
+        message.filePath = object.filePath ?? "";
+        message.join = (object.join !== undefined && object.join !== null) ? CrdtJoin.fromPartial(object.join) : undefined;
+        message.update = (object.update !== undefined && object.update !== null)
+            ? CrdtUpdate.fromPartial(object.update)
+            : undefined;
+        message.ack = (object.ack !== undefined && object.ack !== null) ? CrdtAck.fromPartial(object.ack) : undefined;
+        return message;
+    },
+};
+function createBaseCrdtJoin() {
+    return { stateVector: new Uint8Array(0) };
+}
+export const CrdtJoin = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.stateVector.length !== 0) {
+            writer.uint32(10).bytes(message.stateVector);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtJoin();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.stateVector = reader.bytes();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { stateVector: isSet(object.stateVector) ? bytesFromBase64(object.stateVector) : new Uint8Array(0) };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.stateVector.length !== 0) {
+            obj.stateVector = base64FromBytes(message.stateVector);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtJoin.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtJoin();
+        message.stateVector = object.stateVector ?? new Uint8Array(0);
+        return message;
+    },
+};
+function createBaseCrdtUpdate() {
+    return { update: new Uint8Array(0), stateVector: new Uint8Array(0), origin: "" };
+}
+export const CrdtUpdate = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.update.length !== 0) {
+            writer.uint32(10).bytes(message.update);
+        }
+        if (message.stateVector.length !== 0) {
+            writer.uint32(18).bytes(message.stateVector);
+        }
+        if (message.origin !== "") {
+            writer.uint32(26).string(message.origin);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtUpdate();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.update = reader.bytes();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.stateVector = reader.bytes();
+                    continue;
+                case 3:
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.origin = reader.string();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            update: isSet(object.update) ? bytesFromBase64(object.update) : new Uint8Array(0),
+            stateVector: isSet(object.stateVector) ? bytesFromBase64(object.stateVector) : new Uint8Array(0),
+            origin: isSet(object.origin) ? globalThis.String(object.origin) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.update.length !== 0) {
+            obj.update = base64FromBytes(message.update);
+        }
+        if (message.stateVector.length !== 0) {
+            obj.stateVector = base64FromBytes(message.stateVector);
+        }
+        if (message.origin !== "") {
+            obj.origin = message.origin;
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtUpdate.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtUpdate();
+        message.update = object.update ?? new Uint8Array(0);
+        message.stateVector = object.stateVector ?? new Uint8Array(0);
+        message.origin = object.origin ?? "";
+        return message;
+    },
+};
+function createBaseCrdtAck() {
+    return { sequence: 0 };
+}
+export const CrdtAck = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.sequence !== 0) {
+            writer.uint32(8).uint64(message.sequence);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtAck();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.sequence = longToNumber(reader.uint64());
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { sequence: isSet(object.sequence) ? globalThis.Number(object.sequence) : 0 };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sequence !== 0) {
+            obj.sequence = Math.round(message.sequence);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtAck.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtAck();
+        message.sequence = object.sequence ?? 0;
+        return message;
+    },
+};
+function createBaseCrdtSyncResponse() {
+    return {
+        welcome: undefined,
+        remoteUpdate: undefined,
+        vdomPatch: undefined,
+        cssomPatch: undefined,
+        parseError: undefined,
+    };
+}
+export const CrdtSyncResponse = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.welcome !== undefined) {
+            CrdtWelcome.encode(message.welcome, writer.uint32(10).fork()).ldelim();
+        }
+        if (message.remoteUpdate !== undefined) {
+            CrdtUpdate.encode(message.remoteUpdate, writer.uint32(18).fork()).ldelim();
+        }
+        if (message.vdomPatch !== undefined) {
+            CrdtVdomPatch.encode(message.vdomPatch, writer.uint32(26).fork()).ldelim();
+        }
+        if (message.cssomPatch !== undefined) {
+            CrdtCssomPatch.encode(message.cssomPatch, writer.uint32(34).fork()).ldelim();
+        }
+        if (message.parseError !== undefined) {
+            CrdtParseError.encode(message.parseError, writer.uint32(42).fork()).ldelim();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtSyncResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.welcome = CrdtWelcome.decode(reader, reader.uint32());
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.remoteUpdate = CrdtUpdate.decode(reader, reader.uint32());
+                    continue;
+                case 3:
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.vdomPatch = CrdtVdomPatch.decode(reader, reader.uint32());
+                    continue;
+                case 4:
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.cssomPatch = CrdtCssomPatch.decode(reader, reader.uint32());
+                    continue;
+                case 5:
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.parseError = CrdtParseError.decode(reader, reader.uint32());
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            welcome: isSet(object.welcome) ? CrdtWelcome.fromJSON(object.welcome) : undefined,
+            remoteUpdate: isSet(object.remoteUpdate) ? CrdtUpdate.fromJSON(object.remoteUpdate) : undefined,
+            vdomPatch: isSet(object.vdomPatch) ? CrdtVdomPatch.fromJSON(object.vdomPatch) : undefined,
+            cssomPatch: isSet(object.cssomPatch) ? CrdtCssomPatch.fromJSON(object.cssomPatch) : undefined,
+            parseError: isSet(object.parseError) ? CrdtParseError.fromJSON(object.parseError) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.welcome !== undefined) {
+            obj.welcome = CrdtWelcome.toJSON(message.welcome);
+        }
+        if (message.remoteUpdate !== undefined) {
+            obj.remoteUpdate = CrdtUpdate.toJSON(message.remoteUpdate);
+        }
+        if (message.vdomPatch !== undefined) {
+            obj.vdomPatch = CrdtVdomPatch.toJSON(message.vdomPatch);
+        }
+        if (message.cssomPatch !== undefined) {
+            obj.cssomPatch = CrdtCssomPatch.toJSON(message.cssomPatch);
+        }
+        if (message.parseError !== undefined) {
+            obj.parseError = CrdtParseError.toJSON(message.parseError);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtSyncResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtSyncResponse();
+        message.welcome = (object.welcome !== undefined && object.welcome !== null)
+            ? CrdtWelcome.fromPartial(object.welcome)
+            : undefined;
+        message.remoteUpdate = (object.remoteUpdate !== undefined && object.remoteUpdate !== null)
+            ? CrdtUpdate.fromPartial(object.remoteUpdate)
+            : undefined;
+        message.vdomPatch = (object.vdomPatch !== undefined && object.vdomPatch !== null)
+            ? CrdtVdomPatch.fromPartial(object.vdomPatch)
+            : undefined;
+        message.cssomPatch = (object.cssomPatch !== undefined && object.cssomPatch !== null)
+            ? CrdtCssomPatch.fromPartial(object.cssomPatch)
+            : undefined;
+        message.parseError = (object.parseError !== undefined && object.parseError !== null)
+            ? CrdtParseError.fromPartial(object.parseError)
+            : undefined;
+        return message;
+    },
+};
+function createBaseCrdtWelcome() {
+    return {
+        documentState: new Uint8Array(0),
+        stateVector: new Uint8Array(0),
+        initialVdom: undefined,
+        version: 0,
+        clientCount: 0,
+    };
+}
+export const CrdtWelcome = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.documentState.length !== 0) {
+            writer.uint32(10).bytes(message.documentState);
+        }
+        if (message.stateVector.length !== 0) {
+            writer.uint32(18).bytes(message.stateVector);
+        }
+        if (message.initialVdom !== undefined) {
+            VDocPatch.encode(message.initialVdom, writer.uint32(26).fork()).ldelim();
+        }
+        if (message.version !== 0) {
+            writer.uint32(32).uint64(message.version);
+        }
+        if (message.clientCount !== 0) {
+            writer.uint32(40).uint32(message.clientCount);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtWelcome();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.documentState = reader.bytes();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.stateVector = reader.bytes();
+                    continue;
+                case 3:
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.initialVdom = VDocPatch.decode(reader, reader.uint32());
+                    continue;
+                case 4:
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.version = longToNumber(reader.uint64());
+                    continue;
+                case 5:
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.clientCount = reader.uint32();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            documentState: isSet(object.documentState) ? bytesFromBase64(object.documentState) : new Uint8Array(0),
+            stateVector: isSet(object.stateVector) ? bytesFromBase64(object.stateVector) : new Uint8Array(0),
+            initialVdom: isSet(object.initialVdom) ? VDocPatch.fromJSON(object.initialVdom) : undefined,
+            version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+            clientCount: isSet(object.clientCount) ? globalThis.Number(object.clientCount) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.documentState.length !== 0) {
+            obj.documentState = base64FromBytes(message.documentState);
+        }
+        if (message.stateVector.length !== 0) {
+            obj.stateVector = base64FromBytes(message.stateVector);
+        }
+        if (message.initialVdom !== undefined) {
+            obj.initialVdom = VDocPatch.toJSON(message.initialVdom);
+        }
+        if (message.version !== 0) {
+            obj.version = Math.round(message.version);
+        }
+        if (message.clientCount !== 0) {
+            obj.clientCount = Math.round(message.clientCount);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtWelcome.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtWelcome();
+        message.documentState = object.documentState ?? new Uint8Array(0);
+        message.stateVector = object.stateVector ?? new Uint8Array(0);
+        message.initialVdom = (object.initialVdom !== undefined && object.initialVdom !== null)
+            ? VDocPatch.fromPartial(object.initialVdom)
+            : undefined;
+        message.version = object.version ?? 0;
+        message.clientCount = object.clientCount ?? 0;
+        return message;
+    },
+};
+function createBaseCrdtVdomPatch() {
+    return { patches: [], version: 0, originClientId: "" };
+}
+export const CrdtVdomPatch = {
+    encode(message, writer = _m0.Writer.create()) {
+        for (const v of message.patches) {
+            VDocPatch.encode(v, writer.uint32(10).fork()).ldelim();
+        }
+        if (message.version !== 0) {
+            writer.uint32(16).uint64(message.version);
+        }
+        if (message.originClientId !== "") {
+            writer.uint32(26).string(message.originClientId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtVdomPatch();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.patches.push(VDocPatch.decode(reader, reader.uint32()));
+                    continue;
+                case 2:
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.version = longToNumber(reader.uint64());
+                    continue;
+                case 3:
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.originClientId = reader.string();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            patches: globalThis.Array.isArray(object?.patches) ? object.patches.map((e) => VDocPatch.fromJSON(e)) : [],
+            version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+            originClientId: isSet(object.originClientId) ? globalThis.String(object.originClientId) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.patches?.length) {
+            obj.patches = message.patches.map((e) => VDocPatch.toJSON(e));
+        }
+        if (message.version !== 0) {
+            obj.version = Math.round(message.version);
+        }
+        if (message.originClientId !== "") {
+            obj.originClientId = message.originClientId;
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtVdomPatch.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtVdomPatch();
+        message.patches = object.patches?.map((e) => VDocPatch.fromPartial(e)) || [];
+        message.version = object.version ?? 0;
+        message.originClientId = object.originClientId ?? "";
+        return message;
+    },
+};
+function createBaseCrdtCssomPatch() {
+    return { rules: [], version: 0 };
+}
+export const CrdtCssomPatch = {
+    encode(message, writer = _m0.Writer.create()) {
+        for (const v of message.rules) {
+            CssRule.encode(v, writer.uint32(10).fork()).ldelim();
+        }
+        if (message.version !== 0) {
+            writer.uint32(16).uint64(message.version);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtCssomPatch();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.rules.push(CssRule.decode(reader, reader.uint32()));
+                    continue;
+                case 2:
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.version = longToNumber(reader.uint64());
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            rules: globalThis.Array.isArray(object?.rules) ? object.rules.map((e) => CssRule.fromJSON(e)) : [],
+            version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.rules?.length) {
+            obj.rules = message.rules.map((e) => CssRule.toJSON(e));
+        }
+        if (message.version !== 0) {
+            obj.version = Math.round(message.version);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtCssomPatch.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtCssomPatch();
+        message.rules = object.rules?.map((e) => CssRule.fromPartial(e)) || [];
+        message.version = object.version ?? 0;
+        return message;
+    },
+};
+function createBaseCssRule() {
+    return { selector: "", properties: {} };
+}
+export const CssRule = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.selector !== "") {
+            writer.uint32(10).string(message.selector);
+        }
+        Object.entries(message.properties).forEach(([key, value]) => {
+            CssRule_PropertiesEntry.encode({ key: key, value }, writer.uint32(18).fork()).ldelim();
+        });
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCssRule();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.selector = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    const entry2 = CssRule_PropertiesEntry.decode(reader, reader.uint32());
+                    if (entry2.value !== undefined) {
+                        message.properties[entry2.key] = entry2.value;
+                    }
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            selector: isSet(object.selector) ? globalThis.String(object.selector) : "",
+            properties: isObject(object.properties)
+                ? Object.entries(object.properties).reduce((acc, [key, value]) => {
+                    acc[key] = String(value);
+                    return acc;
+                }, {})
+                : {},
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.selector !== "") {
+            obj.selector = message.selector;
+        }
+        if (message.properties) {
+            const entries = Object.entries(message.properties);
+            if (entries.length > 0) {
+                obj.properties = {};
+                entries.forEach(([k, v]) => {
+                    obj.properties[k] = v;
+                });
+            }
+        }
+        return obj;
+    },
+    create(base) {
+        return CssRule.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCssRule();
+        message.selector = object.selector ?? "";
+        message.properties = Object.entries(object.properties ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.String(value);
+            }
+            return acc;
+        }, {});
+        return message;
+    },
+};
+function createBaseCssRule_PropertiesEntry() {
+    return { key: "", value: "" };
+}
+export const CssRule_PropertiesEntry = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== "") {
+            writer.uint32(18).string(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCssRule_PropertiesEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.value = reader.string();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.String(object.value) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== "") {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return CssRule_PropertiesEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCssRule_PropertiesEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? "";
+        return message;
+    },
+};
+function createBaseCrdtParseError() {
+    return { error: "", line: 0, column: 0 };
+}
+export const CrdtParseError = {
+    encode(message, writer = _m0.Writer.create()) {
+        if (message.error !== "") {
+            writer.uint32(10).string(message.error);
+        }
+        if (message.line !== 0) {
+            writer.uint32(16).uint32(message.line);
+        }
+        if (message.column !== 0) {
+            writer.uint32(24).uint32(message.column);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+        let end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCrdtParseError();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1:
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.error = reader.string();
+                    continue;
+                case 2:
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.line = reader.uint32();
+                    continue;
+                case 3:
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.column = reader.uint32();
+                    continue;
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skipType(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            error: isSet(object.error) ? globalThis.String(object.error) : "",
+            line: isSet(object.line) ? globalThis.Number(object.line) : 0,
+            column: isSet(object.column) ? globalThis.Number(object.column) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.error !== "") {
+            obj.error = message.error;
+        }
+        if (message.line !== 0) {
+            obj.line = Math.round(message.line);
+        }
+        if (message.column !== 0) {
+            obj.column = Math.round(message.column);
+        }
+        return obj;
+    },
+    create(base) {
+        return CrdtParseError.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCrdtParseError();
+        message.error = object.error ?? "";
+        message.line = object.line ?? 0;
+        message.column = object.column ?? 0;
+        return message;
+    },
+};
 function createBaseBufferRequest() {
     return { clientId: "", filePath: "", content: "", expectedStateVersion: undefined };
 }
@@ -2315,6 +3222,31 @@ export const HeartbeatResponse = {
         return message;
     },
 };
+function bytesFromBase64(b64) {
+    if (globalThis.Buffer) {
+        return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+    }
+    else {
+        const bin = globalThis.atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; ++i) {
+            arr[i] = bin.charCodeAt(i);
+        }
+        return arr;
+    }
+}
+function base64FromBytes(arr) {
+    if (globalThis.Buffer) {
+        return globalThis.Buffer.from(arr).toString("base64");
+    }
+    else {
+        const bin = [];
+        arr.forEach((byte) => {
+            bin.push(globalThis.String.fromCharCode(byte));
+        });
+        return globalThis.btoa(bin.join(""));
+    }
+}
 function longToNumber(long) {
     if (long.gt(globalThis.Number.MAX_SAFE_INTEGER)) {
         throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
@@ -2327,6 +3259,9 @@ function longToNumber(long) {
 if (_m0.util.Long !== Long) {
     _m0.util.Long = Long;
     _m0.configure();
+}
+function isObject(value) {
+    return typeof value === "object" && value !== null;
 }
 function isSet(value) {
     return value !== null && value !== undefined;

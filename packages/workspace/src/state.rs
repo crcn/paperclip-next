@@ -363,6 +363,8 @@ pub fn convert_vdom_to_proto(vdom: &VirtualDomDocument) -> proto_vdom::VDocument
     proto_vdom::VDocument {
         nodes: vdom.nodes.iter().map(convert_vnode_to_proto).collect(),
         styles: vdom.styles.iter().map(convert_css_rule_to_proto).collect(),
+        components: vdom.components.iter().map(convert_component_metadata_to_proto).collect(),
+        metadata: None,
     }
 }
 
@@ -387,6 +389,7 @@ fn convert_vnode_to_proto(node: &VNode) -> proto_vdom::VNode {
                     semantic_id: semantic_id.to_selector(),
                     key: key.clone(),
                     source_id: source_id.clone(),
+                    metadata: None,
                 },
             )),
         },
@@ -402,11 +405,16 @@ fn convert_vnode_to_proto(node: &VNode) -> proto_vdom::VNode {
                 },
             )),
         },
-        VNode::Error { message, semantic_id, .. } => proto_vdom::VNode {
+        VNode::Error { message, semantic_id, span } => proto_vdom::VNode {
             node_type: Some(proto_vdom::v_node::NodeType::Error(
                 proto_vdom::ErrorNode {
                     message: message.clone(),
                     semantic_id: semantic_id.to_selector(),
+                    span: span.as_ref().map(|s| proto_vdom::Span {
+                        start: s.start as u32,
+                        end: s.end as u32,
+                        id: s.id.clone(),
+                    }),
                 },
             )),
         },
@@ -418,6 +426,57 @@ fn convert_css_rule_to_proto(rule: &VDomCssRule) -> proto_vdom::CssRule {
     proto_vdom::CssRule {
         selector: rule.selector.clone(),
         properties: rule.properties.clone(),
+        media_query: rule.media_query.clone(),
+        metadata: None,
+    }
+}
+
+// Convert ComponentMetadata to proto ComponentMetadata
+fn convert_component_metadata_to_proto(meta: &paperclip_evaluator::vdom::ComponentMetadata) -> proto_vdom::ComponentMetadata {
+    proto_vdom::ComponentMetadata {
+        name: meta.name.clone(),
+        description: meta.description.clone(),
+        frame: meta.frame.as_ref().map(|f| proto_vdom::FrameMetadata {
+            x: f.x,
+            y: f.y,
+            width: f.width,
+            height: f.height,
+        }),
+        annotations: meta.annotations.iter().map(|a| proto_vdom::AnnotationMetadata {
+            name: a.name.clone(),
+            params: a.params.iter().map(|(k, v)| {
+                (k.clone(), convert_json_to_proto_value(v))
+            }).collect(),
+        }).collect(),
+        source_id: meta.source_id.clone(),
+    }
+}
+
+// Convert JSON Value to proto Value
+fn convert_json_to_proto_value(value: &serde_json::Value) -> proto_vdom::Value {
+    match value {
+        serde_json::Value::Null => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::NullValue(proto_vdom::NullValue::NullValue as i32)),
+        },
+        serde_json::Value::Bool(b) => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::BoolValue(*b)),
+        },
+        serde_json::Value::Number(n) => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::NumberValue(n.as_f64().unwrap_or(0.0))),
+        },
+        serde_json::Value::String(s) => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::StringValue(s.clone())),
+        },
+        serde_json::Value::Array(arr) => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::ListValue(proto_vdom::ListValue {
+                values: arr.iter().map(convert_json_to_proto_value).collect(),
+            })),
+        },
+        serde_json::Value::Object(obj) => proto_vdom::Value {
+            kind: Some(proto_vdom::value::Kind::ObjectValue(proto_vdom::ObjectValue {
+                fields: obj.iter().map(|(k, v)| (k.clone(), convert_json_to_proto_value(v))).collect(),
+            })),
+        },
     }
 }
 

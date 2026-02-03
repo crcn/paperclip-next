@@ -310,6 +310,7 @@ mod tests {
         doc.components.push(Component {
             name: "Button".to_string(),
             public: true,
+            doc_comment: None,
             script: None,
             frame: None,
             variants: Vec::new(),

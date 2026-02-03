@@ -1,3 +1,4 @@
+use crate::annotation_parser::parse_doc_comment;
 use crate::ast::TriggerDecl;
 use crate::ast::*;
 use crate::error::{ParseError, ParseResult};
@@ -30,26 +31,44 @@ impl<'src> Parser<'src> {
     /// Parse a complete document
     pub fn parse_document(&mut self) -> ParseResult<Document> {
         let mut doc = Document::new();
+        let mut pending_doc_comment: Option<DocComment> = None;
 
         while !self.is_at_end() {
+            // Capture doc comment before next construct
+            if let Some((Token::DocComment(_), _)) = self.peek() {
+                pending_doc_comment = self.try_consume_doc_comment();
+                continue;
+            }
+
             match self.peek() {
                 Some((Token::Import, _)) => {
+                    pending_doc_comment = None; // Doc comments don't apply to imports
                     doc.imports.push(self.parse_import()?);
                 }
                 Some((Token::Public, _)) => {
                     self.advance(); // consume 'public'
                     match self.peek() {
                         Some((Token::TokenKeyword, _)) => {
+                            pending_doc_comment = None;
                             doc.tokens.push(self.parse_token_decl(true)?);
                         }
                         Some((Token::Trigger, _)) => {
+                            pending_doc_comment = None;
                             doc.triggers.push(self.parse_trigger_decl(true)?);
                         }
                         Some((Token::Style, _)) => {
+                            pending_doc_comment = None;
                             doc.styles.push(self.parse_style_decl(true)?);
                         }
                         Some((Token::Component, _)) => {
-                            doc.components.push(self.parse_component(true)?);
+                            let mut component = self.parse_component(true)?;
+                            // Attach doc comment and extract frame
+                            if let Some(doc_comment) = pending_doc_comment.take() {
+                                component.frame =
+                                    extract_frame_from_annotations(&doc_comment.annotations);
+                                component.doc_comment = Some(doc_comment);
+                            }
+                            doc.components.push(component);
                         }
                         _ => {
                             return Err(ParseError::invalid_syntax_span(
@@ -60,16 +79,25 @@ impl<'src> Parser<'src> {
                     }
                 }
                 Some((Token::TokenKeyword, _)) => {
+                    pending_doc_comment = None;
                     doc.tokens.push(self.parse_token_decl(false)?);
                 }
                 Some((Token::Trigger, _)) => {
+                    pending_doc_comment = None;
                     doc.triggers.push(self.parse_trigger_decl(false)?);
                 }
                 Some((Token::Style, _)) => {
+                    pending_doc_comment = None;
                     doc.styles.push(self.parse_style_decl(false)?);
                 }
                 Some((Token::Component, _)) => {
-                    doc.components.push(self.parse_component(false)?);
+                    let mut component = self.parse_component(false)?;
+                    // Attach doc comment and extract frame
+                    if let Some(doc_comment) = pending_doc_comment.take() {
+                        component.frame = extract_frame_from_annotations(&doc_comment.annotations);
+                        component.doc_comment = Some(doc_comment);
+                    }
+                    doc.components.push(component);
                 }
                 // Top-level render elements
                 Some((Token::Text, _))
@@ -78,10 +106,26 @@ impl<'src> Parser<'src> {
                 | Some((Token::Button, _))
                 | Some((Token::Img, _))
                 | Some((Token::Input, _)) => {
+                    // Attach doc comment and extract frame for top-level renders
+                    let doc_comment = pending_doc_comment.take();
+                    let frame = doc_comment.as_ref().and_then(|dc| {
+                        extract_frame_from_annotations(&dc.annotations)
+                    });
+                    doc.render_doc_comments.push(doc_comment);
+                    doc.render_frames.push(frame);
                     doc.renders.push(self.parse_element()?);
                 }
                 // Handle lowercase identifiers as potential HTML tags at top level
-                Some((Token::Ident(name), _)) if name.chars().next().map_or(false, |c| c.is_lowercase()) => {
+                Some((Token::Ident(name), _))
+                    if name.chars().next().map_or(false, |c| c.is_lowercase()) =>
+                {
+                    // Attach doc comment and extract frame for top-level renders
+                    let doc_comment = pending_doc_comment.take();
+                    let frame = doc_comment.as_ref().and_then(|dc| {
+                        extract_frame_from_annotations(&dc.annotations)
+                    });
+                    doc.render_doc_comments.push(doc_comment);
+                    doc.render_frames.push(frame);
                     doc.renders.push(self.parse_element()?);
                 }
                 _ => {
@@ -94,6 +138,18 @@ impl<'src> Parser<'src> {
         }
 
         Ok(doc)
+    }
+
+    /// Try to consume a doc comment token and parse it
+    fn try_consume_doc_comment(&mut self) -> Option<DocComment> {
+        if let Some((Token::DocComment(content), span)) = self.peek() {
+            let content = content.to_string();
+            let span = Span::new(span.start, span.end, self.id_generator.new_id());
+            self.advance();
+            Some(parse_doc_comment(&content, span, &mut self.id_generator))
+        } else {
+            None
+        }
     }
 
     /// Parse an import statement
@@ -387,6 +443,7 @@ impl<'src> Parser<'src> {
         Ok(Component {
             public,
             name,
+            doc_comment: None, // Set by parse_document after parsing
             script,
             frame,
             variants,
@@ -1471,6 +1528,37 @@ pub fn parse_with_path(source: &str, path: &str) -> ParseResult<Document> {
     parser.parse_document()
 }
 
+/// Extract frame annotation from parsed annotations
+fn extract_frame_from_annotations(annotations: &[Annotation]) -> Option<FrameAnnotation> {
+    annotations
+        .iter()
+        .find(|a| a.name == "frame")
+        .and_then(|a| {
+            let x = get_number_param(&a.params, "x")?;
+            let y = get_number_param(&a.params, "y")?;
+            let width = get_number_param(&a.params, "width");
+            let height = get_number_param(&a.params, "height");
+            Some(FrameAnnotation {
+                x,
+                y,
+                width,
+                height,
+                span: a.span.clone(),
+            })
+        })
+}
+
+/// Helper to extract a number parameter from annotation params
+fn get_number_param(params: &[(String, AnnotationValue)], key: &str) -> Option<f64> {
+    params.iter().find(|(k, _)| k == key).and_then(|(_, v)| {
+        if let AnnotationValue::Number(n) = v {
+            Some(*n)
+        } else {
+            None
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1605,5 +1693,113 @@ mod tests {
         assert_eq!(override_def.attributes.len(), 2);
         assert!(override_def.attributes.contains_key("id"));
         assert!(override_def.attributes.contains_key("class"));
+    }
+
+    #[test]
+    fn test_parse_doc_comment_with_frame() {
+        let source = r#"
+/**
+ * A card component for displaying content.
+ * @frame(x: 100, y: 200, width: 300, height: 400)
+ */
+component Card {
+    render div {
+        text "Hello"
+    }
+}
+"#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        assert_eq!(doc.components.len(), 1);
+
+        let component = &doc.components[0];
+        assert_eq!(component.name, "Card");
+
+        // Check doc comment was captured
+        assert!(component.doc_comment.is_some());
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        assert!(doc_comment.description.contains("card component"));
+        assert_eq!(doc_comment.annotations.len(), 1);
+        assert_eq!(doc_comment.annotations[0].name, "frame");
+
+        // Check frame was extracted
+        assert!(component.frame.is_some());
+        let frame = component.frame.as_ref().unwrap();
+        assert_eq!(frame.x, 100.0);
+        assert_eq!(frame.y, 200.0);
+        assert_eq!(frame.width, Some(300.0));
+        assert_eq!(frame.height, Some(400.0));
+    }
+
+    #[test]
+    fn test_parse_doc_comment_frame_only() {
+        let source = r#"
+/** @frame(x: 50, y: -100) */
+component Button {
+    render button {}
+}
+"#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        let component = &doc.components[0];
+
+        assert!(component.frame.is_some());
+        let frame = component.frame.as_ref().unwrap();
+        assert_eq!(frame.x, 50.0);
+        assert_eq!(frame.y, -100.0);
+        assert!(frame.width.is_none());
+        assert!(frame.height.is_none());
+    }
+
+    #[test]
+    fn test_parse_public_component_with_doc_comment() {
+        let source = r#"
+/**
+ * @frame(x: 0, y: 0)
+ */
+public component Header {
+    render header {}
+}
+"#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        let component = &doc.components[0];
+
+        assert!(component.public);
+        assert!(component.frame.is_some());
+        assert_eq!(component.frame.as_ref().unwrap().x, 0.0);
+    }
+
+    #[test]
+    fn test_parse_multiple_annotations() {
+        let source = r#"
+/**
+ * @frame(x: 100, y: 200)
+ * @meta(category: buttons, priority: high)
+ */
+component Button {
+    render button {}
+}
+"#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+
+        let doc = result.unwrap();
+        let component = &doc.components[0];
+
+        let doc_comment = component.doc_comment.as_ref().unwrap();
+        assert_eq!(doc_comment.annotations.len(), 2);
+        assert_eq!(doc_comment.annotations[0].name, "frame");
+        assert_eq!(doc_comment.annotations[1].name, "meta");
     }
 }
